@@ -26,25 +26,7 @@ user_agent_rotator = UserAgent(software_names=software_names, operating_systems=
 # global settings and vars
 debug_setting = 1
 
-url_raw = "https://www.foxesscloud.com/c/v0/device/history/raw"
-url_report = "https://www.foxesscloud.com/c/v0/device/history/report"
-
 token = {'value': None, 'valid_from': None, 'valid_for': datetime.timedelta(hours=4).seconds, 'user_agent': None}
-device_list = None
-device = None
-device_id = None
-battery = None
-firmware = None
-variables = None
-var_list = None
-
-allData = {
-    "report":{},
-    "reportDailyGeneration": {},
-    "raw":{},
-    "online":False
-    }
-
 
 def query_date(d):
     t = datetime.datetime.now() if d is None else datetime.datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
@@ -80,9 +62,14 @@ def get_token():
     token['valid_from'] = time_now
     return token['value']
 
+device_list = None
+device = None
+device_id = None
+raw_vars = None
+
 # get list of available devices and select one
 def get_device(n=None):
-    global token, device_list, device, device_id
+    global token, device_list, device, device_id, firmware, battery, raw_vars
     if get_token() is None:
         print(f"** could not get a token")
         return None
@@ -113,57 +100,12 @@ def get_device(n=None):
         return None
     device = device_list[0 if n is None else n]
     device_id = device.get('deviceID')
-    get_firmware()
-    get_variables()
+    firmware = None
+    battery = None
+    raw_vars = get_vars()
     return device
 
-# get battery info for selected device
-def get_battery():
-    global token, device_id, battery
-    if get_device() is None:
-        print(f"** could not get a device")
-        return None
-    if debug_setting > 0:
-        print(f"getting battery")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info?id=" + device_id, headers=headers)
-    if response.status_code != 200:
-        print(f"** battery response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no battery info")
-        return None
-    battery = result
-    return battery
-
-# get list of variables available for selected device
-def get_variables():
-    global token, device_id, variables, var_list
-    if get_device() is None:
-        print(f"** could not get a device")
-        return None
-    if debug_setting > 0:
-        print(f"getting variables")
-    var_list = None
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
-    # v1 api required for full list with {name, variable, unit}
-    response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables?deviceID=" + device_id, headers=headers)
-    if response.status_code != 200:
-        print(f"** variables response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no variables result")
-        return None
-    variables = result.get('variables')
-    if variables is None:
-        print(f"** no variables list")
-        return None
-    var_list = []
-    for v in variables:
-        var_list.append(v['variable'])
-    return variables
+firmware = None
 
 # get current firmware versions for selected device
 def get_firmware():
@@ -188,17 +130,65 @@ def get_firmware():
         return None
     return firmware
 
+battery = None
+
+# get battery info for selected device
+def get_battery():
+    global token, device_id, battery
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting battery")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info?id=" + device_id, headers=headers)
+    if response.status_code != 200:
+        print(f"** battery response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no battery info")
+        return None
+    battery = result
+    return battery
+
+# get list of raw variables available for selected device
+def get_vars():
+    global token, device_id, variables, var_list
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting variables")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    # v1 api required for full list with {name, variable, unit}
+    response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables?deviceID=" + device_id, headers=headers)
+    if response.status_code != 200:
+        print(f"** variables response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no variables result")
+        return None
+    vars = result.get('variables')
+    if vars is None:
+        print(f"** no variables list")
+        return None
+    return vars
+
+power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
+
 # get raw data values
 def get_raw(time_span = 'hour', d = None, v = None):
-    global token, device_id, var_list, debug_setting
+    global token, device_id, debug_setting, raw_vars
     if get_device() is None:
         print(f"** could not get device")
         return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
-    if var_list is None:
-        get_variables()
     if v is None:
-        v = var_list
+        if raw_vars is None:
+            raw_vars = get_vars()
+        v = [x['variable'] for x in raw_vars]
     elif type(v) is not list:
         v = [v]
     query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
@@ -210,17 +200,34 @@ def get_raw(time_span = 'hour', d = None, v = None):
     if result is None:
         print(f"** no raw data")
         return None
+    # integrate kW to kWh based on 5 minute sample
+    for x in [x for x in result if x['unit'] == 'kW']:
+        sum0 = 0.0
+        sum1 = 0.0
+        sum2 = 0.0
+        for y in x['data']:
+            z = y['value']/12
+            sum0 += abs(z)
+            if z >= 0:
+                sum1 += z
+            else:
+                sum2 -= z
+        x['kWh0'] = round(sum0,3)
+        x['kWh1'] = round(sum1,3)
+        x['kWh2'] = round(sum2,3)
     return result
+
+report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
 # get energy report data in kWh
 def get_report(report_type = 'day', d = None, v = None ):
-    global token, device_id, var_list, debug_setting
+    global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         print(f"** could not get device")
         return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
     if v is None:
-        v = ['feedin','generation','gridConsumption','chargeEnergyToTal','dischargeEnergyToTal','loads']
+        v = report_vars
     elif type(v) is not list:
         v = [v]
     query = {'deviceID': device_id, 'reportType': report_type, 'variables': v, 'queryDate': query_date(d)}
@@ -232,13 +239,11 @@ def get_report(report_type = 'day', d = None, v = None ):
     if result is None:
         print(f"** no report data")
         return None
+    for x in result:
+        sum = 0.0
+        for y in x['data']:
+            sum += y['value']
+        x['total'] = round(sum,3)
     return result
-
-
-    reportData = '{"deviceID":"'+deviceID+'","reportType":"day","variables":["feedin","generation","gridConsumption","chargeEnergyToTal","dischargeEnergyToTal","loads"],"queryDate":{"year":'+now.strftime(
-        "%Y")+',"month":'+now.strftime("%_m")+',"day":'+now.strftime("%_d")+'}}'
-
-    generationData = ('{"deviceID":"' + deviceID + '","reportType": "month",' + '"variables": ["generation"],' + '"queryDate": {' + '"year":' + now.strftime(
-        "%Y") + ',"month":' + now.strftime("%_m") + ',"day":' + now.strftime("%_d") + ',"hour":' + now.strftime("%_H") + "}}")
 
 
