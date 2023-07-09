@@ -65,9 +65,9 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 ## Raw Data
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
-'''
+```
 get_raw(time_span, d, v)
-'''
+```
 
 + time_span determines the period covered by the data, for example, 'hour' or 'day'
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
