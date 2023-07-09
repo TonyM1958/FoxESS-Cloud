@@ -1,12 +1,12 @@
 ##################################################################################################
 """
-Module:   Fox ESS Cloud Query
+Module:   Fox ESS Cloud
 Created:  3 June 2023
-Updated:  3 June 2023
+Updated:  9 July 2023
 By:       Tony Matthews
 """
 ##################################################################################################
-# This is the code used for the getting inverter data for the Fox ESS cloud web site
+# This is sample code for getting and setting inverter data via the Fox ESS cloud web site
 ##################################################################################################
 
 import os.path
@@ -65,11 +65,12 @@ def get_token():
 device_list = None
 device = None
 device_id = None
+device_sn = None
 raw_vars = None
 
 # get list of available devices and select one
 def get_device(n=None):
-    global token, device_list, device, device_id, firmware, battery, raw_vars
+    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars
     if get_token() is None:
         print(f"** could not get a token")
         return None
@@ -100,69 +101,26 @@ def get_device(n=None):
         return None
     device = device_list[0 if n is None else n]
     device_id = device.get('deviceID')
+    device_sn = device.get('deviceSN')
     firmware = None
     battery = None
+    battery_settings = {}
     raw_vars = get_vars()
     return device
 
-firmware = None
 
-# get current firmware versions for selected device
-def get_firmware():
-    global token, device_id, firmware
-    if get_device() is None:
-        print(f"** could not get a device")
-        return None
-    if debug_setting > 0:
-        print(f"getting firmware")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/addressbook?deviceID=" + device_id, headers=headers)
-    if response.status_code != 200:
-        print(f"** address book response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no address book result data")
-        return None
-    firmware = result.get('softVersion')
-    if firmware is None:
-        print(f"** no firmware data")
-        return None
-    return firmware
-
-battery = None
-
-# get battery info for selected device
-def get_battery():
-    global token, device_id, battery
-    if get_device() is None:
-        print(f"** could not get a device")
-        return None
-    if debug_setting > 0:
-        print(f"getting battery")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info?id=" + device_id, headers=headers)
-    if response.status_code != 200:
-        print(f"** battery response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no battery info")
-        return None
-    battery = result
-    return battery
-
-# get list of raw variables available for selected device
+# get list of variables for selected device
 def get_vars():
-    global token, device_id, variables, var_list
+    global token, device_id
     if get_device() is None:
         print(f"** could not get a device")
         return None
     if debug_setting > 0:
         print(f"getting variables")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'deviceID': device_id}
     # v1 api required for full list with {name, variable, unit}
-    response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables?deviceID=" + device_id, headers=headers)
+    response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables", params=params, headers=headers)
     if response.status_code != 200:
         print(f"** variables response code: {response.status_code}")
         return None
@@ -175,6 +133,216 @@ def get_vars():
         print(f"** no variables list")
         return None
     return vars
+
+
+firmware = None
+
+# get current firmware versions for selected device
+def get_firmware():
+    global token, device_id, firmware
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting firmware")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'deviceID': device_id}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/addressbook", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** firmware response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no firmware result data")
+        return None
+    firmware = result.get('softVersion')
+    if firmware is None:
+        print(f"** no firmware data")
+        return None
+    return firmware
+
+battery = None
+battery_settings = {}
+
+# get battery info and save to battery
+def get_battery():
+    global token, device_id, battery
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting battery")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'id': device_id}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** battery response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no battery info")
+        return None
+    battery = result
+    return battery
+
+
+# get charge times and save to battery_settings
+def get_charge():
+    global token, device_sn, battery_settings
+    if get_device is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting charge times")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'sn': device_sn}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/time/get", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get charge response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no charge result data")
+        return None
+    times = result.get('times')
+    if times is None:
+        print(f"** no times data")
+        return None
+    battery_settings['times'] = times
+    return battery_settings
+
+# set charge times from battery
+def set_charge():
+    global token, device_sn, battery_settings
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if battery_settings.get('times') is None:
+        print(f"** no times to set")
+        return None
+    if debug_setting > 0:
+        print(f"setting charge times")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    data = {'sn': device_sn, 'times': battery_settings.get('times')}
+    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/time/set", headers=headers, data=json.dumps(data))
+    if response.status_code != 200:
+        print(f"** set charge response code: {response.status_code}")
+        return None
+    result = response.json().get('errno')
+    if result != 0:
+        print(f"** return code = {result}")
+    elif debug_setting > 0:
+        print(f"success") 
+    return result
+
+# get min soc settings and save in battery_settings
+def get_min():
+    global token, device_sn, battery_settings
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting min soc settings")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'sn': device_sn}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/soc/get", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get min soc response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no min soc result data")
+        return None
+    battery_settings['minSoc'] = result.get('minSoc')
+    battery_settings['minGridSoc'] = result.get('minGridSoc')
+    return battery_settings
+
+# set min soc from battery_settings
+def set_min():
+    global token, device_sn, bat_settings
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
+        print(f"** no min soc settings")
+        return None
+    if debug_setting > 0:
+        print(f"setting min soc")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
+    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/soc/set", headers=headers, data=json.dumps(data))
+    if response.status_code != 200:
+        print(f"** set min response code: {response.status_code}")
+        return None
+    result = response.json().get('errno')
+    if result != 0:
+        print(f"** return code = {result}")
+    elif debug_setting > 0:
+        print(f"success") 
+    return result
+
+# get times and min soc settings and save in bat_settings
+def get_settings():
+    global battery_settings
+    get_charge()
+    get_min()
+    return battery_settings
+
+
+# get work mode
+def get_work_mode():
+    global token, device_id
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if debug_setting > 0:
+        print(f"getting work mode")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get work mode response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no work mode result data")
+        return None
+    values = result.get('values')
+    if values is None:
+        print(f"** no work mode values data")
+        return None
+    mode = values.get('operation_mode__work_mode')
+    if mode is None:
+        print(f"** no work mode data")
+        return None
+    return mode
+
+work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving']
+
+# set work mode
+def set_work_mode(mode):
+    global token, device_id, work_modes
+    if get_device() is None:
+        print(f"** could not get a device")
+        return None
+    if mode not in work_modes:
+        print(f"** work mode: must be one of {work_modes}")
+        return None
+    if debug_setting > 0:
+        print(f"setting work mode")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
+    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/setting/set", headers=headers, data=json.dumps(data))
+    if response.status_code != 200:
+        print(f"** set work mode response code: {response.status_code}")
+        return None
+    result = response.json().get('errno')
+    if result != 0:
+        print(f"** return code = {result}")
+    elif debug_setting > 0:
+        print(f"success") 
+    return result
+
 
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
 
@@ -246,4 +414,20 @@ def get_report(report_type = 'day', d = None, v = None ):
         x['total'] = round(sum,3)
     return result
 
-
+# get earnings data
+def get_earnings():
+    global token, device_id, var_list, debug_setting, report_vars
+    if get_device() is None:
+        print(f"** could not get device")
+        return None
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': 'en', 'Connection': 'keep-alive'}
+    params = {'deviceID': device_id}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/earnings", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** earnings data response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no earnings data")
+        return None
+    return result
