@@ -288,10 +288,11 @@ def get_settings():
     get_min()
     return battery_settings
 
+work_mode = None
 
 # get work mode
 def get_work_mode():
-    global token, device_id
+    global token, device_id, work_mode
     if get_device() is None:
         print(f"** could not get a device")
         return None
@@ -311,17 +312,17 @@ def get_work_mode():
     if values is None:
         print(f"** no work mode values data")
         return None
-    mode = values.get('operation_mode__work_mode')
-    if mode is None:
+    work_mode = values.get('operation_mode__work_mode')
+    if work_mode is None:
         print(f"** no work mode data")
         return None
-    return mode
+    return work_mode
 
 work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving']
 
 # set work mode
 def set_work_mode(mode):
-    global token, device_id, work_modes
+    global token, device_id, work_modes, work_mode
     if get_device() is None:
         print(f"** could not get a device")
         return None
@@ -339,9 +340,11 @@ def set_work_mode(mode):
     result = response.json().get('errno')
     if result != 0:
         print(f"** return code = {result}")
+        return None
     elif debug_setting > 0:
-        print(f"success") 
-    return result
+        print(f"success")
+    work_mode = mode
+    return work_mode
 
 
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
