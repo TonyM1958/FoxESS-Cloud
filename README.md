@@ -109,7 +109,7 @@ result=f.get_report('month', d=d)
 Produces a CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. It operates by getting the raw data for a day and integrating this to get an overall energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation.
 
 ```
-get_pvreport(s,n,v)
+get_pvoutput(s,n,v)
 ```
 + s is the start date with the format 'yyyy-mm-dd'. The default is yesterday
 + n is the number of days to report. The default is 1
