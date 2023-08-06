@@ -115,6 +115,8 @@ get_pvreport(s,n,v)
 + n is the number of days to report. The default is 1
 + v are the variables to report - the default variables are stored in pvoutput_vars
 
+The results are reported in kWh.
+
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
