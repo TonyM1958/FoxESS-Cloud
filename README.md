@@ -120,5 +120,5 @@ For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 ```
 import foxess as f
 f.get_device()
-f.get_pvoutput('2023-06-01, 31)
+f.get_pvoutput('2023-06-01', 31)
 ```
