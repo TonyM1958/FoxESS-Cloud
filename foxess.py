@@ -410,7 +410,7 @@ def get_pvoutput(s = None, n = None, v = None):
         result = get_raw('day', d=d + ' 00:00:00', v = v)
         r = ""
         for i in range(len(v)):
-            r += f"{int(result[i]['kWh0'] * 1000)},"
+            r += f"{round(result[i]['kWh0'],3)},"
         print(f"{d}, {r[:-1]}")
     return
 
