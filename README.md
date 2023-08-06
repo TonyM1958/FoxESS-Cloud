@@ -104,3 +104,21 @@ f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_report('month', d=d)
 ```
+
+## PV Output
+Produces a CSV data for upload to [pvoutput.org](https://pvoutput.org] including PV generation, Export, Load and Grid consumption by day in Wh. It operates by getting the raw data for a day and integrating this to get an overall energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation.
+
+```
+get_pvreport(s,n,v)
+```
++ s is the start date with the format 'yyyy-mm-dd'. The default is yesterday
++ n is the number of days to report. The default is 1
++ v are the variables to report - the default variables are stored in pvoutput_vars
+
+For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
+
+```
+import foxess as f
+f.get_device()
+f.get_pvoutput('2023-06-01, 31)
+```
