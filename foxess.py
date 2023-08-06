@@ -11,7 +11,7 @@ By:       Tony Matthews
 
 import os.path
 import json
-import datetime
+from datetime import datetime, timedelta
 import requests
 from requests.auth import HTTPBasicAuth
 import hashlib
@@ -26,16 +26,25 @@ user_agent_rotator = UserAgent(software_names=software_names, operating_systems=
 # global settings and vars
 debug_setting = 1
 
-token = {'value': None, 'valid_from': None, 'valid_for': datetime.timedelta(hours=4).seconds, 'user_agent': None, 'lang': 'en'}
+token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=4).seconds, 'user_agent': None, 'lang': 'en'}
+
+# generate a list of dates
+def date_list(s, n=1):
+    l = []
+    d = datetime.date(datetime.strptime(s, '%Y-%m-%d'))
+    for i in range(n):
+        l.append(datetime.strftime(d, '%Y-%m-%d'))
+        d += timedelta(days=1)
+    return l
 
 def query_date(d):
-    t = datetime.datetime.now() if d is None else datetime.datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+    t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
     global username, password, token, device_list, device, device_id
-    time_now = datetime.datetime.now()
+    time_now = datetime.now()
     if token['valid_from'] is not None:
         if (time_now - token['valid_from']).seconds <= token['valid_for']:
             if debug_setting > 1:
@@ -108,7 +117,6 @@ def get_device(n=None):
     raw_vars = get_vars()
     return device
 
-
 # get list of variables for selected device
 def get_vars():
     global token, device_id
@@ -133,7 +141,6 @@ def get_vars():
         print(f"** no variables list")
         return None
     return vars
-
 
 firmware = None
 
@@ -184,7 +191,6 @@ def get_battery():
         return None
     battery = result
     return battery
-
 
 # get charge times and save to battery_settings
 def get_charge():
@@ -362,7 +368,7 @@ def get_raw(time_span = 'hour', d = None, v = None):
         v = [x['variable'] for x in raw_vars]
     elif type(v) is not list:
         v = [v]
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting raw data")
     query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
@@ -389,6 +395,19 @@ def get_raw(time_span = 'hour', d = None, v = None):
         x['kWh1'] = round(sum1,3)
         x['kWh2'] = round(sum2,3)
     return result
+
+pvoutput_vars = ['pvPower', 'feedinPower']
+
+# get values for pvoutput.org as CSV list
+def get_pvoutput(s=None, n=None, v = pvoutput_vars):
+    if s is None:
+        s = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
+    if n is None:
+        n = 1
+    for d in date_list(s,n):
+        result = get_raw('day', d=d + ' 00:00:00', v = v)
+        print(f"{d}, {round(result[0]['kWh0'],3)}, {round(result[1]['kWh0'],3)}, {round(result[2]['kWh0'],3)}")    
+    return
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
