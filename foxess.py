@@ -396,17 +396,22 @@ def get_raw(time_span = 'hour', d = None, v = None):
         x['kWh2'] = round(sum2,3)
     return result
 
-pvoutput_vars = ['pvPower', 'feedinPower']
+pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
 
 # get values for pvoutput.org as CSV list
-def get_pvoutput(s=None, n=None, v = pvoutput_vars):
+def get_pvoutput(s = None, n = None, v = None):
     if s is None:
         s = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
     if n is None:
         n = 1
+    if v is None:
+        v = pvoutput_vars
     for d in date_list(s,n):
         result = get_raw('day', d=d + ' 00:00:00', v = v)
-        print(f"{d}, {round(result[0]['kWh0'],3)}, {round(result[1]['kWh0'],3)}, {round(result[2]['kWh0'],3)}")    
+        r = ""
+        for i in range(len(v)):
+            r += f"{int(result[i]['kWh0'] * 1000)},"
+        print(f"{d}, {r[:-1]}")
     return
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
