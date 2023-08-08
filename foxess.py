@@ -464,3 +464,27 @@ def get_earnings():
         print(f"** no earnings data")
         return None
     return result
+
+
+##################################################################################################
+# pvoutput upload
+##################################################################################################
+
+def put_pvoutput(d, g, e, c = '', i = '', api_key = None, system_id = None):
+    global debug_setting
+    if api_key is None:
+        api_key = private.pvoutput_apikey
+    if system_id is None:
+        system_id = private.pvoutput_systemid
+    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    data = f"data={d},{g},{e},,,,,,,0,{i},0,0,{c},,,,"
+    if debug_setting > 1:
+        print(api_key)
+        print(system_id)
+        print(data)
+    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data=data)
+    result = response.status_code
+    if result != 200:
+        print(f"** put_pvoutput response code: {result}")
+        return None
+    return result
