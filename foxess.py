@@ -12,6 +12,7 @@ By:       Tony Matthews
 import os.path
 import json
 from datetime import datetime, timedelta
+from copy import deepcopy
 import requests
 from requests.auth import HTTPBasicAuth
 import hashlib
@@ -27,15 +28,6 @@ user_agent_rotator = UserAgent(software_names=software_names, operating_systems=
 debug_setting = 1
 
 token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=4).seconds, 'user_agent': None, 'lang': 'en'}
-
-# generate a list of dates
-def date_list(s, n=1):
-    l = []
-    d = datetime.date(datetime.strptime(s, '%Y-%m-%d'))
-    for i in range(n):
-        l.append(datetime.strftime(d, '%Y-%m-%d'))
-        d += timedelta(days=1)
-    return l
 
 def query_date(d):
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
@@ -77,8 +69,8 @@ device_id = None
 device_sn = None
 raw_vars = None
 
-# get list of available devices and select one
-def get_device(n=None):
+# get list of available devices and select one, using the serial number if there is more than 1
+def get_device(sn=None):
     global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars
     if get_token() is None:
         print(f"** could not get a token")
@@ -102,13 +94,21 @@ def get_device(n=None):
         print(f"** invalid list of devices returned: {total}")
         return None
     device_list = result.get('devices')
-    total = len(device_list)
-    if (n is None and total > 1) or (n is not None and n > total):
-        print(f"** {total} devices were found")
-        for d in device_list:
-            print(f"SN={d['deviceSN']}, Type={d['deviceType']}, ID={d['deviceID']} ")
-        return None
-    device = device_list[0 if n is None else n]
+    n = None
+    if len(device_list) > 1:
+        if sn is not None:
+            for i in range(len(device_list)):
+                if device_list[i]['deviceSN'][:len(sn)] == sn:
+                    n = i
+                    break
+        if n is None:
+            print(f"** multiple devices found, please specify a serial number from the list")
+            for d in device_list:
+                print(f"SN={d['deviceSN']}, Type={d['deviceType']}, ID={d['deviceID']} ")
+            return None
+    else:
+        n = 0
+    device = device_list[n]
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
     firmware = None
@@ -352,11 +352,14 @@ def set_work_mode(mode):
     work_mode = mode
     return work_mode
 
-
+# generationPower must be first
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
+# equivalent data after integration from kW into kWh, input name must be last
+energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'input_daily']
 
 # get raw data values
-def get_raw(time_span = 'hour', d = None, v = None):
+# transform determines operating mode - 0: return raw data, 1: add kwh, 2: add kwh and drop raw data
+def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
     global token, device_id, debug_setting, raw_vars
     if get_device() is None:
         print(f"** could not get device")
@@ -379,40 +382,53 @@ def get_raw(time_span = 'hour', d = None, v = None):
     if result is None:
         print(f"** no raw data")
         return None
-    # integrate kW to kWh based on 5 minute sample
+    # integrate kW to kWh based on 5 minute samples
+    if transform == 0:
+        return result
+    # copy generationPower to produce inputPower data
+    generation_name = power_vars[0]
+    generation_index = None
+    if generation_name in v:
+        generation_index = v.index(generation_name)
+        input_name = energy_vars[-1]
+        input_result = deepcopy(result[generation_index])
+        input_result['name'] = input_name
+        for y in input_result['data']:
+            y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
+        result.append(input_result)
     for x in [x for x in result if x['unit'] == 'kW']:
-        sum0 = 0.0
-        sum1 = 0.0
-        sum2 = 0.0
+        d = None
+        kwh = 0.0       # kwh total
+        kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
+        kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
+        hour = 0
+        x['date'] = x['data'][0]['time'][0:10]
+        x['state'] = []
         for y in x['data']:
-            z = y['value']/12
-            sum0 += abs(z)
-            if z >= 0:
-                sum1 += z
-            else:
-                sum2 -= z
-        x['kWh0'] = round(sum0,3)
-        x['kWh1'] = round(sum1,3)
-        x['kWh2'] = round(sum2,3)
+            h = int(y['time'][11:13])       # current hour
+            z = y['value']/12               # convert kW to kWh
+            if z >= 0.0:
+                kwh += z
+                if h >= 2 and h < 5:        # hour is between 2am and 5am
+                    kwh_off += z
+                if h >= 16 and h < 19:      # hour is between 4pm and 7pm
+                    kwh_peak += z
+            else:                           # remove ignored -ve values
+                y['value'] = 0.0
+            if h > hour:    # new hour
+                x['state'].append(round(kwh,1))
+                hour = h
+        x['kwh'] = round(kwh,1)
+        x['kwh_off'] = round(kwh_off,1)
+        x['kwh_peak'] = round(kwh_peak,1)
+        x['state'].append(round(kwh,1))
+        if transform ==2:
+            if generation_index is not None and x['name'] != input_name:
+                x['name'] = energy_vars[power_vars.index(x['variable'])]
+            x['unit'] = 'kWh'
+            del x['data']
+            del x['variable']
     return result
-
-pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
-
-# get values for pvoutput.org as CSV list
-def get_pvoutput(s = None, n = None, v = None):
-    if s is None:
-        s = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')
-    if n is None:
-        n = 1
-    if v is None:
-        v = pvoutput_vars
-    for d in date_list(s,n):
-        result = get_raw('day', d=d + ' 00:00:00', v = v)
-        r = ""
-        for i in range(len(v)):
-            r += f"{round(result[i]['kWh0'],3)},"
-        print(f"{d}, {r[:-1]}")
-    return
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
@@ -470,19 +486,57 @@ def get_earnings():
 # pvoutput upload
 ##################################################################################################
 
-def put_pvoutput(d, g, e, c = '', i = '', api_key = None, system_id = None):
+# generate a list of up to 200 dates, where the last date is not later than yeterday
+def date_list(s=None, e=None):
+    yesterday = datetime.date(datetime.now() - timedelta(days=1))
+    d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else yesterday
+    if d > yesterday:
+        d = yesterday
+    l = [datetime.strftime(d, '%Y-%m-%d')]
+    if e is None:
+        return l
+    last = datetime.date(datetime.strptime(e, '%Y-%m-%d'))
+    n = 0
+    while d < last and d < yesterday and n < 200:
+        d += timedelta(days=1)
+        l.append(datetime.strftime(d, '%Y-%m-%d'))
+        n += 1
+    return l
+
+def format_data(dat, gen, exp, con = '', imp = ''):
+    return f"{dat},{gen},{exp},,,,,,,0,{imp},0,0,{con},,,,"
+
+pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
+pvoutput_names = ['gen', 'exp', 'con', 'imp']
+
+# get CSV upload data from the Fox Cloud as energy values for a list of dates
+def get_pvoutput(dates):
+    if len(dates) == 0:
+        print(f"** invalid date range")
+        return
+    print(f"CSV upload data: {pvoutput_names}")
+    for d in dates:
+        values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, transform=2)
+        result = {'date' : d}
+        text = d
+        for i in range(len(pvoutput_names)):
+            v = round(values[i]['kwh'],3)
+            text += f",{v}"
+        if debug_setting > 0:
+            print(text)
+    return
+
+
+# upload data for day 'dat' via pvoutput api
+def put_pvoutput(data, system_id = None):
     global debug_setting
-    if api_key is None:
-        api_key = private.pvoutput_apikey
     if system_id is None:
         system_id = private.pvoutput_systemid
-    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
-    data = f"data={d},{g},{e},,,,,,,0,{i},0,0,{c},,,,"
+    headers = {'X-Pvoutput-Apikey': private.api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     if debug_setting > 1:
-        print(api_key)
         print(system_id)
         print(data)
-    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data=data)
+    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + data)
     result = response.status_code
     if result != 200:
         print(f"** put_pvoutput response code: {result}")
