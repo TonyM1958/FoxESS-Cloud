@@ -27,22 +27,28 @@ user_agent_rotator = UserAgent(software_names=software_names, operating_systems=
 # global settings and vars
 debug_setting = 1
 
+##################################################################################################
+# Inverter information and settings
+##################################################################################################
+
 token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=4).seconds, 'user_agent': None, 'lang': 'en'}
 
 def query_date(d):
+    if d is not None and len(d) < 18:
+        d += ' 00:00:00'
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
-    global username, password, token, device_list, device, device_id
+    global username, password, token, device_list, device, device_id, debug_setting
     time_now = datetime.now()
     if token['valid_from'] is not None:
         if (time_now - token['valid_from']).seconds <= token['valid_for']:
             if debug_setting > 1:
                 print(f"token is still valid")
             return token['value']
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"loading new token")
     device_list = None
     device = None
@@ -63,27 +69,127 @@ def get_token():
     token['valid_from'] = time_now
     return token['value']
 
+##################################################################################################
+# get list of sites
+##################################################################################################
+
+site_list = None
+site = None
+
+def get_site(name=None):
+    global token, site_list, site, debug_setting
+    if get_token() is None:
+        print(f"** could not get a token")
+        return None
+    if site is not None:
+        return site
+    if debug_setting > 1:
+        print(f"getting sites")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
+    response = requests.post(url="https://www.foxesscloud.com/c/v1/plant/list", headers=headers, data=json.dumps(query))
+    if response.status_code != 200:
+        print(f"** sites list response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no site list result data")
+        return None
+    total = result.get('total')
+    if total is None or total == 0 or total > 100:
+        print(f"** invalid list of sites returned: {total}")
+        return None
+    site_list = result.get('plants')
+    n = None
+    if len(site_list) > 1:
+        if name is not None:
+            for i in range(len(site_list)):
+                if site_list[i]['name'][:len(name)] == name:
+                    n = i
+                    break
+        if n is None:
+            print(f"** multiple sites found, please specify a name from the list")
+            for s in site_list:
+                print(f"Name={s['name']}")
+            return None
+    else:
+        n = 0
+    site = site_list[n]
+    return site
+
+##################################################################################################
+# get list of data loggers
+##################################################################################################
+
+logger_list = None
+logger = None
+
+def get_logger(sn=None):
+    global token, logger_list, logger, debug_setting
+    if get_token() is None:
+        print(f"** could not get a token")
+        return None
+    if logger is not None:
+        return logger
+    if debug_setting > 1:
+        print(f"getting loggers")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
+    response = requests.post(url="https://www.foxesscloud.com/c/v0/module/list", headers=headers, data=json.dumps(query))
+    if response.status_code != 200:
+        print(f"** logger list response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no logger list result data")
+        return None
+    total = result.get('total')
+    if total is None or total == 0 or total > 100:
+        print(f"** invalid list of loggers returned: {total}")
+        return None
+    logger_list = result.get('data')
+    n = None
+    if len(logger_list) > 1:
+        if sn is not None:
+            for i in range(len(logger_list)):
+                if site_list[i]['moduleSN'][:len(sn)] == sn:
+                    n = i
+                    break
+        if n is None:
+            print(f"** multiple logger found, please specify a serial number from the list")
+            for l in logger_list:
+                print(f"SN={l['moduleSN']}, Plant={l['plantName']}, StationID={l['stationID']}")
+            return None
+    else:
+        n = 0
+    logger = logger_list[n]
+    return logger
+
+
+##################################################################################################
+# get list of available devices and select one, using the serial number if there is more than 1
+##################################################################################################
+
 device_list = None
 device = None
 device_id = None
 device_sn = None
 raw_vars = None
 
-# get list of available devices and select one, using the serial number if there is more than 1
 def get_device(sn=None):
-    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars
+    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting
     if get_token() is None:
         print(f"** could not get a token")
         return None
     if device is not None:
         return device
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting device")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
-        print(f"** list response code: {response.status_code}")
+        print(f"** device list response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -117,13 +223,16 @@ def get_device(sn=None):
     raw_vars = get_vars()
     return device
 
+##################################################################################################
 # get list of variables for selected device
+##################################################################################################
+
 def get_vars():
-    global token, device_id
+    global token, device_id, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting variables")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
@@ -142,15 +251,18 @@ def get_vars():
         return None
     return vars
 
+##################################################################################################
+# get current firmware versions for selected device
+##################################################################################################
+
 firmware = None
 
-# get current firmware versions for selected device
 def get_firmware():
-    global token, device_id, firmware
+    global token, device_id, firmware, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting firmware")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
@@ -168,16 +280,19 @@ def get_firmware():
         return None
     return firmware
 
+##################################################################################################
+# get battery info and save to battery
+##################################################################################################
+
 battery = None
 battery_settings = {}
 
-# get battery info and save to battery
 def get_battery():
-    global token, device_id, battery
+    global token, device_id, battery, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting battery")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'id': device_id}
@@ -192,13 +307,16 @@ def get_battery():
     battery = result
     return battery
 
+##################################################################################################
 # get charge times and save to battery_settings
+##################################################################################################
+
 def get_charge():
-    global token, device_sn, battery_settings
+    global token, device_sn, battery_settings, debug_setting
     if get_device is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting charge times")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
@@ -217,16 +335,19 @@ def get_charge():
     battery_settings['times'] = times
     return battery_settings
 
+##################################################################################################
 # set charge times from battery
+##################################################################################################
+
 def set_charge():
-    global token, device_sn, battery_settings
+    global token, device_sn, battery_settings, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
     if battery_settings.get('times') is None:
         print(f"** no times to set")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"setting charge times")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
@@ -237,17 +358,20 @@ def set_charge():
     result = response.json().get('errno')
     if result != 0:
         print(f"** return code = {result}")
-    elif debug_setting > 0:
+    elif debug_setting > 1:
         print(f"success") 
     return result
 
+##################################################################################################
 # get min soc settings and save in battery_settings
+##################################################################################################
+
 def get_min():
-    global token, device_sn, battery_settings
+    global token, device_sn, battery_settings, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting min soc")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
@@ -263,16 +387,19 @@ def get_min():
     battery_settings['minGridSoc'] = result.get('minGridSoc')
     return battery_settings
 
+##################################################################################################
 # set min soc from battery_settings
+##################################################################################################
+
 def set_min():
-    global token, device_sn, bat_settings
+    global token, device_sn, bat_settings, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
     if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
         print(f"** no min soc settings")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"setting min soc")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
@@ -283,26 +410,32 @@ def set_min():
     result = response.json().get('errno')
     if result != 0:
         print(f"** return code = {result}")
-    elif debug_setting > 0:
+    elif debug_setting > 1:
         print(f"success") 
     return result
 
+##################################################################################################
 # get times and min soc settings and save in bat_settings
+##################################################################################################
+
 def get_settings():
     global battery_settings
     get_charge()
     get_min()
     return battery_settings
 
+##################################################################################################
+# get work mode
+##################################################################################################
+
 work_mode = None
 
-# get work mode
 def get_work_mode():
-    global token, device_id, work_mode
+    global token, device_id, work_mode, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting work mode")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
@@ -324,18 +457,21 @@ def get_work_mode():
         return None
     return work_mode
 
+##################################################################################################
+# set work mode
+##################################################################################################
+
 work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving']
 
-# set work mode
 def set_work_mode(mode):
-    global token, device_id, work_modes, work_mode
+    global token, device_id, work_modes, work_mode, debug_setting
     if get_device() is None:
         print(f"** could not get a device")
         return None
     if mode not in work_modes:
         print(f"** work mode: must be one of {work_modes}")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"setting work mode")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
@@ -347,20 +483,24 @@ def set_work_mode(mode):
     if result != 0:
         print(f"** return code = {result}")
         return None
-    elif debug_setting > 0:
+    elif debug_setting > 1:
         print(f"success")
     work_mode = mode
     return work_mode
 
+##################################################################################################
+# get raw data values
+# returns a list of variables and their values / attributes
+# transform determines operating mode - 0: return raw data, 1: estimate kwh, 2: estimate kwh only (drop raw data)
+##################################################################################################
+
 # generationPower must be first
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
-# equivalent data after integration from kW into kWh, input name must be last
+# corresponding names to use after integration to kWh, input is extra and must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'input_daily']
 
-# get raw data values
-# transform determines operating mode - 0: return raw data, 1: add kwh, 2: add kwh and drop raw data
 def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
-    global token, device_id, debug_setting, raw_vars
+    global token, device_id, debug_setting, raw_vars, debug_setting
     if get_device() is None:
         print(f"** could not get device")
         return None
@@ -385,13 +525,14 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
     # integrate kW to kWh based on 5 minute samples
     if transform == 0:
         return result
+    if debug_setting > 1:
+        print(f"estimating kwh from raw data")
     # copy generationPower to produce inputPower data
     generation_name = power_vars[0]
-    generation_index = None
+    input_name = None
     if generation_name in v:
-        generation_index = v.index(generation_name)
         input_name = energy_vars[-1]
-        input_result = deepcopy(result[generation_index])
+        input_result = deepcopy(result[v.index(generation_name)])
         input_result['name'] = input_name
         for y in input_result['data']:
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
@@ -416,23 +557,25 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
             else:                           # remove ignored -ve values
                 y['value'] = 0.0
             if h > hour:    # new hour
-                x['state'].append(round(kwh,1))
+                x['state'].append(round(kwh,3))
                 hour = h
-        x['kwh'] = round(kwh,1)
-        x['kwh_off'] = round(kwh_off,1)
-        x['kwh_peak'] = round(kwh_peak,1)
-        x['state'].append(round(kwh,1))
+        x['kwh'] = round(kwh,3)
+        x['kwh_off'] = round(kwh_off,3)
+        x['kwh_peak'] = round(kwh_peak,3)
+        x['state'].append(round(kwh,3))
         if transform ==2:
-            if generation_index is not None and x['name'] != input_name:
+            if input_name is None or x['name'] != input_name:
                 x['name'] = energy_vars[power_vars.index(x['variable'])]
             x['unit'] = 'kWh'
             del x['data']
-            del x['variable']
     return result
+
+##################################################################################################
+# get energy report data in kWh
+##################################################################################################
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
-# get energy report data in kWh
 def get_report(report_type = 'day', d = None, v = None ):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
@@ -443,7 +586,7 @@ def get_report(report_type = 'day', d = None, v = None ):
         v = report_vars
     elif type(v) is not list:
         v = [v]
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting report data")
     query = {'deviceID': device_id, 'reportType': report_type, 'variables': v, 'queryDate': query_date(d)}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
@@ -461,13 +604,16 @@ def get_report(report_type = 'day', d = None, v = None ):
         x['total'] = round(sum,3)
     return result
 
+##################################################################################################
 # get earnings data
+##################################################################################################
+
 def get_earnings():
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         print(f"** could not get device")
         return None
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"getting earnings")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
@@ -483,10 +629,13 @@ def get_earnings():
 
 
 ##################################################################################################
-# pvoutput upload
+#
+# PV Output Data Handling
+#
 ##################################################################################################
 
 # generate a list of up to 200 dates, where the last date is not later than yeterday
+
 def date_list(s=None, e=None):
     yesterday = datetime.date(datetime.now() - timedelta(days=1))
     d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else yesterday
@@ -503,42 +652,50 @@ def date_list(s=None, e=None):
         n += 1
     return l
 
-def format_data(dat, gen, exp, con = '', imp = ''):
-    return f"{dat},{gen},{exp},,,,,,,0,{imp},0,0,{con},,,,"
+##################################################################################################
+# get PV Output upload data from the Fox Cloud as energy values for a list of dates
+##################################################################################################
 
 pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
-pvoutput_names = ['gen', 'exp', 'con', 'imp']
 
-# get CSV upload data from the Fox Cloud as energy values for a list of dates
-def get_pvoutput(dates):
-    if len(dates) == 0:
-        print(f"** invalid date range")
-        return
-    print(f"CSV upload data: {pvoutput_names}")
-    for d in dates:
-        values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, transform=2)
-        result = {'date' : d}
-        text = d
-        for i in range(len(pvoutput_names)):
-            v = round(values[i]['kwh'],3)
-            text += f",{v}"
-        if debug_setting > 0:
-            print(text)
-    return
+# get pvoutput data for upload to pvoutput api or via Bulk Loader.
 
+def get_pvoutput(d, tou=1):
+    data = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, transform=2)
+    result = ''
+    generate = ''
+    export = ','
+    export2 = ',,,'
+    consume = ','
+    grid = ',,,,'
+    for v in data:     # process values
+        standard = int(v['kwh'] * 1000)
+        peak = int(v['kwh_peak'] * 1000)
+        off_peak = int(v['kwh_off'] * 1000)
+        if v['variable'] == 'pvPower':
+            generate = f"{v['date'].replace('-','')},{standard},"
+        elif v['variable'] == 'feedinPower':
+            export = f"{standard}," if tou == 0 else f","
+            export2 = f",,," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0"
+        elif v['variable'] == 'loadsPower':
+            consume = f"{standard},"
+        elif v['variable'] == 'gridConsumptionPower':
+            grid = f"0,0,{standard},0," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0,"
+    if generate != '':
+        return generate + export + ',,,,,,' + grid + consume + export2
+    return None
 
-# upload data for day 'dat' via pvoutput api
-def put_pvoutput(data, system_id = None):
+# set data for a day using pvoutput api
+def set_pvoutput(d, tou=1, system_id = None):
     global debug_setting
     if system_id is None:
         system_id = private.pvoutput_systemid
-    headers = {'X-Pvoutput-Apikey': private.api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
-    if debug_setting > 1:
-        print(system_id)
-        print(data)
+    headers = {'X-Pvoutput-Apikey': private.pvoutput_apikey, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    data = get_pvoutput(d, tou)
+    if debug_setting > 0:
+        print(f"{data}")
     response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + data)
     result = response.status_code
     if result != 200:
         print(f"** put_pvoutput response code: {result}")
-        return None
     return result
