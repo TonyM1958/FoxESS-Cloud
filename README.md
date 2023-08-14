@@ -8,22 +8,25 @@ To create private.py, copy template_private.py, enter your credentials into the 
 
 To run the code, you will need to install the python libraries: json, datetime, requests, hashlib and random_user_agent.
 
-## Device Information
-To start, you will need to load a device:
+## Site, Logger and Device Information
+Load information about a site, data logger or inverter (device):
 
 ```
+get_site()
+get_logger()
 get_device()
 ```
 
-By default, this will load the first device in the list of devices provided by the cloud.
-If there is more than 1 device, this call will show the list of devices.
-To select a specific device to work with, call get_device with the index of the device e.g. get_device(1)
+By default, this will load the first item in the list provided by the cloud.
 
-When a device is selected, this call returns a dictionary containing the device details.
+If there is more than 1 item, the call will show the list of items. To select a specific item to work with, call a qualifier:
++ Site: full or partial name of the site
++ Logger: full or partial serial number
++ Inverter: full or partial serial number
 
-A list of variables that can be used with the device is also loaded and stored as raw_vars
+When an item is selected, the functions returns a dictionary containing item details. For an inverter, a list of variables that can be used with the device is also loaded and stored as raw_vars
 
-Once a device is loaded, you can make other calls to get information:
+Once an inverter is selected, you can make other calls to get information:
 
 ```
 get_firmware()
@@ -106,21 +109,46 @@ result=f.get_report('month', d=d)
 ```
 
 ## PV Output
-Produces a CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. It operates by getting the raw data for a day and integrating this to get an overall energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation.
+Produces CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. It operates by getting the raw data for a day and integrating this to get an overall energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation.
+
+You can also apply Time Of Use (TOU) to the grid import and export data - this splits the data into time periods: off-peak is 02:00 to 05:00, peak is 16:00 to 19:00. Energy use outside these periods are allocated as to the 'shoulder' category.
 
 ```
-get_pvoutput(s,n,v)
+date_list(s,e)
 ```
-+ s is the start date with the format 'yyyy-mm-dd'. The default is yesterday
-+ n is the number of days to report. The default is 1
-+ v are the variables to report - the default variables are stored in pvoutput_vars
 
-The results are reported in kWh.
++ returns a list of dates from s to e inclusive
++ dates are in the format 'YYYY-MM-DD'
++ will not return dates in the future
++ limits the overall number of days to 200
+
+```
+get_pvoutput(d, tou)
+```
+
++ returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter)
++ d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
++ tou controls time of use. Set to 0 to remove time of use from the upload data
++ copy this data to the pvoutput data CSV Loader, using the following settings:
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/21459cdc-a943-4e9d-a204-7efd45a422d8)
 
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
 import foxess as f
-f.get_device()
-f.get_pvoutput('2023-06-01', 30)
+for d in f.date_list('2023-06-01', '2023-06-30'):
+    print(f.get_pvoutput(d, tou=1))
 ```
++ if you have more than 1 inverter, you will need to call get_device(sn='xxxxx') to select the correct device first.
+
+
+```
+set_pvoutput(d, tou, system_id)
+```
+
++ get the CSV data and uploads this directly using the PV Ouput API
++ d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
++ tou controls time of use. Set to 0 to remove time of use from the upload data
++ system_id is optional and allows you to select whick system data will be uploaded to, where you have more than 1 registered system in pvoutput.org
+
