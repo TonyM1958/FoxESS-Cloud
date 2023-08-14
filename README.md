@@ -124,11 +124,12 @@ date_list(s,e)
 
 ## Get PV Output Data
 
+Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
+
 ```
 get_pvoutput(d, tou)
 ```
 
-+ returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter)
 + d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
 + tou controls time of use. Set to 0 to remove time of use from the upload data
 + copy this data to the pvoutput data CSV Loader, using the following settings:
@@ -145,12 +146,14 @@ for d in f.date_list('2023-06-01', '2023-06-30'):
 + if you have more than 1 inverter, you will need to call get_device(sn='xxxxx') to select the correct device first.
 
 ## Set PV Output Data
+
+Loads CSV data directly using the PV Ouput API:
+
 ```
 set_pvoutput(d, tou, system_id)
 ```
 
-+ get the CSV data and uploads this directly using the PV Ouput API
 + d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
 + tou controls time of use. Set to 0 to remove time of use from the upload data
-+ system_id is optional and allows you to select whick system data will be uploaded to, where you have more than 1 registered system in pvoutput.org
++ system_id is optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
 
