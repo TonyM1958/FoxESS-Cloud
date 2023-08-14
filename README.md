@@ -108,7 +108,7 @@ d = '2023-06-17 00:00:00'
 result=f.get_report('month', d=d)
 ```
 
-## PV Output
+# PV Output
 These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. They operate by getting the raw power data for a day (5 minute samples, or 288 values per variable, per day) and integrating kW to get an overall kWh energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation. Typically, the results are within 4% of the values reported by the energy meters built into the inverter.
 
 You can also apply Time Of Use (TOU) to the grid import and export data - this splits the data into time periods: off-peak is 02:00 to 05:00, peak is 16:00 to 19:00. Energy use outside these periods are allocated as to the 'shoulder' category.
@@ -121,6 +121,8 @@ date_list(s,e)
 + dates are in the format 'YYYY-MM-DD'
 + will not return dates in the future
 + limits the overall number of days to 200
+
+## Get PV Output Data
 
 ```
 get_pvoutput(d, tou)
@@ -142,7 +144,7 @@ for d in f.date_list('2023-06-01', '2023-06-30'):
 ```
 + if you have more than 1 inverter, you will need to call get_device(sn='xxxxx') to select the correct device first.
 
-
+## Set PV Output Data
 ```
 set_pvoutput(d, tou, system_id)
 ```
