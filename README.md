@@ -69,12 +69,13 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-get_raw(time_span, d, v)
+get_raw(time_span, d, v, energy)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour' or 'day'
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
 + v is a variable, or list of variables
++ energy is optional - see following section.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter.
 
@@ -86,6 +87,22 @@ f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
 ```
+
+## Estimated Energy
+
+Setting the optional parameter 'energy' when calling get_raw() provides daily energy stats from the power data
+
++ energy = 1: energy stats (kwh) are calculated
++ energy = 2: energy stats (kwh) are calculated and raw power data is removed to save space
+
+The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
+
+In addition to daily energy totals, it implements peak and off-peak time of use (TOU). The time periods are set by global variables: off_peak1, off_peak2 and peak. The default settings are:
+
++ off_peak1: 02:00 to 05:00 - adds energy to kwh_off
++ off_peak2: 00:00 to 00:00 - adds energy to kwh_off
++ peak: 16:00 to 19:00 - adds energy to kwh_peak
++ other times: calculate from kwh - kwh_peak - kwh_off
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -109,9 +126,9 @@ result=f.get_report('month', d=d)
 ```
 
 # PV Output
-These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. They operate by getting the raw power data for a day (5 minute samples, or 288 values per variable, per day) and integrating kW to get an overall kWh energy value for that day. This approximation is required as the Fox Cloud API does not expose the PV energy generation. Typically, the results are within 4% of the values reported by the energy meters built into the inverter.
+These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
-You can also apply Time Of Use (TOU) to the grid import and export data - this splits the data into time periods: off-peak is 02:00 to 05:00, peak is 16:00 to 19:00. Energy use outside these periods are allocated as to the 'shoulder' category.
+Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories.
 
 ```
 date_list(s,e)
