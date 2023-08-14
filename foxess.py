@@ -499,8 +499,17 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 # corresponding names to use after integration to kWh, input is extra and must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'input_daily']
 
+# convert time to fractional hours
+def frac_hour(s):
+    return sum(float(t) / x for x, t in zip([1, 60, 3600], s.split(":")))
+
+# time periods settings for TOU allocation.
+off_peak1 = {'start': 2.0, 'end': 5.0}
+off_peak2 = {'start': 0.0, 'end': 0.0}
+peak = {'start': 16.0, 'end': 19.0 }
+
 def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
-    global token, device_id, debug_setting, raw_vars, debug_setting
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak
     if get_device() is None:
         print(f"** could not get device")
         return None
@@ -546,16 +555,18 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
         x['date'] = x['data'][0]['time'][0:10]
         x['state'] = []
         for y in x['data']:
-            h = int(y['time'][11:13])       # current hour
-            z = y['value']/12               # convert kW to kWh
+            h = frac_hour(y['time'][11:19]) # time
+            z = y['value'] / 1              # 12 x 5 minute samples = 1 hour
             if z >= 0.0:
                 kwh += z
-                if h >= 2 and h < 5:        # hour is between 2am and 5am
+                if h >= off_peak1['start'] and h < off_peak1['end']:
                     kwh_off += z
-                if h >= 16 and h < 19:      # hour is between 4pm and 7pm
+                elif h >= off_peak2['start'] and h < off_peak2['end']:
+                    kwh_off += z
+                elif h >= peak['start'] and h < peak['end']:
                     kwh_peak += z
-            else:                           # remove ignored -ve values
-                y['value'] = 0.0
+            else:
+                y['value'] = 0.0            # remove ignored values
             if h > hour:    # new hour
                 x['state'].append(round(kwh,3))
                 hour = h
