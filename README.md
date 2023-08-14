@@ -155,5 +155,5 @@ set_pvoutput(d, tou, system_id)
 
 + d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
 + tou controls time of use. Set to 0 to remove time of use from the upload data
-+ system_id is optional and allows you to select whick system data will be uploaded to, where you have more than 1 registered system in pvoutput.org
++ system_id is optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
 
