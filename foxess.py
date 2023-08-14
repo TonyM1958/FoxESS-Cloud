@@ -629,9 +629,11 @@ def get_earnings():
 
 
 ##################################################################################################
+##################################################################################################
 #
 # PV Output Data Handling
 #
+##################################################################################################
 ##################################################################################################
 
 # generate a list of up to 200 dates, where the last date is not later than yeterday
@@ -660,7 +662,10 @@ pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
 
 # get pvoutput data for upload to pvoutput api or via Bulk Loader.
 
-def get_pvoutput(d, tou=1):
+def get_pvoutput(d = None, tou = 1):
+    global debug_setting
+    if d is None:
+        d = date_list()[0]
     data = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, transform=2)
     result = ''
     generate = ''
@@ -686,8 +691,10 @@ def get_pvoutput(d, tou=1):
     return None
 
 # set data for a day using pvoutput api
-def set_pvoutput(d, tou=1, system_id = None):
+def set_pvoutput(d = None, tou = 1, system_id = None):
     global debug_setting
+    if d is None:
+        d = date_list()[0]
     if system_id is None:
         system_id = private.pvoutput_systemid
     headers = {'X-Pvoutput-Apikey': private.pvoutput_apikey, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
