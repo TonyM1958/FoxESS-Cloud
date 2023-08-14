@@ -69,13 +69,13 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-get_raw(time_span, d, v, transform)
+get_raw(time_span, d, v, energy)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour' or 'day'
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
 + v is a variable, or list of variables
-+ transform is optional - see following section.
++ energy is optional - see following section.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter.
 
@@ -88,13 +88,16 @@ d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
 ```
 
-## Raw Data Tranform
+## Estimated Energy
 
-Setting the optional parameter 'transform' for get_raw enables daily power data to be transformed into energy stats
-+ transform = 1: energy stats (kwh) is calculated
-+ transform = 2: energy stats (kwh) is calculated and the raw data is removed to space space
+Setting the optional parameter 'energy' when calling get_raw() provides daily energy stats from the power data
 
-The transform creates a Riemann sum of the power data, integrating power in kW to energy in kWh. In addition to daily energy totals, it implements peak and off-peak time of use (TOU). The time periods are set by global variables: off_peak1, off_peak2 and peak. The default settings are:
++ energy = 1: energy stats (kwh) are calculated
++ energy = 2: energy stats (kwh) are calculated and raw power data is removed to save space
+
+The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
+
+In addition to daily energy totals, it implements peak and off-peak time of use (TOU). The time periods are set by global variables: off_peak1, off_peak2 and peak. The default settings are:
 
 + off_peak1: 02:00 to 05:00 - adds energy to kwh_off
 + off_peak2: 00:00 to 00:00 - adds energy to kwh_off
