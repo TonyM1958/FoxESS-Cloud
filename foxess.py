@@ -491,7 +491,7 @@ def set_work_mode(mode):
 ##################################################################################################
 # get raw data values
 # returns a list of variables and their values / attributes
-# transform determines operating mode - 0: return raw data, 1: estimate kwh, 2: estimate kwh only (drop raw data)
+# energy determines operating mode - 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data
 ##################################################################################################
 
 # generationPower must be first
@@ -508,7 +508,7 @@ off_peak1 = {'start': 2.0, 'end': 5.0}
 off_peak2 = {'start': 0.0, 'end': 0.0}
 peak = {'start': 16.0, 'end': 19.0 }
 
-def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
+def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak
     if get_device() is None:
         print(f"** could not get device")
@@ -532,7 +532,7 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
         print(f"** no raw data")
         return None
     # integrate kW to kWh based on 5 minute samples
-    if transform == 0:
+    if energy == 0:
         return result
     if debug_setting > 1:
         print(f"estimating kwh from raw data")
@@ -556,7 +556,7 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
         x['state'] = []
         for y in x['data']:
             h = frac_hour(y['time'][11:19]) # time
-            z = y['value'] / 1              # 12 x 5 minute samples = 1 hour
+            z = y['value'] / 12             # 12 x 5 minute samples = 1 hour
             if z >= 0.0:
                 kwh += z
                 if h >= off_peak1['start'] and h < off_peak1['end']:
@@ -574,7 +574,7 @@ def get_raw(time_span = 'hour', d = None, v = None, transform = 0):
         x['kwh_off'] = round(kwh_off,3)
         x['kwh_peak'] = round(kwh_peak,3)
         x['state'].append(round(kwh,3))
-        if transform ==2:
+        if energy ==2:
             if input_name is None or x['name'] != input_name:
                 x['name'] = energy_vars[power_vars.index(x['variable'])]
             x['unit'] = 'kWh'
@@ -677,14 +677,14 @@ def get_pvoutput(d = None, tou = 1):
     global debug_setting
     if d is None:
         d = date_list()[0]
-    data = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, transform=2)
+    values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=2)
     result = ''
     generate = ''
     export = ','
     export2 = ',,,'
     consume = ','
     grid = ',,,,'
-    for v in data:     # process values
+    for v in values:     # process values
         standard = int(v['kwh'] * 1000)
         peak = int(v['kwh_peak'] * 1000)
         off_peak = int(v['kwh_off'] * 1000)
@@ -709,10 +709,10 @@ def set_pvoutput(d = None, tou = 1, system_id = None):
     if system_id is None:
         system_id = private.pvoutput_systemid
     headers = {'X-Pvoutput-Apikey': private.pvoutput_apikey, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
-    data = get_pvoutput(d, tou)
+    csv = get_pvoutput(d, tou)
     if debug_setting > 0:
-        print(f"{data}")
-    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + data)
+        print(f"{csv}")
+    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
         print(f"** put_pvoutput response code: {result}")
