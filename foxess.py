@@ -685,6 +685,8 @@ def get_pvoutput(d = None, tou = 1):
     if d is None:
         d = date_list()[0]
     values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=2)
+    if values is None:
+        return None
     result = ''
     generate = ''
     export = ','
