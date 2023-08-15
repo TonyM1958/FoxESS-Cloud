@@ -657,20 +657,22 @@ def get_earnings():
 
 # generate a list of up to 200 dates, where the last date is not later than yeterday
 
-def date_list(s=None, e=None):
+def date_list(s=None, e=None, limit=None):
+    global debug_setting
     yesterday = datetime.date(datetime.now() - timedelta(days=1))
     d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else yesterday
     if d > yesterday:
         d = yesterday
     l = [datetime.strftime(d, '%Y-%m-%d')]
-    if e is None and s is None:
+    if s is None:
         return l
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else yesterday
-    n = 0
-    while d < last and d < yesterday and n < 200:
+    limit = 200 if limit is None or limit < 1 else limit
+    while d < last and d < yesterday and len(l) < limit:
         d += timedelta(days=1)
         l.append(datetime.strftime(d, '%Y-%m-%d'))
-        n += 1
+    if debug_setting > 0 and len(l) > 1:
+        print(f"Date range from {l[0]} to {l[-1]} has {len(l)} days")
     return l
 
 ##################################################################################################
