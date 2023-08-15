@@ -30,7 +30,7 @@ debug_setting = 1
 # Inverter information and settings
 ##################################################################################################
 
-token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=4).seconds, 'user_agent': None, 'lang': 'en'}
+token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=1).seconds, 'user_agent': None, 'lang': 'en'}
 
 def query_date(d):
     if d is not None and len(d) < 18:
@@ -86,7 +86,7 @@ def get_site(name=None):
     if get_token() is None:
         print(f"** could not get a token")
         return None
-    if site is not None:
+    if site is not None and name is None:
         return site
     if debug_setting > 1:
         print(f"getting sites")
@@ -134,7 +134,7 @@ def get_logger(sn=None):
     if get_token() is None:
         print(f"** could not get a token")
         return None
-    if logger is not None:
+    if logger is not None and sn is None:
         return logger
     if debug_setting > 1:
         print(f"getting loggers")
@@ -186,7 +186,7 @@ def get_device(sn=None):
     if get_token() is None:
         print(f"** could not get a token")
         return None
-    if device is not None:
+    if device is not None and sn is None:
         return device
     if debug_setting > 1:
         print(f"getting device")
