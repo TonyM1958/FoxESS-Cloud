@@ -39,6 +39,9 @@ def query_date(d):
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+username = None
+password = None
+
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
     global username, password, token, device_list, device, device_id, debug_setting
@@ -54,7 +57,12 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    credentials = {'user': private.username, 'password': hashlib.md5(private.password.encode()).hexdigest()}
+    un = private.username if username is None else username
+    pwd = private.password if password is None else password
+    if un is None or pwd is None:
+        print(f"** you must provide a username and password")
+        return None
+    credentials = {'user': un, 'password': hashlib.md5(pwd.encode()).hexdigest()}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
     if response.status_code != 200:
         print(f"** login response code: {response.status_code}")
@@ -655,9 +663,9 @@ def date_list(s=None, e=None):
     if d > yesterday:
         d = yesterday
     l = [datetime.strftime(d, '%Y-%m-%d')]
-    if e is None:
+    if e is None and s is None:
         return l
-    last = datetime.date(datetime.strptime(e, '%Y-%m-%d'))
+    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else yesterday
     n = 0
     while d < last and d < yesterday and n < 200:
         d += timedelta(days=1)
@@ -701,14 +709,20 @@ def get_pvoutput(d = None, tou = 1):
         return generate + export + ',,,,,,' + grid + consume + export2
     return None
 
+api_key = None
+system_id = None
+
 # set data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 1, system_id = None):
-    global debug_setting
+def set_pvoutput(d = None, tou = 1, id = system_id):
+    global api_key, system_id, debug_setting
     if d is None:
         d = date_list()[0]
-    if system_id is None:
-        system_id = private.pvoutput_systemid
-    headers = {'X-Pvoutput-Apikey': private.pvoutput_apikey, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    key = private.pvoutput_apikey if api_key is None else api_key
+    sys_id = private.pvoutput_systemid if id is None else id
+    if key is None or sys_id is None:
+        print(f"** you must provide an api_key and system_id")
+        return None 
+    headers = {'X-Pvoutput-Apikey': key, 'X-Pvoutput-SystemId': sys_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if debug_setting > 0:
         print(f"{csv}")
