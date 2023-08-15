@@ -4,6 +4,6 @@ username = "<your username>"
 password = "<your username>"
 
 # pvoutput.org credentials
-pvoutput_apikey = '<your api key>'
-pvoutput_systemid = '<your system id>'
+api_key = '<your api key>'
+system_id = '<your system id>'
 

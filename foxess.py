@@ -18,7 +18,6 @@ from requests.auth import HTTPBasicAuth
 import hashlib
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
-import private
 
 software_names = [SoftwareName.CHROME.value]
 operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
@@ -57,12 +56,10 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    un = private.username if username is None else username
-    pwd = private.password if password is None else password
-    if un is None or pwd is None:
-        print(f"** you must provide a username and password")
+    if username is None or password is None or username == '<your uername>':
+        print(f"** please setup your Fox ESS Cloud username and password")
         return None
-    credentials = {'user': un, 'password': hashlib.md5(pwd.encode()).hexdigest()}
+    credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
     if response.status_code != 200:
         print(f"** login response code: {response.status_code}")
@@ -719,12 +716,10 @@ def set_pvoutput(d = None, tou = 1, id = system_id):
     global api_key, system_id, debug_setting
     if d is None:
         d = date_list()[0]
-    key = private.pvoutput_apikey if api_key is None else api_key
-    sys_id = private.pvoutput_systemid if id is None else id
-    if key is None or sys_id is None:
-        print(f"** you must provide an api_key and system_id")
+    if api_key is None or id is None or api_key == '<your api key>':
+        print(f"** please setup your PV Output api_key and system_id")
         return None 
-    headers = {'X-Pvoutput-Apikey': key, 'X-Pvoutput-SystemId': sys_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if debug_setting > 0:
         print(f"{csv}")
