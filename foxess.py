@@ -2,7 +2,7 @@
 """
 Module:   Fox ESS Cloud
 Created:  3 June 2023
-Updated:  9 July 2023
+Updated:  16 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -714,13 +714,17 @@ api_key = None
 system_id = None
 
 # set data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 1, id = system_id):
+def set_pvoutput(d = None, tou = 1, id = None):
     global api_key, system_id, debug_setting
     if d is None:
         d = date_list()[0]
+    id = system_id if id is None else id
+    if debug_setting > 1:
+        print(api_key)
+        print(id)
     if api_key is None or id is None or api_key == '<your api key>':
         print(f"** please setup your PV Output api_key and system_id")
-        return None 
+        return None
     headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if debug_setting > 0:
