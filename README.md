@@ -168,21 +168,28 @@ for d in f.date_list('2023-06-01', '2023-06-30'):
 Loads CSV data directly using the PV Ouput API:
 
 ```
-set_pvoutput(d, tou, api_key, system_id, today)
+set_pvoutput(d, tou, system_id, today)
 ```
 
-+ d is optional and is the start date with the format 'YYYY-MM-DD'
++ d is optional and is the date to upload in the format 'YYYY-MM-DD'. For default, see today below
 + tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
-+ api_key and system_id are optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
-+ today = True is optional and sets the day to today instead of yesterday 
++ system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
++ today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
 
 ## pvoutput.sh
 
 The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload data. This builds on the python libraries above to upload a days data. Optional parameters are:
 
 + $1 = the path to the folder containing foxess.py and private.py with the user credentials required. Default is the current directory
-+ $2 = True to upload partial data for today. The default is False and uploads data from yesterday
++ $2 = True to upload partial data for today. The default is False and uploads complete data from yesterday
 + $3 = Device serial number, if you have more than 1 device in your Fox ESS account. Leave blank if you only have 1 inverter
+
+For example, the first command line uploads data for yesterday. The second line uploads data for today:
+
+```
+./pvoutput.sh
+./pvoutput.sh . True
+```
 
 You can check if you can run this command in your environment by opening a shell and running 'python -h' to check if the python interpreter is available. If it is not, you may need to install it.
 
