@@ -4,6 +4,7 @@ cd ${1:-.}
 python << END
 
 import foxess as f
+f.get_device(sn="$3")
 f.set_pvoutput(tou=1, today=${2:-False})
 
 END

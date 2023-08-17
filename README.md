@@ -176,4 +176,14 @@ set_pvoutput(d, tou, api_key, system_id, today)
 + api_key and system_id are optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the day to today instead of yesterday 
 
-The file pvoutput.sh is a shell command file runs set_pvoutput() to upload data. You can add a path to the command line to run in a location containing foxess.py and private.py files with specific credentials. You can also check if you can run this command by opening terminal and running 'python -h' to check if the python interpreter is available.
+## pvoutput.sh
+
+The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload data. This builds on the python libraries above to upload a days data. Optional parameters are:
+
++ $1 = the path to the folder containing foxess.py and private.py with the user credentials required. Default is the current directory
++ $2 = True to upload partial data for today. The default is False and uploads data from yesterday
++ $3 = Device serial number, if you have more than 1 device in your Fox ESS account. Leave blank if you only have 1 inverter
+
+You can check if you can run this command in your environment by opening a shell and running 'python -h' to check if the python interpreter is available. If it is not, you may need to install it.
+
+This file can be run, for example, on a schedule to regularly upload data 

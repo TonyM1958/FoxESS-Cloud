@@ -204,19 +204,17 @@ def get_device(sn=None):
         return None
     device_list = result.get('devices')
     n = None
-    if len(device_list) > 1:
-        if sn is not None:
-            for i in range(len(device_list)):
-                if device_list[i]['deviceSN'][:len(sn)] == sn:
-                    n = i
-                    break
-        if n is None:
-            print(f"** multiple devices found, please specify a serial number from the list")
-            for d in device_list:
-                print(f"SN={d['deviceSN']}, Type={d['deviceType']}, ID={d['deviceID']} ")
-            return None
-    else:
-        n = 0
+    if sn is None:
+        sn = private.device_sn
+    for i in range(len(device_list)):
+        if device_list[i]['deviceSN'][:len(sn)] == sn:
+            n = i
+            break
+    if n is None:
+        print(f"** please specify a serial number from this list")
+        for d in device_list:
+            print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
+        return None
     device = device_list[n]
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
