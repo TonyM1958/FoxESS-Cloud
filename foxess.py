@@ -2,7 +2,7 @@
 """
 Module:   Fox ESS Cloud
 Created:  3 June 2023
-Updated:  16 August 2023
+Updated:  17 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -18,6 +18,7 @@ from requests.auth import HTTPBasicAuth
 import hashlib
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
+import private
 
 software_names = [SoftwareName.CHROME.value]
 operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
@@ -38,9 +39,6 @@ def query_date(d):
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
-username = None
-password = None
-
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
     global username, password, token, device_list, device, device_id, debug_setting
@@ -56,10 +54,10 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    if username is None or password is None or username == '<your uername>':
+    if private.username == '<your username>' or private.password == '<your password>':
         print(f"** please setup your Fox ESS Cloud username and password")
         return None
-    credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
+    credentials = {'user': private.username, 'password': hashlib.md5(private.password.encode()).hexdigest()}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
     if response.status_code != 200:
         print(f"** login response code: {response.status_code}")
@@ -652,20 +650,22 @@ def get_earnings():
 ##################################################################################################
 ##################################################################################################
 
-# generate a list of up to 200 dates, where the last date is not later than yeterday
+# generate a list of up to 200 dates, where the last date is not later than yeterday or today
 
-def date_list(s=None, e=None, limit=None):
+def date_list(s = None, e = None, limit = None, today = False):
     global debug_setting
-    yesterday = datetime.date(datetime.now() - timedelta(days=1))
-    d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else yesterday
-    if d > yesterday:
-        d = yesterday
+    latest_date = datetime.date(datetime.now())
+    if not today:
+        latest_date -= timedelta(days=1)
+    d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else latest_date
+    if d > latest_date:
+        d = lastest_date
     l = [datetime.strftime(d, '%Y-%m-%d')]
     if s is None:
         return l
-    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else yesterday
+    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else latest_date
     limit = 200 if limit is None or limit < 1 else limit
-    while d < last and d < yesterday and len(l) < limit:
+    while d < last and d < latest_date and len(l) < limit:
         d += timedelta(days=1)
         l.append(datetime.strftime(d, '%Y-%m-%d'))
     if debug_setting > 0 and len(l) > 1:
@@ -710,23 +710,22 @@ def get_pvoutput(d = None, tou = 1):
         return generate + export + ',,,,,,' + grid + consume + export2
     return None
 
-api_key = None
-system_id = None
-
 # set data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 1, id = None):
-    global api_key, system_id, debug_setting
+def set_pvoutput(d = None, tou = 1, api_key = None, system_id = None, today = False):
+    global pvoutput_api_key, pvoutput_system_id, debug_setting
     if d is None:
-        d = date_list()[0]
-    id = system_id if id is None else id
-    if debug_setting > 1:
-        print(api_key)
-        print(id)
-    if api_key is None or id is None or api_key == '<your api key>':
+        d = date_list(today = today)[0]
+    if api_key is None:
+        api_key = private.api_key
+    if system_id is None:
+        system_id = private.system_id
+    if api_key == '<your api key>' or system_id == '<your system id>':
         print(f"** please setup your PV Output api_key and system_id")
         return None
-    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
+    if csv is None:
+        return None
     if debug_setting > 0:
         print(f"{csv}")
     response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + csv)
