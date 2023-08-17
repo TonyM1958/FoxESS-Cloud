@@ -82,7 +82,7 @@ The list of variables that can be queried is stored in raw_vars. There is also a
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
 ```
-import foxess-cloud as f
+import foxess_cloud as f
 f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
@@ -119,7 +119,7 @@ The list of variables that can be reported on is stored in report_vars.
 For example, this Jupyter Lab cell will report energy data by day for the month of June 2023:
 
 ```
-import foxess-cloud as f
+import foxess_cloud as f
 f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_report('month', d=d)
@@ -157,7 +157,7 @@ get_pvoutput(d, tou)
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
-import foxess-cloud as f
+import foxess_cloud as f
 for d in f.date_list('2023-06-01', '2023-06-30'):
     print(f.get_pvoutput(d, tou=1))
 ```
@@ -180,7 +180,7 @@ set_pvoutput(d, tou, system_id, today)
 
 The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload data. This builds on the python libraries above to upload a days data. Optional parameters are:
 
-+ $1 = the path to the folder containing foxess.py and private.py with the user credentials required. Default is the current directory
++ $1 = the path to the folder containing foxess_cloud.py and private.py with the user credentials required. Default is the current directory
 + $2 = True to upload partial data for today. The default is False and uploads complete data from yesterday
 
 For example, the first command line uploads complete data for yesterday. The second line uploads partial data for today:
