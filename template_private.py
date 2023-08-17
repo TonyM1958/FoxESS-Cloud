@@ -1,10 +1,10 @@
 
-# Fox cloud login
+# Fox ESS Cloud
 username = "<your username>"
 password = "<your username>"
 device_sn = ""
 
-# pvoutput.org credentials
+# PV Output
 api_key = "<your api key>"
 system_id = "<your system id>"
 
