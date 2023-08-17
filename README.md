@@ -183,7 +183,7 @@ The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload 
 + $1 = the path to the folder containing foxess.py and private.py with the user credentials required. Default is the current directory
 + $2 = True to upload partial data for today. The default is False and uploads complete data from yesterday
 
-For example, the first command line uploads data for yesterday. The second line uploads data for today:
+For example, the first command line uploads complete data for yesterday. The second line uploads partial data for today:
 
 ```
 ./pvoutput.sh
