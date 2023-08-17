@@ -131,13 +131,14 @@ These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.o
 Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories.
 
 ```
-date_list(s,e)
+date_list(s, e, limit, today)
 ```
 
 + returns a list of dates from s to e inclusive
 + dates are in the format 'YYYY-MM-DD'
 + will not return dates in the future
-+ limits the overall number of days to 200
++ limit is optional and sets the maximum number of days. The default is 200
++ today = True is optional and sets the latest date to today instead of yesterday
 
 ## Get PV Output Data
 
@@ -167,10 +168,12 @@ for d in f.date_list('2023-06-01', '2023-06-30'):
 Loads CSV data directly using the PV Ouput API:
 
 ```
-set_pvoutput(d, tou, system_id)
+set_pvoutput(d, tou, api_key, system_id, today)
 ```
 
-+ d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
-+ tou controls time of use. Set to 0 to remove time of use from the upload data
-+ system_id is optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
++ d is optional and is the start date with the format 'YYYY-MM-DD'
++ tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
++ api_key and system_id are optional and allows you to select the system data is uploaded to (where you have more than 1 registered system)
++ today = True is optional and sets the day to today instead of yesterday 
 
+The file pvoutput.sh is a shell command file runs set_pvoutput() to upload data. You can add a path to the command line to run in a location containing foxess.py and private.py files with specific credentials. You can also check if you can run this command by opening terminal and running 'python -h' to check if the python interpreter is available.
