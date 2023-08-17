@@ -18,7 +18,6 @@ from requests.auth import HTTPBasicAuth
 import hashlib
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
-import private
 
 software_names = [SoftwareName.CHROME.value]
 operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
@@ -39,6 +38,9 @@ def query_date(d):
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+username = None
+password = None
+
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
     global username, password, token, device_list, device, device_id, debug_setting
@@ -54,10 +56,10 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    if private.username == '<your username>' or private.password == '<your password>':
+    if username is None or password is None:
         print(f"** please setup your Fox ESS Cloud username and password")
         return None
-    credentials = {'user': private.username, 'password': hashlib.md5(private.password.encode()).hexdigest()}
+    credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
     if response.status_code != 200:
         print(f"** login response code: {response.status_code}")
@@ -184,8 +186,9 @@ def get_device(sn=None):
     if get_token() is None:
         print(f"** could not get a token")
         return None
-    if sn is None and device is not None:
-        sn = private.device_sn
+    if device is not None:
+        if sn is None:
+            return device
         if device_sn[:len(sn)].upper() == sn.upper():
             return device
     if debug_setting > 1:
@@ -206,17 +209,18 @@ def get_device(sn=None):
         return None
     device_list = result.get('devices')
     n = None
-    if sn is None:
-        sn = private.device_sn
-    for i in range(len(device_list)):
-        if device_list[i]['deviceSN'][:len(sn)].upper() == sn.upper():
-            n = i
-            break
-    if n is None:
-        print(f"** please pick a serial number from this list")
-        for d in device_list:
-            print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
-        return None
+    if len(device_list) == 1 and sn is None:
+        n = 0
+    else:
+        for i in range(len(device_list)):
+            if device_list[i]['deviceSN'][:len(sn)].upper() == sn.upper():
+                n = i
+                break
+        if n is None:
+            print(f"** please pick a serial number from this list")
+            for d in device_list:
+                print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
+            return None
     device = device_list[n]
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
@@ -710,17 +714,16 @@ def get_pvoutput(d = None, tou = 1):
         return generate + export + ',,,,,,' + grid + consume + export2
     return None
 
+api_key = None
+system_id = None
+
 # set data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 1, api_key = None, system_id = None, today = False):
-    global pvoutput_api_key, pvoutput_system_id, debug_setting
+def set_pvoutput(d = None, tou = 1, today = False):
+    global api_key, system_id, debug_setting
     if d is None:
         d = date_list(today = today)[0]
-    if api_key is None:
-        api_key = private.api_key
-    if system_id is None:
-        system_id = private.system_id
-    if api_key == '<your api key>' or system_id == '<your system id>':
-        print(f"** please setup your PV Output api_key and system_id")
+    if api_key is None or system_id is None or api_key == '<your api key>' or system_id == '<your system id>':
+        print(f"** please enter your PV Output api_key and system_id")
         return None
     headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
