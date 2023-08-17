@@ -182,7 +182,6 @@ The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload 
 
 + $1 = the path to the folder containing foxess.py and private.py with the user credentials required. Default is the current directory
 + $2 = True to upload partial data for today. The default is False and uploads complete data from yesterday
-+ $3 = Device serial number, if you have more than 1 device in your Fox ESS account. Leave blank if you only have 1 inverter
 
 For example, the first command line uploads data for yesterday. The second line uploads data for today:
 
