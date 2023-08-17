@@ -107,11 +107,11 @@ def get_site(name=None):
     if len(site_list) > 1:
         if name is not None:
             for i in range(len(site_list)):
-                if site_list[i]['name'][:len(name)] == name:
+                if site_list[i]['name'][:len(name)].upper() == name.upper():
                     n = i
                     break
         if n is None:
-            print(f"** multiple sites found, please specify a name from the list")
+            print(f"** please pick a name from the list")
             for s in site_list:
                 print(f"Name={s['name']}")
             return None
@@ -155,11 +155,11 @@ def get_logger(sn=None):
     if len(logger_list) > 1:
         if sn is not None:
             for i in range(len(logger_list)):
-                if site_list[i]['moduleSN'][:len(sn)] == sn:
+                if site_list[i]['moduleSN'][:len(sn)].upper() == sn.upper():
                     n = i
                     break
         if n is None:
-            print(f"** multiple logger found, please specify a serial number from the list")
+            print(f"** please pick a serial number from the list")
             for l in logger_list:
                 print(f"SN={l['moduleSN']}, Plant={l['plantName']}, StationID={l['stationID']}")
             return None
@@ -184,8 +184,10 @@ def get_device(sn=None):
     if get_token() is None:
         print(f"** could not get a token")
         return None
-    if device is not None and sn is None:
-        return device
+    if sn is None and device is not None:
+        sn = private.device_sn
+        if device_sn[:len(sn)].upper() == sn.upper():
+            return device
     if debug_setting > 1:
         print(f"getting device")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
@@ -207,11 +209,11 @@ def get_device(sn=None):
     if sn is None:
         sn = private.device_sn
     for i in range(len(device_list)):
-        if device_list[i]['deviceSN'][:len(sn)] == sn:
+        if device_list[i]['deviceSN'][:len(sn)].upper() == sn.upper():
             n = i
             break
     if n is None:
-        print(f"** please specify a serial number from this list")
+        print(f"** please pick a serial number from this list")
         for d in device_list:
             print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
         return None
