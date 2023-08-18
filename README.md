@@ -3,18 +3,28 @@ This site contains sample python code for accessing the Fox cloud data via the R
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
 ## Setup
-Access to the cloud data requires your username and password. These are stored in the file private.py (not uploaded).
-To create private.py, copy template_private.py, enter your credentials into the file and save the file as private.py so it can be loaded by the sample code.
+To initialise a Jupyter Lab notebook, copy the following text:
 
-To run the code, you will need to install the python libraries: json, datetime, requests, hashlib and random_user_agent.
+```
+!pip install random-user-agent --root-user-action=ignore --quiet
+!pip install foxesscloud --root-user-action=ignore --quiet
+import foxesscloud.foxesscloud as f
+
+# add your info here
+f.username = "<your username>"
+f.password = "<your password"
+f.device_sn = "<your serial number>"
+f.api_key = "<your api key>"
+f.system_id = "<your system id>"
+```
 
 ## Site, Logger and Device Information
 Load information about a site, data logger or inverter (device):
 
 ```
-get_site()
-get_logger()
-get_device()
+f.get_site()
+f.get_logger()
+f.get_device()
 ```
 
 By default, this will load the first item in the list provided by the cloud.
@@ -29,24 +39,24 @@ When an item is selected, the functions returns a dictionary containing item det
 Once an inverter is selected, you can make other calls to get information:
 
 ```
-get_firmware()
-get_battery()
-get_settings()
-get_charge()
-get_min()
-get_work_mode()
-get_earnings()
+f.get_firmware()
+f.get_battery()
+f.get_settings()
+f.get_charge()
+f.get_min()
+f.get_work_mode()
+f.get_earnings()
 
 ```
 Each of these calls will return a dictionary containing the relevant information.
 
-get_firmware() returns the current inverter firmware versions. The result is stored as firmware.
+get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
 
-get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as battery.
+get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
 
-get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
+get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
-get_work_mode() returns the current work mode. The result is stored in work_mode.
+get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
 get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
 
@@ -54,9 +64,9 @@ get_earnings() returns the power generated and earning data that is displayed on
 You can change inverter settings using:
 
 ```
-set_min()
-set_charge()
-set_work_mode(mode)
+f.set_min()
+f.set_charge()
+f.set_work_mode(mode)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter.
@@ -69,7 +79,7 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-get_raw(time_span, d, v, energy)
+f.get_raw(time_span, d, v, energy)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour' or 'day'
@@ -82,8 +92,6 @@ The list of variables that can be queried is stored in raw_vars. There is also a
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
 ```
-import foxess_cloud as f
-f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
 ```
@@ -108,19 +116,17 @@ In addition to daily energy totals, it implements peak and off-peak time of use 
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
 ```
-get_report(report_type, d, v)
+f.get_report(report_type, d, v)
 ```
 + report_type sets the period covered by the report and is one of 'day', 'month', 'year'. When 'day' is selected, energy is reported each hour through the day; when 'month' is selected, energy is reported each day through the month; when 'year' is selected, energy is reported each month through the year. Note that reporting by 'day' does not produce accurate data so it is advised to report by month and select the day required to get an accurate report of total energy for a specific day
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
 + v is a variable, or list of variables. The default is to all report_vars
 
-The list of variables that can be reported on is stored in report_vars.
+The list of variables that can be reported on is stored in f.report_vars.
 
 For example, this Jupyter Lab cell will report energy data by day for the month of June 2023:
 
 ```
-import foxess_cloud as f
-f.get_device()
 d = '2023-06-17 00:00:00'
 result=f.get_report('month', d=d)
 ```
@@ -131,7 +137,7 @@ These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.o
 Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories.
 
 ```
-date_list(s, e, limit, today)
+f.date_list(s, e, limit, today)
 ```
 
 + returns a list of dates from s to e inclusive
@@ -145,7 +151,7 @@ date_list(s, e, limit, today)
 Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
 
 ```
-get_pvoutput(d, tou)
+f.get_pvoutput(d, tou)
 ```
 
 + d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
@@ -157,7 +163,6 @@ get_pvoutput(d, tou)
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
-import foxess_cloud as f
 for d in f.date_list('2023-06-01', '2023-06-30'):
     print(f.get_pvoutput(d, tou=1))
 ```
@@ -168,28 +173,10 @@ for d in f.date_list('2023-06-01', '2023-06-30'):
 Loads CSV data directly using the PV Ouput API:
 
 ```
-set_pvoutput(d, tou, system_id, today)
+f.set_pvoutput(d, tou, system_id, today)
 ```
 
 + d is optional and is the date to upload in the format 'YYYY-MM-DD'. For default, see today below
 + tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
-
-## pvoutput.sh
-
-The file pvoutput.sh is a shell command file that runs set_pvoutput() to upload data. This builds on the python libraries above to upload a days data. Optional parameters are:
-
-+ $1 = the path to the folder containing foxess_cloud.py and private.py with the user credentials required. Default is the current directory
-+ $2 = True to upload partial data for today. The default is False and uploads complete data from yesterday
-
-For example, the first command line uploads complete data for yesterday. The second line uploads partial data for today:
-
-```
-./pvoutput.sh
-./pvoutput.sh . True
-```
-
-You can check if you can run this command in your environment by opening a shell and running 'python -h' to check if the python interpreter is available. If it is not, you may need to install it.
-
-This file can be run, for example, on a schedule to regularly upload data 
