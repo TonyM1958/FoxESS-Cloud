@@ -1,0 +1,59 @@
+{
+  "name": "pvoutput_upload",
+  "image": {
+    "name": "saturn-python",
+    "version": "2023.05.01",
+    "owner": "saturncloud"
+  },
+  "description": "Upload generation data to PV Output",
+  "environment_variables": {},
+  "working_directory": "/home/jovyan/workspace",
+  "extra_packages": {
+    "pip": {
+      "install": "random-user-agent foxesscloud"
+    }
+  },
+  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\n\nimport foxesscloud.foxesscloud as f\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = $FOX_DEVICE_SN\nf.api_key = $PV_API_KEY\nf.system_id = $PV_SYSTEM_ID\nf.set_pvoutput(tou=1, today=False)\nf.set_pvoutput(tou=1, today=True)\n\nEOF\n",
+  "git_repositories": [],
+  "shared_folders": [],
+  "secrets": [
+    {
+      "location": "FOX_USERNAME",
+      "type": "environment_variable",
+      "description": "",
+      "name": "FOX_USERNAME"
+    },
+    {
+      "location": "FOX_PASSWORD",
+      "type": "environment_variable",
+      "description": "",
+      "name": "FOX_PASSWORD"
+    },
+    {
+      "location": "FOX_DEVICE_SN",
+      "type": "environment_variable",
+      "description": "",
+      "name": "FOX_DEVICE_SN"
+    },
+    {
+      "location": "PV_API_KEY",
+      "type": "environment_variable",
+      "description": "",
+      "name": "PV_API_KEY"
+    },
+    {
+      "location": "PV_SYSTEM_ID",
+      "type": "environment_variable",
+      "description": "",
+      "name": "PV_SYSTEM_ID"
+    }
+  ],
+  "job": {
+    "instance_type": "large",
+    "command": "python script.py",
+    "start_dind": false,
+    "schedule": null
+  },
+  "owner": "TonyM1958",
+  "schema_version": "2022.10.01"
+}
