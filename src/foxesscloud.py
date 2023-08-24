@@ -463,9 +463,10 @@ def set_min(minGridSoc = None, minSoc = None):
 
 def get_settings():
     global battery_settings
-    if battery_settings is None:
-        get_min()
+    if battery_settings.get('times') is None:
         get_charge()
+    if battery_settings.get('minGridSoc') is None:
+        get_min()
     return battery_settings
 
 ##################################################################################################
@@ -618,7 +619,7 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         x['kwh_off'] = round(kwh_off,3)
         x['kwh_peak'] = round(kwh_peak,3)
         x['state'].append(round(kwh,3))
-        if energy ==2:
+        if energy == 2:
             if input_name is None or x['name'] != input_name:
                 x['name'] = energy_vars[power_vars.index(x['variable'])]
             x['unit'] = 'kWh'
@@ -878,6 +879,7 @@ page_width = 100        # maximum text string for display
 figure_width = 24       # width of plots
 
 # This is the code used for loading and displaying yield forecasts from Solcast.com.au.
+
 class Solcast :
     """
     Load Solcast Estimate / Actuals / Forecast daily yield
