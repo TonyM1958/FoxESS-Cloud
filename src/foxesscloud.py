@@ -1,8 +1,9 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
+Version:  0.2.0
 Created:  3 June 2023
-Updated:  19 August 2023
+Updated:  24 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -18,6 +19,8 @@ from requests.auth import HTTPBasicAuth
 import hashlib
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
+import math
+import matplotlib.pyplot as plt
 
 software_names = [SoftwareName.CHROME.value]
 operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
@@ -223,8 +226,15 @@ def get_device(sn=None):
     device_sn = device.get('deviceSN')
     firmware = None
     battery = None
-    battery_settings = {}
+    battery_settings = None
     raw_vars = get_vars()
+    model_code = device['deviceType'].replace('-','').upper()
+    model = model_code[:2]
+    device['model'] = model
+    eps = model_code[-1:] == 'E'
+    device['eps'] = eps
+    power = float(model_code.replace(model,'').replace('E', ''))
+    device['power'] = power
     return device
 
 ##################################################################################################
@@ -287,7 +297,7 @@ def get_firmware():
 ##################################################################################################
 
 battery = None
-battery_settings = {}
+battery_settings = None
 
 def get_battery():
     global token, device_id, battery, debug_setting
@@ -314,7 +324,7 @@ def get_battery():
 
 def get_charge():
     global token, device_sn, battery_settings, debug_setting
-    if get_device is None:
+    if get_device() is None:
         return None
     if debug_setting > 1:
         print(f"getting charge times")
@@ -332,6 +342,8 @@ def get_charge():
     if times is None:
         print(f"** no times data")
         return None
+    if battery_settings is None:
+        battery_settings = {}
     battery_settings['times'] = times
     return battery_settings
 
@@ -339,14 +351,39 @@ def get_charge():
 # set charge times from battery
 ##################################################################################################
 
-def set_charge():
+def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None):
     global token, device_sn, battery_settings, debug_setting
     if get_device() is None:
         return None
     if battery_settings.get('times') is None:
-        print(f"** no times to set")
+        print(f"** invalid battery settings")
         return None
+    if st1 is not None:
+        if st1 == en1:
+            st1 = 0
+            en1 = 0
+            ch1 = False
+        battery_settings['times'][0]['enableCharge'] = True
+        battery_settings['times'][0]['enableGrid'] = ch1
+        battery_settings['times'][0]['startTime']['hour'] = int(st1)
+        battery_settings['times'][0]['startTime']['minute'] = int(60 * (st1 - int(st1)))
+        battery_settings['times'][0]['endTime']['hour'] = int(en1)
+        battery_settings['times'][0]['endTime']['minute'] = int(60 * (en1 - int(en1)))
+    if st2 is not None:
+        if st2 == en2:
+            st2 = 0
+            en2 = 0
+            ch2 = False
+        battery_settings['times'][1]['enableCharge'] = True
+        battery_settings['times'][1]['enableGrid'] = ch2
+        battery_settings['times'][1]['startTime']['hour'] = int(st2)
+        battery_settings['times'][1]['startTime']['minute'] = int(60 * (st2 - int(st2)))
+        battery_settings['times'][1]['endTime']['hour'] = int(en2)
+        battery_settings['times'][1]['endTime']['minute'] = int(60 * (en2 - int(en2)))
     if debug_setting > 1:
+        print(battery_settings)
+        return None
+    if debug_setting > 0:
         print(f"setting charge times")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
@@ -381,6 +418,8 @@ def get_min():
     if result is None:
         print(f"** no min soc result data")
         return None
+    if battery_settings is None:
+        battery_settings = {}
     battery_settings['minSoc'] = result.get('minSoc')
     battery_settings['minGridSoc'] = result.get('minGridSoc')
     return battery_settings
@@ -389,14 +428,21 @@ def get_min():
 # set min soc from battery_settings
 ##################################################################################################
 
-def set_min():
+def set_min(minGridSoc = None, minSoc = None):
     global token, device_sn, bat_settings, debug_setting
     if get_device() is None:
         return None
     if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
         print(f"** no min soc settings")
         return None
+    if minGridSoc is not None:
+        battery_settings['minGridSoc'] = minGridSoc
+    if minSoc is not None:
+        battery_settings['minSoc'] = minSoc
     if debug_setting > 1:
+        print(battery_settings)
+        return None
+    if debug_setting > 0:
         print(f"setting min soc")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
@@ -417,8 +463,9 @@ def set_min():
 
 def get_settings():
     global battery_settings
-    get_charge()
-    get_min()
+    if battery_settings is None:
+        get_min()
+        get_charge()
     return battery_settings
 
 ##################################################################################################
@@ -467,6 +514,9 @@ def set_work_mode(mode):
         print(f"** work mode: must be one of {work_modes}")
         return None
     if debug_setting > 1:
+        print(mode)
+        return None
+    if debug_setting > 0:
         print(f"setting work mode")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
@@ -632,11 +682,90 @@ def get_earnings():
 
 
 ##################################################################################################
+# calculate charge needed from current battery charge, forecast yield and expected load
 ##################################################################################################
-#
-# PV Output Data Handling
-#
+
+# roll over 24 hours times and round times to 1 minute for time in decimal hours
+def round_time(h):
+    if h > 24:
+        h -= 24
+    return int(h) + round(60 * (h - int(h)), 0) / 60
+
+# how consumption varies by month across a year. Total of all 12 values must be 12.0
+seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
+
+# work out the charge times to set using the parameters:
+#  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
+#  annual_consumption: the kWh consumed each year via the inverter. Default is 5,500 kWh
+#  contingency: a factor to add to allow for variations. 1.0 is no variation. Default is 1.2
+#  charge_power: the kW of charge that will be applied
+#  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours
+#  end_by: time in hours when charging will stop
+#  force_charge: if True, the remainder of the time, force charge is set. If false, force charge is not set
+#  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
+
+def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20):
+    global seasonality, debug_setting
+    now = datetime.now()
+    if now.hour < run_after:
+        print(f"** {datetime.strftime(now, '%H:%M')}, waiting for time to run, run_after = {run_after}")
+        return None
+    tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
+    get_settings()
+    get_battery()
+    min = battery_settings['minGridSoc']
+    soc = battery['soc']
+    residual = battery['residual']
+    capacity = int(residual * 100 / soc if soc > 0 else residual)
+    reserve = int(capacity * min / 100)
+    usable = int(residual - reserve)
+    if debug_setting > 1:
+        print(f"capacity = {capacity} kWh, min = {min} %, soc = {soc} %, residual = {residual} kWh, usable = {usable} kWh")
+    usable = 0.0 if usable < 0 else round(usable / 1000,3)
+    if forecast is not None:
+        expected = forecast
+    else:
+        forecast = Solcast(days=2)
+        if forecast is None:
+            return None
+        expected = round(forecast.daily[tomorrow]['kwh'] if forecast is not None else 0,3)
+    if annual_consumption is None:
+        print(f"** you must provide your annual consumption")
+        return None
+    load = round(annual_consumption / 365 * seasonality[now.month - 1] * contingency,3)
+    if debug_setting > 1:
+        print(f"expected = {expected} kWh, usable = {usable} kWh, load = {load} kWh for month {now.month}")
+    charge = round(load - usable - expected,3)
+    if debug_setting > 0:
+        print(f"estimated charge needed: {charge}")
+    if charge > (capacity - reserve):
+        print(f"** warning: charge required {charge_required} kWh exceeds battery capacity by {charge_required - capacity + reserve} kWh")
+    if charge < 0.0:
+        charge = 0
+    if charge_power is None:
+        charge_power = device['power']
+    hours = round_time(charge / (charge_power if charge_power > 0 else 3.7))
+    if hours > 0 and hours < 0.25:
+        hours = 0.25
+    start1 = start_at
+    end1 = round_time(start1 + hours)
+    if end1 > end_by:
+        print(f"** charge end time {end1} exceeds end by {end_by}")
+        end1 = end_by
+    if force_charge:
+        start2 = round_time(end1 + 1 / 60)
+        start2 = end_by if start2 > end_by else start2
+        end2 = end_by
+    else:
+        start2 = 0
+        end2 = 0
+    set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
+    return battery_settings
+
+
+
 ##################################################################################################
+# PV Output
 ##################################################################################################
 
 # generate a list of up to 200 dates, where the last date is not later than yeterday or today
@@ -721,3 +850,163 @@ def set_pvoutput(d = None, tou = 1, today = False):
     if result != 200:
         print(f"** put_pvoutput response code: {result}")
     return result
+
+
+##################################################################################################
+# Solar forecast using solcast.com.au
+##################################################################################################
+
+def c_int(i):
+    # handle None in integer conversion
+    if i is None :
+        return None
+    return int(i)
+
+def c_float(n):
+    # handle None in float conversion
+    if n is None :
+        return float(0)
+    return float(n)
+
+# solcast settings
+solcast_url = 'https://api.solcast.com.au/'
+solcast_api_key = None
+solcast_rids = []
+solcast_save = 'solcast.json'
+solcast_cal = 1.0
+page_width = 100        # maximum text string for display
+figure_width = 24       # width of plots
+
+# This is the code used for loading and displaying yield forecasts from Solcast.com.au.
+class Solcast :
+    """
+    Load Solcast Estimate / Actuals / Forecast daily yield
+    """ 
+
+    def __init__(self, days = 7, reload = 2) :
+        # days sets the number of days to get for forecasts and estimated.
+        # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
+        # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
+        global debug_setting, solcast_url, solcast_api_key, solcast_rids, solcast_save, solcast_cal
+        if solcast_api_key is None:
+            print(f"** no api key provided")
+            return None
+        self.credentials = HTTPBasicAuth(solcast_api_key, '')
+        if solcast_rids is None:
+            print(f"** no rids provided")
+            return None
+        data_sets = ['forecasts', 'estimated_actuals']
+        self.data = {}
+        self.today =datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
+        if reload == 1 and os.path.exists(solcast_save):
+            os.remove(solcast_save)
+        if solcast_save is not None and os.path.exists(solcast_save):
+            f = open(solcast_save)
+            self.data = json.load(f)
+            f.close()
+            if len(self.data) == 0:
+                print(f"No data in {solcast_save}")
+            elif reload == 2 and 'date' in self.data and self.data['date'] != self.today:
+                self.data = {}
+            elif debug_setting > 0:
+                print(f"Using data for {self.data['date']} from {solcast_save}")
+        if len(self.data) == 0 :
+            if debug_setting > 0:
+                print(f"Loading data from solcast.com.au for {self.today}")
+            self.data['date'] = self.today
+            params = {'format' : 'json', 'hours' : 168, 'period' : 'PT30M'}     # always get 168 x 30 min values
+            for t in data_sets :
+                self.data[t] = {}
+                for rid in solcast_rids :
+                    response = requests.get(solcast_url + 'rooftop_sites/' + rid + '/' + t, auth = self.credentials, params = params)
+                    if response.status_code != 200 :
+                        print(f"** response code getting {t} for {rid} from {response.url} was {response.status_code}")
+                        return
+                    self.data[t][rid] = response.json().get(t)
+            if solcast_save is not None :
+                f = open(solcast_save, 'w')
+                json.dump(self.data, f, sort_keys = True, indent=4, ensure_ascii= False)
+                f.close()
+        self.daily = {}
+        self.rids = []
+        for t in data_sets :
+            for rid in self.data[t].keys() :            # aggregate sites
+                if self.data[t][rid] is not None :
+                    self.rids.append(rid)
+                    for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
+                        period_end = f.get('period_end')
+                        date = period_end[:10]
+                        time = period_end[11:16]
+                        if date not in self.daily.keys() :
+                            self.daily[date] = {'forecast' : t == 'forecasts', 'kwh' : 0.0}
+                        if rid not in self.daily[date].keys() :
+                            self.daily[date][rid] = []
+                        if time not in self.daily[date][rid] :
+                            self.daily[date]['kwh'] += c_float(f.get('pv_estimate')) / 2      # 30 minute kw yield / 2 = kwh
+                            self.daily[date][rid].append(time)
+                        elif debug_setting > 1 :
+                                print(f"** overlapping data was ignored for {rid} in {t} at {date} {time}")
+        # ignore first and last dates as these are forecast and estimates only cover part of the day, so are not accurate
+        self.keys = sorted(self.daily.keys())[1:-1]
+        self.days = len(self.keys)
+        # trim the range if fewer days have been requested
+        while self.days > 2 * days :
+            self.keys = self.keys[1:-1]
+            self.days = len(self.keys)
+        self.values = [self.daily[k]['kwh'] for k in self.keys]
+        self.total = sum(self.values)
+        if self.days > 0 :
+            self.avg = self.total / self.days
+        self.cal = solcast_cal
+        return
+
+    def __str__(self) :
+        # return printable Solcast info
+        global debug_setting
+        s = f'Solcast yield for {self.days} days'
+        if self.cal is not None and self.cal != 1.0 :
+            s += f", calibration = {self.cal}"
+        s += f" (E = estimated, F = forecasts):\n\n"
+        for k in self.keys :
+            tag = 'F' if self.daily[k]['forecast'] else 'E'
+            y = self.daily[k]['kwh'] * self.cal
+            d = datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
+            s += "\033[1m--> " if k == self.today else "    "
+            s += f"{k} {d} {tag}: {y:5.2f} kwh"
+            s += "\033[0m\n" if k == self.today else "\n"
+            for r in self.rids :
+                n = len(self.daily[k][r])
+                if n != 48 and debug_setting > 0:
+                    print(f" ** {k} rid {r} should have 48 x 30 min values. {n} values found")
+        return s
+
+    def plot_daily(self) :
+        if not hasattr(self, 'daily') :
+            print(f"** no daily data available")
+            return
+        figwidth = 12 * self.days / 7
+        self.figsize = (figwidth, figwidth/3)     # size of charts
+        plt.figure(figsize=self.figsize)
+        # plot estimated
+        x = [f"{k} {datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if not self.daily[k]['forecast']]
+        y = [self.daily[k]['kwh'] * self.cal for k in self.keys if not self.daily[k]['forecast']]
+        if x is not None and len(x) != 0 :
+            plt.bar(x, y, color='orange', linestyle='solid', label='estimated', linewidth=2)
+        # plot forecasts
+        x = [f"{k} {datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if self.daily[k]['forecast']]
+        y = [self.daily[k]['kwh'] * self.cal for k in self.keys if self.daily[k]['forecast']]
+        if x is not None and len(x) != 0 :
+            plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
+        # annotations
+        if hasattr(self, 'avg') :
+            plt.axhline(self.avg, color='blue', linestyle='solid', label=f'average {self.avg:.1f} kwh / day', linewidth=2)
+        title = f"Solcast yield on {self.today} for {self.days} days"
+        if self.cal != 1.0 :
+            title += f" (calibration = {self.cal})"
+        title += f". Total yield = {self.total:.0f} kwh"    
+        plt.title(title, fontsize=16)
+        plt.grid()
+        plt.legend(fontsize=14)
+        plt.xticks(rotation=45, ha='right')
+        plt.show()
+        return
