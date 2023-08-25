@@ -1,12 +1,14 @@
 {
-  "name": "pv_job",
+  "name": "pv_update",
   "image": {
     "name": "saturn-python",
     "version": "2023.05.01",
     "owner": "saturncloud"
   },
   "description": "PV management job - uploads data to PV Output and works out battery charge schedule required",
-  "environment_variables": {},
+  "environment_variables": {
+    "CHARGE_PARAMS": "charge_power=4.1"
+  },
   "working_directory": "/home/jovyan/workspace",
   "extra_packages": {
     "pip": {
@@ -46,6 +48,18 @@
       "type": "environment_variable",
       "description": "",
       "name": "PV_SYSTEM_ID"
+    },
+    {
+      "location": "SOLCAST_API_KEY",
+      "type": "environment_variable",
+      "description": "",
+      "name": "SOLCAST_API_KEY"
+    },
+    {
+      "location": "SOLCAST_RIDS",
+      "type": "environment_variable",
+      "description": "",
+      "name": "SOLCAST_RIDS"
     }
   ],
   "job": {
