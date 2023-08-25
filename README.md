@@ -208,3 +208,7 @@ The consumption is calculated by dividing the annual use by 365 and applying a s
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 ```
+
+## Version Info
+
+0.2.0: added charge_needed() and merged solcast forcast<br>
