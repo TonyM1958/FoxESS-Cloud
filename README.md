@@ -180,3 +180,31 @@ f.set_pvoutput(d, tou, system_id, today)
 + tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
+
+
+## Charge Needed
+
+Uses forecast PV yield data to work out if battery charging from grid is required to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared.
+
+```
+f.solcast_api_key = "xxx"
+f.solcast_rids = ["aaa","bbb"]
+f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
+```
+
+All the parameters for charge_needed() are optional:
++  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au
++  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is 5,500 kWh
++  contingency: allow for variations in consumption. 1.0 is no variation. Default is 1.2 (+20%)
++  charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
++  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours. The default is 2 (2am)
++  end_by: time in hours when charging will stop. The default is 5 (5am)
++  force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
++  run_after: the time in hours when the charge calculation should take place. The default is 20 (8pm). If run before this time, no action will be taken
++  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95
+
+The consumption is calculated by dividing the annual use by 365 and applying a seasonality factor that decreases consumption in the summer and increases it in winter. This can be adjusted if required by specifying a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0
+
+```
+f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
+```
