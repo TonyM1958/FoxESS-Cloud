@@ -5,6 +5,6 @@ password = "<your username>"
 device_sn = ""
 
 # PV Output
-api_key = "<your api key>"
-system_id = "<your system id>"
+pv_api_key = "<your api key>"
+pv_system_id = "<your system id>"
 
