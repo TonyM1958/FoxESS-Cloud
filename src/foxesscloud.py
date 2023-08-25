@@ -193,6 +193,7 @@ def get_device(sn=None):
             return device
     if debug_setting > 1:
         print(f"getting device")
+    # get device list
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/list", headers=headers, data=json.dumps(query))
@@ -208,6 +209,7 @@ def get_device(sn=None):
         print(f"** invalid list of devices returned: {total}")
         return None
     device_list = result.get('devices')
+    # look for the device we want in the list
     n = None
     if len(device_list) == 1 and sn is None:
         n = 0
@@ -221,6 +223,7 @@ def get_device(sn=None):
             for d in device_list:
                 print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
             return None
+    # load information for the device
     device = device_list[n]
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
@@ -228,13 +231,24 @@ def get_device(sn=None):
     battery = None
     battery_settings = None
     raw_vars = get_vars()
+    # parse the model code to work out attributes
     model_code = device['deviceType'].replace('-','').upper()
+    # first 2 letters / numbers e.g. H1, H3, KH
     model = model_code[:2]
+    if model not in ['H1', 'H3', 'KH']:
+        model = model_code[:3]
+        if  model not in ['AC1', 'AC3']:
+            model = model_code[:5]
+            if model not in ['AIOH1', 'AIOH3']:
+                print(f"** device model not recognised: {device['deviceType']}")
+                return device
     device['model'] = model
+    device['phase'] = 3 if model[-1:] == '3' else 1
     eps = model_code[-1:] == 'E'
     device['eps'] = eps
-    power = float(model_code.replace(model,'').replace('E', ''))
-    device['power'] = power
+    power = model_code.replace(model,'').replace('E', '')
+    if power.replace('.','').isnumeric():
+        device['power'] = float(power)
     return device
 
 ##################################################################################################
@@ -358,6 +372,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     if battery_settings.get('times') is None:
         print(f"** invalid battery settings")
         return None
+    # configure time period 1
     if st1 is not None:
         if st1 == en1:
             st1 = 0
@@ -369,6 +384,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times'][0]['startTime']['minute'] = int(60 * (st1 - int(st1)))
         battery_settings['times'][0]['endTime']['hour'] = int(en1)
         battery_settings['times'][0]['endTime']['minute'] = int(60 * (en1 - int(en1)))
+    # configure time period 2
     if st2 is not None:
         if st2 == en2:
             st2 = 0
@@ -385,6 +401,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         return None
     if debug_setting > 0:
         print(f"setting charge times")
+    # set charge times
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/time/set", headers=headers, data=json.dumps(data))
@@ -704,14 +721,16 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  end_by: time in hours when charging will stop
 #  force_charge: if True, the remainder of the time, force charge is set. If false, force charge is not set
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
+#  efficiency: inverter conversion factor from PV power or AC power to charge power
 
-def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20):
-    global seasonality, debug_setting
+def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20, efficiency = 0.95):
+    global device, seasonality, debug_setting
     now = datetime.now()
     if now.hour < run_after:
         print(f"** {datetime.strftime(now, '%H:%M')}, waiting for time to run, run_after = {run_after}")
         return None
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
+    # get battery info
     get_settings()
     get_battery()
     min = battery_settings['minGridSoc']
@@ -719,35 +738,45 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     residual = battery['residual']
     capacity = int(residual * 100 / soc if soc > 0 else residual)
     reserve = int(capacity * min / 100)
-    usable = int(residual - reserve)
-    if debug_setting > 1:
-        print(f"capacity = {capacity} kWh, min = {min} %, soc = {soc} %, residual = {residual} kWh, usable = {usable} kWh")
-    usable = 0.0 if usable < 0 else round(usable / 1000,3)
+    available = int(residual - reserve)
+    if debug_setting > 0:
+        print(f"Battery capacity = {capacity} Wh, minGridSoc = {min}%, soc = {soc}%, residual = {residual} Wh, available = {available} Wh")
+    available = 0.0 if available < 0 else round(available / 1000, 3)
+    # get forecast info
     if forecast is not None:
         expected = forecast
     else:
         forecast = Solcast(days=2)
         if forecast is None:
             return None
-        expected = round(forecast.daily[tomorrow]['kwh'] if forecast is not None else 0,3)
+        expected = round(forecast.daily[tomorrow]['kwh'] * efficiency if forecast is not None else 0, 3)
+    # get consumption info
     if annual_consumption is None:
         print(f"** you must provide your annual consumption")
         return None
-    load = round(annual_consumption / 365 * seasonality[now.month - 1] * contingency,3)
-    if debug_setting > 1:
-        print(f"expected = {expected} kWh, usable = {usable} kWh, load = {load} kWh for month {now.month}")
-    charge = round(load - usable - expected,3)
+    consumption = round(annual_consumption / 365 * seasonality[now.month - 1] * contingency, 3)
     if debug_setting > 0:
-        print(f"estimated charge needed: {charge}")
+        print(f"Expected yield tomorrow = {expected} kWh, available from battery = {available} kWh, consumption = {consumption} kWh")
+    # calculate charge to add to battery
+    charge = round(consumption - available - expected,3)
+    if debug_setting > 0:
+        print(f"Estimate of charge needed: {charge}")
     if charge > (capacity - reserve):
-        print(f"** warning: charge required {charge_required} kWh exceeds battery capacity by {charge_required - capacity + reserve} kWh")
+        print(f"** charge needed exceeds battery capacity by {charge - capacity + reserve} kWh")
     if charge < 0.0:
         charge = 0
-    if charge_power is None:
-        charge_power = device['power']
-    hours = round_time(charge / (charge_power if charge_power > 0 else 3.7))
+    # calculate charge time
+    if charge_power is None or charge_power <= 0:
+        charge_power = device.get('power')
+        if charge_power is None:
+            charge_power = 3.7
+    hours = round_time(charge / charge_power / efficiency)
+    # don't charge for less than 15 minutes
     if hours > 0 and hours < 0.25:
         hours = 0.25
+    if debug_setting > 0:
+        print(f"Charge time is {hours} hours with {charge_power} charge power")
+    # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
     if end1 > end_by:
@@ -760,6 +789,7 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     else:
         start2 = 0
         end2 = 0
+    # setup charging
     set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
     return battery_settings
 
@@ -803,16 +833,16 @@ def get_pvoutput(d = None, tou = 1):
     global debug_setting
     if d is None:
         d = date_list()[0]
+    # get power information for day
     values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=2)
     if values is None:
         return None
-    result = ''
     generate = ''
     export = ','
-    export2 = ',,,'
+    export_tou = ',,,'
     consume = ','
     grid = ',,,,'
-    for v in values:     # process values
+    for v in values:     # process list of power / energy values
         standard = int(v['kwh'] * 1000)
         peak = int(v['kwh_peak'] * 1000)
         off_peak = int(v['kwh_off'] * 1000)
@@ -820,33 +850,34 @@ def get_pvoutput(d = None, tou = 1):
             generate = f"{v['date'].replace('-','')},{standard},"
         elif v['variable'] == 'feedinPower':
             export = f"{standard}," if tou == 0 else f","
-            export2 = f",,," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0"
+            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0"
         elif v['variable'] == 'loadsPower':
             consume = f"{standard},"
         elif v['variable'] == 'gridConsumptionPower':
             grid = f"0,0,{standard},0," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0,"
-    if generate != '':
-        return generate + export + ',,,,,,' + grid + consume + export2
-    return None
+    if generate == '':
+        return None
+    return generate + export + ',,,,,,' + grid + consume + export_tou
 
-api_key = None
-system_id = None
+pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
+pv_api_key = None
+pv_system_id = None
 
 # set data for a day using pvoutput api
 def set_pvoutput(d = None, tou = 1, today = False):
-    global api_key, system_id, debug_setting
+    global pv_url, pv_api_key, pv_system_id, debug_setting
     if d is None:
         d = date_list(today = today)[0]
-    if api_key is None or system_id is None or api_key == '<your api key>' or system_id == '<your system id>':
+    if pv_api_key is None or pv_system_id is None or pv_api_key == '<your api key>' or pv_system_id == '<your system id>':
         print(f"** please enter your PV Output api_key and system_id")
         return None
-    headers = {'X-Pvoutput-Apikey': api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': pv_system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if csv is None:
         return None
     if debug_setting > 0:
         print(f"{csv}")
-    response = requests.post(url="https://pvoutput.org/service/r2/addoutput.jsp", headers=headers, data='data=' + csv)
+    response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
         print(f"** put_pvoutput response code: {result}")
