@@ -1,9 +1,9 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Version:  0.2.2
+Version:  0.2.3
 Created:  3 June 2023
-Updated:  24 August 2023
+Updated:  25 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -401,7 +401,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         return None
     if debug_setting > 0:
         print(f"setting charge times:")
-        print(battery_settings['times'])
+        print(json.dumps(battery_settings['times'], indent = 2))
     # set charge times
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
@@ -736,12 +736,12 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     get_battery()
     min = battery_settings['minGridSoc']
     soc = battery['soc']
-    residual = battery['residual']
-    capacity = int(residual * 100 / soc if soc > 0 else residual)
-    reserve = int(capacity * min / 100)
-    available = int(residual - reserve)
+    residual = round(battery['residual']/1000, 3)
+    capacity = round(residual * 100 / soc if soc > 0 else residual, 3)
+    reserve = round(capacity * min / 100, 3)
+    available = round(residual - reserve, 3)
     if debug_setting > 0:
-        print(f"Battery capacity = {capacity} Wh, minGridSoc = {min}%, soc = {soc}%, residual = {residual} Wh, available = {available} Wh")
+        print(f"Battery capacity = {capacity}kWh, minGridSoc = {min}%, soc = {soc}%, residual = {residual}kWh, available = {available}kWh")
     available = 0.0 if available < 0 else round(available / 1000, 3)
     # get forecast info
     if forecast is not None:
@@ -757,13 +757,13 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
         return None
     consumption = round(annual_consumption / 365 * seasonality[now.month - 1] * contingency, 3)
     if debug_setting > 0:
-        print(f"Expected PV energy tomorrow = {expected} kWh, available from battery = {available} kWh, consumption = {consumption} kWh")
+        print(f"Expected PV energy tomorrow = {expected}kWh, available from battery = {available}kWh, consumption = {consumption}kWh")
     # calculate charge to add to battery
     charge = round(consumption - available - expected * efficiency,3)
     if debug_setting > 0:
         print(f"Estimate of charge needed: {charge}")
     if charge > (capacity - residual):
-        print(f"** charge needed exceeds battery capacity by {charge - capacity + residual} kWh")
+        print(f"** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
     if charge < 0.0:
         charge = 0
     # calculate charge time
@@ -776,7 +776,7 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     if hours > 0 and hours < 0.25:
         hours = 0.25
     if debug_setting > 0:
-        print(f"Charge time is {hours} hours at {charge_power} kW charge power")
+        print(f"Charge time is {hours} hours at {charge_power}kW charge power")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)

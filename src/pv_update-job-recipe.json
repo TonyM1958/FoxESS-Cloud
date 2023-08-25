@@ -7,7 +7,7 @@
   },
   "description": "PV management job - uploads data to PV Output and works out battery charge schedule required",
   "environment_variables": {
-    "CHARGE_PARAMS": "charge_power=4.1"
+    "CHARGE_PARAMS": "annual_consumption=6000,charge_power=4.1,start_at=2.0, end_by=5.0,force_charge=False,efficiency=0.95,contingency=1.2"
   },
   "working_directory": "/home/jovyan/workspace",
   "extra_packages": {
