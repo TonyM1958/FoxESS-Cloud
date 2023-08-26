@@ -19,7 +19,7 @@ f.pv_api_key = "<your api key>"
 f.pv_system_id = "<your system id>"
 
 f.solcast_api_key = "<your api key"
-f.solcast_rids = ["your rid 1>","<your rid2>"]
+f.solcast_rids = ["<your rid 1>","<your rid2>"]
 ```
 
 ## Site, Logger and Device Information
