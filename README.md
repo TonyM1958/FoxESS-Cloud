@@ -68,12 +68,14 @@ get_earnings() returns the power generated and earning data that is displayed on
 You can change inverter settings using:
 
 ```
-f.set_min()
+f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
 ```
 
-set_min() takes the min_soc settings from battery_settings and applies these to the inverter.
+set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
++ minGridSoc: min Soc on Grid setting e.g. 15 = 15%
++ minSoc: min Soc setting e.g. 10 = 10%
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
 + ch1: enable charge from grid for period 1 (True or False)
