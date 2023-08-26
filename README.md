@@ -19,7 +19,7 @@ f.pv_api_key = "<your api key>"
 f.pv_system_id = "<your system id>"
 
 f.solcast_api_key = "<your api key"
-f.solcast_rids = ["<your rid 1>","<your rid2>"]
+f.solcast_rids = ["<your rid 1>","<your rid 2>"]
 ```
 
 ## Site, Logger and Device Information
@@ -69,13 +69,20 @@ You can change inverter settings using:
 
 ```
 f.set_min()
-f.set_charge()
+f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter.
 
-set_charge() takes the charge times from the battery_settings and applies these to the inverter.
+set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
++ ch1: enable charge from grid for period 1 (True or False)
++ st1: the start time for period 1 in decimal hours e.g. 1.5 = 1:30am, 2am = 2.0
++ en1: the end time for period 1 in decimal hours
++ ch2: enable charge from grid for period 2 (True or False)
++ st2: the start time for period 2 in decimal hours
++ en2: the end time for period 2 in decimal hours
+
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
@@ -87,8 +94,8 @@ f.get_raw(time_span, d, v, energy)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour' or 'day'
-+ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
-+ v is a variable, or list of variables
++ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
++ v is a variable, or list of variables (see below)
 + energy is optional - see following section.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter.
@@ -203,13 +210,13 @@ f.set_pvoutput(d, tou, system_id, today)
 
 ## Charge Needed
 
-Uses forecast PV yield data to work out if battery charging from grid is required to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared.
+Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
 f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
 ```
 
-All the parameters for charge_needed() are optional:
+All the parameters are optional:
 +  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au
 +  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 +  contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
@@ -228,6 +235,8 @@ f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 
 If annual_consumption is not provided, an estimate will be calcuated from the average of the last 7 days consumption.
 
+Note: calls to the Solcast API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+
 ## Version Info
 
-0.2.x: added charge_needed() and merged solcast forcast<br>
+0.2.8: added charge_needed() and merged solcast forcast<br>
