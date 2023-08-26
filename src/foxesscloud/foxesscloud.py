@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Version:  0.2.5
+Version:  0.2.7
 Created:  3 June 2023
 Updated:  26 August 2023
 By:       Tony Matthews
