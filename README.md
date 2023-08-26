@@ -130,15 +130,18 @@ f.get_report(report_type, d, v)
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
 + v is a variable, or list of variables. The default is to all report_vars
 
-Note that reporting by 'day' does not produce accurate data so it is advised to report by month and select the day required to get an accurate report of total energy for a specific day
+The list of variables that can be reported on is stored in f.report_vars.
 
-The list of variables that can be reported on is stored in f.report_vars. The results include the following attributes data:
+Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
+
+The results include the following attributes data:
 
 + 'variable': name of the data set
 + 'date': that was used to produce the report
 + 'count': the number of data items
-+ 'total': sum of the data items
-+ 'average': average of the data items
++ 'sum': the sum of the data items
++ 'total': corrected total of the data items
++ 'average': corrected average of the data items
 
 For example, this Jupyter Lab cell will report energy data by day for the month of June 2023:
 
