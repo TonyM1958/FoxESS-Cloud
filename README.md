@@ -209,19 +209,21 @@ f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_a
 All the parameters for charge_needed() are optional:
 +  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au
 +  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
-+  contingency: allow for variations in consumption. 1.0 is no variation. Default is 1.2 (+20%)
++  contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
 +  charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
 +  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours. The default is 2 (2am)
 +  end_by: time in hours when charging will stop. The default is 5 (5am)
 +  force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
 +  run_after: the time in hours when the charge calculation should take place. The default is 20 (8pm). If run before this time, no action will be taken
-+  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95
++  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
-Where annual_consumption is provided, the daily consumption is calculated by dividing by 365 and applying seasonality to decrease consumption in the summer and increase it in winter. The weighting can be adjusted using a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0. The default setting is:
+If annual_consumption is provided, the daily consumption is calculated by dividing by 365 and applying seasonality to decrease consumption in the summer and increase it in winter. The weighting can be adjusted using a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0. The default setting is:
 
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 ```
+
+If annual_consumption is not provided, an estimate will be calcuated from the average of the last 7 days consumption.
 
 ## Version Info
 
