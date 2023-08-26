@@ -122,16 +122,23 @@ Report data provides information on the energy produced by the inverter, battery
 ```
 f.get_report(report_type, d, v)
 ```
-+ report_type sets the period covered by the report and is one of 'day', 'month', 'year'. When 'day' is selected, energy is reported each hour through the day; when 'month' is selected, energy is reported each day through the month; when 'year' is selected, energy is reported each month through the year. Note that reporting by 'day' does not produce accurate data so it is advised to report by month and select the day required to get an accurate report of total energy for a specific day
-+ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'
++ report_type sets the period covered by the report and is one of 'day', 'week', 'month', 'year':
++ when 'day' is selected, energy is reported each hour through the day
++ when 'week' is selected, the 7 days up to and including the date
++ when 'month' is selected, energy is reported each day through the month
++ when 'year' is selected, energy is reported each month through the year.
+
++ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
 + v is a variable, or list of variables. The default is to all report_vars
+
+Note that reporting by 'day' does not produce accurate data so it is advised to report by month and select the day required to get an accurate report of total energy for a specific day
 
 The list of variables that can be reported on is stored in f.report_vars.
 
 For example, this Jupyter Lab cell will report energy data by day for the month of June 2023:
 
 ```
-d = '2023-06-17 00:00:00'
+d = '2023-06-17'
 result=f.get_report('month', d=d)
 ```
 
