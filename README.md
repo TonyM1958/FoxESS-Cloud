@@ -14,8 +14,12 @@ import foxesscloud.foxesscloud as f
 f.username = "<your username>"
 f.password = "<your password"
 f.device_sn = "<your serial number>"
-f.api_key = "<your api key>"
-f.system_id = "<your system id>"
+
+f.pv_api_key = "<your api key>"
+f.pv_system_id = "<your system id>"
+
+f.solcast_api_key = "<your api key"
+f.solcast_rids = ["your rid 1>","<your rid2>"]
 ```
 
 ## Site, Logger and Device Information
@@ -187,14 +191,12 @@ f.set_pvoutput(d, tou, system_id, today)
 Uses forecast PV yield data to work out if battery charging from grid is required to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared.
 
 ```
-f.solcast_api_key = "xxx"
-f.solcast_rids = ["aaa","bbb"]
 f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
 ```
 
 All the parameters for charge_needed() are optional:
 +  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au
-+  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is 5,500 kWh
++  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 +  contingency: allow for variations in consumption. 1.0 is no variation. Default is 1.2 (+20%)
 +  charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
 +  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours. The default is 2 (2am)
@@ -203,7 +205,7 @@ All the parameters for charge_needed() are optional:
 +  run_after: the time in hours when the charge calculation should take place. The default is 20 (8pm). If run before this time, no action will be taken
 +  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95
 
-The consumption is calculated by dividing the annual use by 365 and applying a seasonality factor that decreases consumption in the summer and increases it in winter. This can be adjusted if required by specifying a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0
+Where annual_consumption is provided, the daily consumption is calculated by dividing by 365 and applying seasonality to decrease consumption in the summer and increase it in winter. The weighting can be adjusted using a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0. The default setting is:
 
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
@@ -211,4 +213,4 @@ f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 
 ## Version Info
 
-0.2.0: added charge_needed() and merged solcast forcast<br>
+0.2.x: added charge_needed() and merged solcast forcast<br>
