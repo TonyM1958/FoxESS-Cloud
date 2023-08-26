@@ -134,7 +134,7 @@ The list of variables that can be reported on is stored in f.report_vars.
 
 Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
 
-The results include the following attributes data:
+The result data for each variable include the following attributes:
 
 + 'variable': name of the data set
 + 'date': that was used to produce the report
