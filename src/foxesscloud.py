@@ -1,9 +1,9 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Version:  0.2.3
+Version:  0.2.4
 Created:  3 June 2023
-Updated:  25 August 2023
+Updated:  26 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -35,10 +35,12 @@ debug_setting = 1
 
 token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=1).seconds, 'user_agent': None, 'lang': 'en'}
 
-def query_date(d):
+def query_date(d, offset = None):
     if d is not None and len(d) < 18:
         d += ' 00:00:00'
     t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+    if offset is not None:
+        t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
 username = None
@@ -361,6 +363,14 @@ def get_charge():
     battery_settings['times'] = times
     return battery_settings
 
+# helper to format time period structures
+def time_period(t):
+    result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d} - {t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
+    if t['enableGrid']:
+        result += f" Charge from grid"
+    return result
+
+
 ##################################################################################################
 # set charge times from battery
 ##################################################################################################
@@ -400,8 +410,9 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         print(battery_settings)
         return None
     if debug_setting > 0:
-        print(f"setting charge times:")
-        print(json.dumps(battery_settings['times'], indent = 2))
+        print(f"Setting time periods:")
+        print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
+        print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
     # set charge times
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
@@ -577,6 +588,8 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
     if get_device() is None:
         return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    if d is None:
+        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
     if v is None:
         if raw_vars is None:
             raw_vars = get_vars()
@@ -655,13 +668,34 @@ def get_report(report_type = 'day', d = None, v = None ):
     if get_device() is None:
         return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    if d is None:
+        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
     if v is None:
         v = report_vars
     elif type(v) is not list:
         v = [v]
     if debug_setting > 1:
         print(f"getting report data")
-    query = {'deviceID': device_id, 'reportType': report_type, 'variables': v, 'queryDate': query_date(d)}
+    current = query_date(None)
+    first = query_date(d)
+    last_result = None
+    if report_type == 'week':
+        last = query_date(d, -7)
+        if first['month'] != last['month']:
+            # overlapping months in week, get last months data
+            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': last}
+            response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
+            if response.status_code != 200:
+                print(f"** report data response code: {response.status_code}")
+                return None
+            last_result = response.json().get('result')
+            if last_result is None:
+                print(f"** no report data for last month")
+                return None
+            # prune results for last month to just the days required
+            for v in last_result:
+                v['data'] = v['data'][int(last['day']):]
+    query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': first}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
         print(f"** report data response code: {response.status_code}")
@@ -670,12 +704,41 @@ def get_report(report_type = 'day', d = None, v = None ):
     if result is None:
         print(f"** no report data")
         return None
-    for x in result:
+    # prune results back to only valid, complete data for day, week, month or year
+    if report_type == 'day' and first['year'] == current['year'] and first['month'] == current['month'] and first['day'] == current['day']:
+        for v in result:
+            # prune current day to hours that are valid
+            v['data'] = v['data'][:int(current['hour'])]
+    if report_type == 'week':
+        for v in range(len(result)):
+            # prune results to days required
+            result[v]['data'] = result[v]['data'][:int(first['day'])]
+            if last_result is not None:
+                # prepend last months results if required
+                result[v]['data'] = last_result[v]['data'] + result[v]['data']
+            # prune to week required
+            result[v]['data'] = result[v]['data'][-7:]
+    elif report_type == 'month' and first['year'] == current['year'] and first['month'] == current['month']:
+        for v in result:
+            # prune current month to days that are valid
+            v['data'] = v['data'][:int(current['day'])]
+    elif report_type == 'year' and first['year'] == current['year']:
+        for v in result:
+            # prune current year to months that are valid
+            v['data'] = v['data'][:int(current['month'])]
+    # calculate and add summary data
+    for v in result:
         sum = 0.0
-        for y in x['data']:
+        count = 0
+        for y in v['data']:
             sum += y['value']
-        x['total'] = round(sum,3)
+            count += 1
+        v['total'] = round(sum,3)
+        v['average'] = round(sum / count, 3) if count > 0 else None
+        v['date'] = d
+        v['count'] = count
     return result
+
 
 ##################################################################################################
 # get earnings data
@@ -715,20 +778,20 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
-#  annual_consumption: the kWh consumed each year via the inverter. Default is 5,500 kWh
-#  contingency: a factor to add to allow for variations. 1.0 is no variation. Default is 1.2
+#  annual_consumption: the kWh consumed each year via the inverter
+#  contingency: a factor to add to allow for variations. 1.0 is no variation. Default is 1.25
 #  charge_power: the kW of charge that will be applied
 #  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours
 #  end_by: time in hours when charging will stop
 #  force_charge: if True, the remainder of the time, force charge is set. If false, force charge is not set
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
-#  efficiency: inverter conversion factor from PV power or AC power to charge power
+#  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
-def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20, efficiency = 0.95):
+def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20, efficiency = 0.95):
     global device, seasonality, debug_setting
     now = datetime.now()
     if now.hour < run_after:
-        print(f"** {datetime.strftime(now, '%H:%M')}, waiting for time to run, run_after = {run_after}")
+        print(f"{datetime.strftime(now, '%H:%M')}, not time yet, run_after = {run_after}")
         return None
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     # get battery info
@@ -741,31 +804,40 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     reserve = round(capacity * min / 100, 3)
     available = round(residual - reserve, 3)
     if debug_setting > 0:
-        print(f"Battery capacity = {capacity}kWh, minGridSoc = {min}%, soc = {soc}%, residual = {residual}kWh, available = {available}kWh")
-    available = 0.0 if available < 0 else round(available / 1000, 3)
+        print(f"Battery")
+        print(f"   Capacity = {capacity}kWh")
+        print(f"   Min SoC on Grid = {min}%")
+        print(f"   Current SoC = {soc}%")
+        print(f"   Residual = {residual}kWh")
+        print(f"   Available energy = {available}kWh")
     # get forecast info
     if forecast is not None:
-        expected = forecast
+        expected = round(forecast,3)
     else:
         forecast = Solcast(days=2)
         if forecast is None:
             return None
         expected = round(forecast.daily[tomorrow]['kwh'] if forecast is not None else 0, 3)
+    if debug_setting > 0:
+        print(f"Forecast PV generation tomorrow = {expected}kWh")
     # get consumption info
-    if annual_consumption is None:
-        print(f"** you must provide your annual consumption")
-        return None
-    consumption = round(annual_consumption / 365 * seasonality[now.month - 1] * contingency, 3)
+    if annual_consumption is not None:
+        consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 3)
+    else:
+        consumption = get_report('week', v='loads')[0]['average']
+        if consumption is None or consumption <= 0:
+            print(f"** unable to get your average weekly consumption. Please provide your annual consumption")
+            return None
     if debug_setting > 0:
-        print(f"Expected PV energy tomorrow = {expected}kWh, available from battery = {available}kWh, consumption = {consumption}kWh")
+        print(f"Estimated consumption tomorrow = {consumption}kWh")
     # calculate charge to add to battery
-    charge = round(consumption - available - expected * efficiency,3)
-    if debug_setting > 0:
-        print(f"Estimate of charge needed: {charge}")
-    if charge > (capacity - residual):
-        print(f"** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
+    charge = round((consumption - available - expected * efficiency) * contingency,3)
     if charge < 0.0:
-        charge = 0
+        charge = 0.0
+    if debug_setting > 0:
+        print(f"Charge needed is {charge}kWh")
+    if (residual + charge) > capacity:
+        print(f"** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
     # calculate charge time
     if charge_power is None or charge_power <= 0:
         charge_power = device.get('power')
@@ -776,7 +848,7 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
     if hours > 0 and hours < 0.25:
         hours = 0.25
     if debug_setting > 0:
-        print(f"Charge time is {hours} hours at {charge_power}kW charge power")
+        print(f"  Charge time is {hours} hours using {charge_power}kW charge power")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
@@ -792,7 +864,7 @@ def charge_needed(forecast = None, annual_consumption = 5500, contingency = 1.2,
         end2 = 0
     # setup charging
     set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
-    return battery_settings
+    return None
 
 
 
