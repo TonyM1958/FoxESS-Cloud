@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Version:  0.2.4
+Version:  0.2.5
 Created:  3 June 2023
 Updated:  26 August 2023
 By:       Tony Matthews
@@ -679,10 +679,11 @@ def get_report(report_type = 'day', d = None, v = None ):
     current = query_date(None)
     first = query_date(d)
     last_result = None
-    if report_type == 'week':
-        last = query_date(d, -7)
-        if first['month'] != last['month']:
-            # overlapping months in week, get last months data
+    if report_type in ('day', 'week'):
+        # secondary report needed
+        last = query_date(d, -7) if report_type == 'week' else first
+        if report_type == 'day' or first['month'] != last['month']:
+            # need a secondary report..
             query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': last}
             response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
             if response.status_code != 200:
@@ -692,9 +693,6 @@ def get_report(report_type = 'day', d = None, v = None ):
             if last_result is None:
                 print(f"** no report data for last month")
                 return None
-            # prune results for last month to just the days required
-            for v in last_result:
-                v['data'] = v['data'][int(last['day']):]
     query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': first}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
@@ -710,14 +708,14 @@ def get_report(report_type = 'day', d = None, v = None ):
             # prune current day to hours that are valid
             v['data'] = v['data'][:int(current['hour'])]
     if report_type == 'week':
-        for v in range(len(result)):
+        for i, v in enumerate(result):
             # prune results to days required
-            result[v]['data'] = result[v]['data'][:int(first['day'])]
+            v['data'] = v['data'][:int(first['day'])]
             if last_result is not None:
                 # prepend last months results if required
-                result[v]['data'] = last_result[v]['data'] + result[v]['data']
+                v['data'] = last_result[i]['data'][int(last['day']):] + v['data']
             # prune to week required
-            result[v]['data'] = result[v]['data'][-7:]
+            v['data'] = v['data'][-7:]
     elif report_type == 'month' and first['year'] == current['year'] and first['month'] == current['month']:
         for v in result:
             # prune current month to days that are valid
@@ -727,14 +725,14 @@ def get_report(report_type = 'day', d = None, v = None ):
             # prune current year to months that are valid
             v['data'] = v['data'][:int(current['month'])]
     # calculate and add summary data
-    for v in result:
+    for i, v in enumerate(result):
+        count = len(v['data'])
         sum = 0.0
-        count = 0
         for y in v['data']:
             sum += y['value']
-            count += 1
-        v['total'] = round(sum,3)
-        v['average'] = round(sum / count, 3) if count > 0 else None
+        v['sum'] = round(sum,3)
+        v['total'] = round(sum,3) if report_type != 'day' else last_result[i]['data'][int(first['day'])-1]['value']
+        v['average'] = round(v['total'] / count, 3) if count > 0 else None
         v['date'] = d
         v['count'] = count
     return result

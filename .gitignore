@@ -5,3 +5,9 @@ __pycache__/cloud.cpython-37.pyc
 __pycache__/foxess.cpython-37.pyc
 __pycache__/private.cpython-37.pyc
 private.py
+src/foxesscloud.egg-info/top_level.txt
+src/foxesscloud.egg-info/dependency_links.txt
+src/foxesscloud.egg-info/PKG-INFO
+src/foxesscloud.egg-info/SOURCES.txt
+*.whl
+*.gz
