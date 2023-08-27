@@ -100,7 +100,7 @@ f.get_raw(time_span, d, v, energy)
 + v is a variable, or list of variables (see below)
 + energy is optional - see following section.
 
-The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter.
+The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
@@ -137,7 +137,7 @@ f.get_report(report_type, d, v)
 + when 'month' is selected, energy is reported each day through the month;
 + when 'year' is selected, energy is reported each month through the year
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
-+ v is a variable, or list of variables. The default is to all report_vars
++ v is a variable, or list of variables. The default is to use report_vars
 
 The list of variables that can be reported on is stored in f.report_vars.
 
@@ -149,6 +149,8 @@ The result data for each variable include the following attributes:
 + 'date': that was used to produce the report
 + 'count': the number of data items
 + 'sum': the sum of the data items
++ 'max': the biggest data value
++ 'min': the smallest data value
 + 'total': corrected total of the data items
 + 'average': corrected average of the data items
 
@@ -229,16 +231,15 @@ All the parameters are optional:
 +  run_after: the time in hours when the charge calculation should take place. The default is 20 (8pm). If run before this time, no action will be taken
 +  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
-If annual_consumption is provided, the daily consumption is calculated by dividing by 365 and applying seasonality to decrease consumption in the summer and increase it in winter. The weighting can be adjusted using a list of 12 values for the months Jan, Feb, Mar etc. The sum of the list values should be 12.0. The default setting is:
+If annual_consumption is not provided, an estimate will be calcuated using the average of the last 7 days consumption based on the load power reported by the inverter. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, annual_consumption can be provided. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings  for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
 
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 ```
 
-If annual_consumption is not provided, an estimate will be calcuated from the average of the last 7 days consumption.
-
 Note: calls to the Solcast API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
 ## Version Info
 
-0.2.8: added charge_needed() and merged solcast forcast<br>
+0.2.8: added max and min attributes to get_report(). Adjusted model parsing / inverter charge power<br>
+0.2.3: added charge_needed() and solcast forcast<br>
