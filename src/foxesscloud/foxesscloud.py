@@ -799,7 +799,7 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
 #  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 20, efficiency = 0.95):
+def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 22, efficiency = 0.95):
     global device, seasonality, debug_setting
     now = datetime.now()
     if now.hour < run_after:
@@ -821,7 +821,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         print(f"   Min SoC on Grid = {min}%")
         print(f"   Current SoC = {soc}%")
         print(f"   Residual = {residual}kWh")
-        print(f"   Available energy = {available}kWh")
+        print(f"   Available = {available}kWh")
     # get forecast info
     if forecast is not None:
         expected = round(forecast,3)
@@ -831,7 +831,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
             return None
         expected = round(forecast.daily[tomorrow]['kwh'] if forecast is not None else 0, 3)
     if debug_setting > 0:
-        print(f"Forecast PV generation tomorrow = {expected}kWh")
+        print(f"Forecast PV generation = {expected}kWh")
     # get consumption info
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 3)
@@ -841,7 +841,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
             print(f"** unable to get your average weekly consumption. Please provide your annual consumption")
             return None
     if debug_setting > 0:
-        print(f"Estimated consumption tomorrow = {consumption}kWh")
+        print(f"Estimated consumption = {consumption}kWh")
     # calculate charge to add to battery
     charge = round((consumption - available - expected * efficiency) * contingency,3)
     if charge < 0.0:
@@ -1088,7 +1088,7 @@ class Solcast :
         for k in self.keys :
             tag = 'F' if self.daily[k]['forecast'] else 'E'
             y = self.daily[k]['kwh'] * self.cal
-            d = datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
+            d = datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
             s += "\033[1m--> " if k == self.today else "    "
             s += f"{k} {d} {tag}: {y:5.2f} kwh"
             s += "\033[0m\n" if k == self.today else "\n"
@@ -1106,12 +1106,12 @@ class Solcast :
         self.figsize = (figwidth, figwidth/3)     # size of charts
         plt.figure(figsize=self.figsize)
         # plot estimated
-        x = [f"{k} {datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if not self.daily[k]['forecast']]
+        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if not self.daily[k]['forecast']]
         y = [self.daily[k]['kwh'] * self.cal for k in self.keys if not self.daily[k]['forecast']]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='orange', linestyle='solid', label='estimated', linewidth=2)
         # plot forecasts
-        x = [f"{k} {datetime.datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if self.daily[k]['forecast']]
+        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if self.daily[k]['forecast']]
         y = [self.daily[k]['kwh'] * self.cal for k in self.keys if self.daily[k]['forecast']]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)

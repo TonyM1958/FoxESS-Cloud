@@ -228,7 +228,7 @@ All the parameters are optional:
 +  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours. The default is 2 (2am)
 +  end_by: time in hours when charging will stop. The default is 5 (5am)
 +  force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
-+  run_after: the time in hours when the charge calculation should take place. The default is 20 (8pm). If run before this time, no action will be taken
++  run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
 +  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
 If annual_consumption is not provided, an estimate will be calcuated using the average of the last 7 days consumption based on the load power reported by the inverter. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, annual_consumption can be provided. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings  for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
@@ -241,5 +241,5 @@ Note: calls to the Solcast API for hobby accounts are very limited so repeated c
 
 ## Version Info
 
-0.2.8: added max and min attributes to get_report(). Adjusted model parsing / inverter charge power<br>
-0.2.3: added charge_needed() and solcast forcast<br>
+0.2.8: Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot<br>
+0.2.3: Added charge_needed() and solcast forcast<br>
