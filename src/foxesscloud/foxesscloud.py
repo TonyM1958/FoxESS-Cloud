@@ -1,14 +1,16 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Version:  0.2.7
-Created:  3 June 2023
-Updated:  26 August 2023
+Updated:  27 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
-# This is sample code for getting and setting inverter data via the Fox ESS cloud web site
+# Sample code for getting and setting inverter data via the Fox ESS cloud web site, including
+# getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
+
+version = "0.2.8"
+debug_setting = 1
 
 import os.path
 import json
@@ -26,11 +28,8 @@ software_names = [SoftwareName.CHROME.value]
 operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
 user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
 
-# global settings and vars
-debug_setting = 1
-
 ##################################################################################################
-# Inverter information and settings
+# foxesscloud.com web site access
 ##################################################################################################
 
 token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=1).seconds, 'user_agent': None, 'lang': 'en'}
@@ -175,7 +174,7 @@ def get_logger(sn=None):
 
 
 ##################################################################################################
-# get list of available devices and select one, using the serial number if there is more than 1
+# get list of devices and select one, using the serial number if there is more than 1
 ##################################################################################################
 
 device_list = None
@@ -234,27 +233,32 @@ def get_device(sn=None):
     battery_settings = None
     raw_vars = get_vars()
     # parse the model code to work out attributes
-    model_code = device['deviceType'].replace('-','').upper()
+    model_code = device['deviceType'].upper()
     # first 2 letters / numbers e.g. H1, H3, KH
-    model = model_code[:2]
-    if model not in ['H1', 'H3', 'KH']:
-        model = model_code[:3]
-        if  model not in ['AC1', 'AC3']:
-            model = model_code[:5]
-            if model not in ['AIOH1', 'AIOH3']:
-                print(f"** device model not recognised: {device['deviceType']}")
-                return device
+    if model_code[:2] == 'KH':
+        mode_code = 'KH-' + model_code[2:]
+    elif model_code[:4] == 'AIO-':
+        mode_code = 'AIO' + model_code[4:]
+    device['eps'] = 'E' in model_code
+    parts = model_code.split('-')
+    model = parts[0]
+    if model not in ['H1', 'H3', 'KH', 'AC1', 'AC3', 'AIOH1', 'AIOH3']:
+        print(f"** device model not recognised for deviceType: {device['deviceType']}")
+        return device
     device['model'] = model
     device['phase'] = 3 if model[-1:] == '3' else 1
-    eps = model_code[-1:] == 'E'
-    device['eps'] = eps
-    power = model_code.replace(model,'').replace('E', '')
-    if power.replace('.','').isnumeric():
-        device['power'] = float(power)
+    for p in parts[1:]:
+        if p.replace('.','').isnumeric():
+            power = float(p)
+            if power >= 1.0 and power < 20.0:
+                device['power'] = float(p)
+            break
+    if device.get('power') is None:
+        print(f"** device power not found for deviceType: {device['deviceType']}")
     return device
 
 ##################################################################################################
-# get list of variables for selected device
+# get list of raw_data variables for selected device
 ##################################################################################################
 
 def get_vars():
@@ -372,15 +376,16 @@ def time_period(t):
 
 
 ##################################################################################################
-# set charge times from battery
+# set charge times from battery_settings or parameters
 ##################################################################################################
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None):
     global token, device_sn, battery_settings, debug_setting
     if get_device() is None:
         return None
-    if battery_settings.get('times') is None:
+    if battery_settings.get('times') is None or len(battery_settings['times']) != 2:
         print(f"** invalid battery settings")
+        print(battery_settings)
         return None
     # configure time period 1
     if st1 is not None:
@@ -454,7 +459,7 @@ def get_min():
     return battery_settings
 
 ##################################################################################################
-# set min soc from battery_settings
+# set min soc from battery_settings or parameters
 ##################################################################################################
 
 def set_min(minGridSoc = None, minSoc = None):
@@ -463,6 +468,7 @@ def set_min(minGridSoc = None, minSoc = None):
         return None
     if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
         print(f"** no min soc settings")
+        print(battery_settings)
         return None
     if minGridSoc is not None:
         battery_settings['minGridSoc'] = minGridSoc
@@ -574,8 +580,8 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 # corresponding names to use after integration to kWh, input is extra and must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'input_daily']
 
-# convert time to fractional hours
-def frac_hour(s):
+# convert a time to decimal hours
+def decimal_hours(s):
     return sum(float(t) / x for x, t in zip([1, 60, 3600], s.split(":")))
 
 # time periods settings for TOU allocation.
@@ -631,7 +637,7 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         x['date'] = x['data'][0]['time'][0:10]
         x['state'] = []
         for y in x['data']:
-            h = frac_hour(y['time'][11:19]) # time
+            h = decimal_hours(y['time'][11:19]) # time
             z = y['value'] / 12             # 12 x 5 minute samples = 1 hour
             if z >= 0.0:
                 kwh += z
@@ -677,64 +683,72 @@ def get_report(report_type = 'day', d = None, v = None ):
     if debug_setting > 1:
         print(f"getting report data")
     current = query_date(None)
-    first = query_date(d)
-    last_result = None
+    main = query_date(d)
+    side_result = None
     if report_type in ('day', 'week'):
-        # secondary report needed
-        last = query_date(d, -7) if report_type == 'week' else first
-        if report_type == 'day' or first['month'] != last['month']:
-            # need a secondary report..
-            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': last}
+        # side report needed
+        side = query_date(d, -7) if report_type == 'week' else main
+        if report_type == 'day' or main['month'] != side['month']:
+            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': side}
             response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
             if response.status_code != 200:
-                print(f"** report data response code: {response.status_code}")
+                print(f"** side report data response code: {response.status_code}")
                 return None
-            last_result = response.json().get('result')
-            if last_result is None:
-                print(f"** no report data for last month")
+            side_result = response.json().get('result')
+            if side_result is None:
+                print(f"** no side report data")
                 return None
-    query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': first}
+    query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
-        print(f"** report data response code: {response.status_code}")
+        print(f"** main report data response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no report data")
+        print(f"** no main report data")
         return None
     # prune results back to only valid, complete data for day, week, month or year
-    if report_type == 'day' and first['year'] == current['year'] and first['month'] == current['month'] and first['day'] == current['day']:
+    if report_type == 'day' and main['year'] == current['year'] and main['month'] == current['month'] and main['day'] == current['day']:
         for v in result:
             # prune current day to hours that are valid
             v['data'] = v['data'][:int(current['hour'])]
     if report_type == 'week':
         for i, v in enumerate(result):
             # prune results to days required
-            v['data'] = v['data'][:int(first['day'])]
-            if last_result is not None:
-                # prepend last months results if required
-                v['data'] = last_result[i]['data'][int(last['day']):] + v['data']
+            v['data'] = v['data'][:int(main['day'])]
+            if side_result is not None:
+                # prepend side results (previous month) if required
+                v['data'] = side_result[i]['data'][int(side['day']):] + v['data']
             # prune to week required
             v['data'] = v['data'][-7:]
-    elif report_type == 'month' and first['year'] == current['year'] and first['month'] == current['month']:
+    elif report_type == 'month' and main['year'] == current['year'] and main['month'] == current['month']:
         for v in result:
             # prune current month to days that are valid
             v['data'] = v['data'][:int(current['day'])]
-    elif report_type == 'year' and first['year'] == current['year']:
+    elif report_type == 'year' and main['year'] == current['year']:
         for v in result:
             # prune current year to months that are valid
             v['data'] = v['data'][:int(current['month'])]
     # calculate and add summary data
     for i, v in enumerate(result):
-        count = len(v['data'])
+        count = 0
         sum = 0.0
+        max = None
+        min = None
         for y in v['data']:
-            sum += y['value']
+            value = y['value']
+            count += 1
+            sum += value
+            max = value if max is None or value > max else max
+            min = value if min is None or value < min else min
         v['sum'] = round(sum,3)
-        v['total'] = round(sum,3) if report_type != 'day' else last_result[i]['data'][int(first['day'])-1]['value']
+        # correct total using daily value from 'month' report
+        v['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main['day'])-1]['value']
         v['average'] = round(v['total'] / count, 3) if count > 0 else None
         v['date'] = d
         v['count'] = count
+        v['max'] = round(max,3)
+        v['min'] = round(min,3)
     return result
 
 
@@ -879,7 +893,7 @@ def date_list(s = None, e = None, limit = None, today = False):
         latest_date -= timedelta(days=1)
     d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else latest_date
     if d > latest_date:
-        d = lastest_date
+        d = latest_date
     l = [datetime.strftime(d, '%Y-%m-%d')]
     if s is None:
         return l
@@ -1050,7 +1064,7 @@ class Solcast :
                             self.daily[date][rid].append(time)
                         elif debug_setting > 1 :
                                 print(f"** overlapping data was ignored for {rid} in {t} at {date} {time}")
-        # ignore first and last dates as these are forecast and estimates only cover part of the day, so are not accurate
+        # ignore first and last dates as these forecast and estimate only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
         # trim the range if fewer days have been requested
