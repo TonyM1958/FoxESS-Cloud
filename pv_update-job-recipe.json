@@ -7,7 +7,7 @@
   },
   "description": "PV management job - uploads data to PV Output and works out battery charge schedule required",
   "environment_variables": {
-    "CHARGE_PARAMS": ""
+    "CHARGE_PARAMS": "run_after=22"
   },
   "working_directory": "/home/jovyan/workspace",
   "extra_packages": {
@@ -66,7 +66,7 @@
     "instance_type": "medium",
     "command": "python script.py",
     "start_dind": false,
-    "schedule": "5 8,12,16,20 * * *",
+    "schedule": "5 8,12,16,20,22 * * *",
     "concurrency_policy": "Allow",
     "backoff_limit": 0
   },
