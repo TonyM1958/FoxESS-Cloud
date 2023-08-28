@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  27 August 2023
+Updated:  28 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,8 +9,10 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.2.8"
+version = "0.3.0"
 debug_setting = 1
+
+print(f"FoxESS-Cloud version {version}")
 
 import os.path
 import json
@@ -60,7 +62,7 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    if username is None or password is None:
+    if username is None or password is None or username == '<your username>' or password == '<your password>':
         print(f"** please setup your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
@@ -367,17 +369,17 @@ def get_charge():
     battery_settings['times'] = times
     return battery_settings
 
+
+##################################################################################################
+# set charge times from battery_settings or parameters
+##################################################################################################
+
 # helper to format time period structures
 def time_period(t):
     result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d} - {t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
     if t['enableGrid']:
         result += f" Charge from grid"
     return result
-
-
-##################################################################################################
-# set charge times from battery_settings or parameters
-##################################################################################################
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None):
     global token, device_sn, battery_settings, debug_setting
@@ -572,13 +574,13 @@ def set_work_mode(mode):
 ##################################################################################################
 # get raw data values
 # returns a list of variables and their values / attributes
-# energy determines operating mode - 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data
+# energy 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data, 3: add state
 ##################################################################################################
 
 # generationPower must be first
-power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower']
-# corresponding names to use after integration to kWh, input is extra and must be last
-energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'input_daily']
+power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower', 'meterPower2']
+#  names to use after integration to kWh. List must be in the same order as above. input_daily is additional and must be last
+energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 # convert a time to decimal hours
 def decimal_hours(s):
@@ -593,9 +595,16 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak
     if get_device() is None:
         return None
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
+    if time_span == 'week':
+        result_list = []
+        for d in date_list(e=d, span='week', quiet=True):
+            result = get_raw('day', d=d, v=v, energy=energy)
+            if result is None:
+                return None
+            result_list += result
+        return result_list
     if v is None:
         if raw_vars is None:
             raw_vars = get_vars()
@@ -604,6 +613,7 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         v = [v]
     if debug_setting > 1:
         print(f"getting raw data")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
@@ -628,15 +638,20 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         for y in input_result['data']:
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
         result.append(input_result)
-    for x in [x for x in result if x['unit'] == 'kW']:
+    for v in [v for v in result if v['unit'] == 'kW']:
         d = None
         kwh = 0.0       # kwh total
         kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
         kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
         hour = 0
-        x['date'] = x['data'][0]['time'][0:10]
-        x['state'] = []
-        for y in x['data']:
+        max = None
+        max_time = None
+        v['date'] = v['data'][0]['time'][0:10]
+        v['state'] = [{}]
+        for y in v['data']:
+            if max is None or y['value'] > max:
+                max = y['value']
+                max_time = y['time'][11:16]
             h = decimal_hours(y['time'][11:19]) # time
             z = y['value'] / 12             # 12 x 5 minute samples = 1 hour
             if z >= 0.0:
@@ -649,18 +664,22 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
                     kwh_peak += z
             else:
                 y['value'] = 0.0            # remove ignored values
-            if h > hour:    # new hour
-                x['state'].append(round(kwh,3))
-                hour = h
-        x['kwh'] = round(kwh,3)
-        x['kwh_off'] = round(kwh_off,3)
-        x['kwh_peak'] = round(kwh_peak,3)
-        x['state'].append(round(kwh,3))
-        if energy == 2:
-            if input_name is None or x['name'] != input_name:
-                x['name'] = energy_vars[power_vars.index(x['variable'])]
-            x['unit'] = 'kWh'
-            del x['data']
+            if energy == 3:
+                if int(h) > hour:    # new hour
+                    v['state'].append({})
+                    hour += 1
+                v['state'][hour]['time'] = y['time'][11:16]
+                v['state'][hour]['state'] = round(kwh,3)
+        v['kwh'] = round(kwh,3)
+        v['kwh_off'] = round(kwh_off,3)
+        v['kwh_peak'] = round(kwh_peak,3)
+        v['max'] = max
+        v['max_time'] = max_time
+        if energy >= 2:
+            if input_name is None or v['name'] != input_name:
+                v['name'] = energy_vars[power_vars.index(v['variable'])]
+            v['unit'] = 'kWh'
+            del v['data']
     return result
 
 ##################################################################################################
@@ -748,7 +767,9 @@ def get_report(report_type = 'day', d = None, v = None ):
         v['date'] = d
         v['count'] = count
         v['max'] = round(max,3)
+        v['max_index'] = [y['value'] for y in v['data']].index(max)
         v['min'] = round(min,3)
+        v['min_index'] = [y['value'] for y in v['data']].index(min)
     return result
 
 
@@ -792,15 +813,22 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
 #  annual_consumption: the kWh consumed each year via the inverter
 #  contingency: a factor to add to allow for variations. 1.0 is no variation. Default is 1.25
-#  charge_power: the kW of charge that will be applied
 #  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours
 #  end_by: time in hours when charging will stop
 #  force_charge: if True, the remainder of the time, force charge is set. If false, force charge is not set
-#  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
+#  charge_power: the kW of charge that will be applied
 #  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
+#  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25, charge_power = None, start_at = 2.0, end_by = 5.0, force_charge = False, run_after = 22, efficiency = 0.95):
-    global device, seasonality, debug_setting
+def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25,
+        start_at = 2.0, end_by = 5.0, force_charge = False,
+        charge_power = None, efficiency = 0.92, run_after = 22):
+    global device, seasonality, solcast_api_key, debug_setting
+    if debug_setting > 0:
+        print(f"Parameters:")
+        args = locals()
+        for k in args.keys():
+            print(f"   {k} = {args[k]}")
     now = datetime.now()
     if now.hour < run_after:
         print(f"{datetime.strftime(now, '%H:%M')}, not time yet, run_after = {run_after}")
@@ -811,45 +839,63 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     get_battery()
     min = battery_settings['minGridSoc']
     soc = battery['soc']
-    residual = round(battery['residual']/1000, 3)
-    capacity = round(residual * 100 / soc if soc > 0 else residual, 3)
-    reserve = round(capacity * min / 100, 3)
-    available = round(residual - reserve, 3)
+    residual = round(battery['residual']/1000, 1)
+    capacity = round(residual * 100 / soc if soc > 0 else residual, 1)
+    reserve = round(capacity * min / 100, 1)
+    available = round(residual - reserve, 1)
     if debug_setting > 0:
-        print(f"Battery")
+        print(f"Battery:")
         print(f"   Capacity = {capacity}kWh")
         print(f"   Min SoC on Grid = {min}%")
         print(f"   Current SoC = {soc}%")
         print(f"   Residual = {residual}kWh")
         print(f"   Available = {available}kWh")
     # get forecast info
+    expected = None
     if forecast is not None:
-        expected = round(forecast,3)
-    else:
+        expected = round(forecast,1)
+    elif solcast_api_key is not None and solcast_api_key != '<your api key>':
         forecast = Solcast(days=2)
-        if forecast is None:
-            return None
-        expected = round(forecast.daily[tomorrow]['kwh'] if forecast is not None else 0, 3)
+        expected = round(forecast.daily[tomorrow]['kwh'], 3) if hasattr(forecast, 'daily') else None
+    if expected is None:
+        if debug_setting > 1:
+            print('getting PV generation for last 7 days')
+        history = get_raw('week', v=['pvPower','meterPower2'], energy=2)
+        history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
+        sum_pv = sum(history_pv)
+        history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
+        sum_ct2 = sum(history_ct2)
+        if debug_setting > 0:
+            print(f"Generation history over last 7 days:")
+            print(f"   PV: {history_pv} kWh")
+            if sum_ct2 > 0.0:
+                print(f"  CT2: {history_ct2} kWh")
+        expected = round(sum_pv / 7 + sum_ct2 / 7, 1)
     if debug_setting > 0:
-        print(f"Forecast PV generation = {expected}kWh")
+        print(f"   Average generation = {expected}kWh")
     # get consumption info
     if annual_consumption is not None:
-        consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 3)
+        consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 1)
+        if debug_setting > 0:
+            print(f"Estimate of consumption = {consumption}kWh")
     else:
-        consumption = get_report('week', v='loads')[0]['average']
-        if consumption is None or consumption <= 0:
-            print(f"** unable to get your average weekly consumption. Please provide your annual consumption")
-            return None
-    if debug_setting > 0:
-        print(f"Estimated consumption = {consumption}kWh")
+        history = get_report('week', v='loads')[0]['data']
+        history_load = [round(h['value'], 1) for h in history]
+        history_sum = sum(history_load)
+        consumption = round(sum(history_load) / 7, 1)
+        if debug_setting > 0:
+            print(f"Consumption history over last 7 days:")
+            print(f"   Load: {history_load} kWh")
+            print(f"   Average consumption = {consumption}kWh")
     # calculate charge to add to battery
-    charge = round((consumption - available - expected * efficiency) * contingency,3)
+    charge = round(consumption - available - expected / contingency, 1)
     if charge < 0.0:
+        print(f"Estimate of surplus generation is {-charge} kWh:")
         charge = 0.0
-    if debug_setting > 0:
-        print(f"Charge needed is {charge}kWh")
-    if (residual + charge) > capacity:
-        print(f"** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
+    else:
+        print(f"Estimate of charge needed is {charge}kWh:")
+        if (residual + charge) > capacity:
+            print(f"  ** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
     # calculate charge time
     if charge_power is None or charge_power <= 0:
         charge_power = device.get('power')
@@ -860,7 +906,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     if hours > 0 and hours < 0.25:
         hours = 0.25
     if debug_setting > 0:
-        print(f"  Charge time is {hours} hours using {charge_power}kW charge power")
+        print(f"   Charge time is {hours} hours using {charge_power}kW charge power")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
@@ -884,25 +930,57 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
 # PV Output
 ##################################################################################################
 
-# generate a list of up to 200 dates, where the last date is not later than yeterday or today
+# generate a list of up to 200 dates, where the last date is not later than yesterday or today
+# s and e: start and end dates using the format 'YYYY-MM-DD'
+# limit: limits the total number of days (default is 200)
+# today: True defaults the date to today as the last date, otherwise, yesterday
+# span: 'week', 'month' or 'year' generated dates that span a week, month or year
+# quiet: do not print results if True
 
-def date_list(s = None, e = None, limit = None, today = False):
+def date_list(s = None, e = None, limit = None, today = False, span = None, quiet = False):
     global debug_setting
     latest_date = datetime.date(datetime.now())
     if not today:
         latest_date -= timedelta(days=1)
-    d = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else latest_date
-    if d > latest_date:
-        d = latest_date
+    first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else None
+    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else None
+    if span is not None:
+        limit = 366 if limit is None else limit
+        if first is None and last is None:
+            last = latest_date
+        if span == 'week':
+            # number of days in a week less 1 day
+            last = first + timedelta(days=6) if first is not None else last
+            first = last - timedelta(days=6) if first is None else first
+        elif span == 'month':
+            if first is not None:
+                # number of days in this month less 1 day
+                days = ((first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)).day - 1
+            else:
+                # number of days in previous month less 1 day
+                days = (last.replace(day=1) - timedelta(days=1)).day - 1
+            last = first + timedelta(days=days) if first is not None else last
+            first = last - timedelta(days=days) if first is None else first
+        elif span == 'year':
+            if first is not None:
+                # number of days in coming year
+                days = (first.replace(year=first.year+1,day=28 if first.month==2 and first.day==29 else first.day) - first).days - 1
+            else:
+                # number of days in previous year
+                days = (last - last.replace(year=last.year-1,day=28 if last.month==2 and last.day==29 else last.day)).days - 1
+            last = first + timedelta(days=days) if first is not None else last
+            first = last - timedelta(days=days) if first is None else first
+    else:
+        limit = 200 if limit is None or limit < 1 else limit
+    last = latest_date if last is None or last > latest_date else last
+    d = latest_date if first is None or first > latest_date else first
+    if d > last:
+        d, last = last, d
     l = [datetime.strftime(d, '%Y-%m-%d')]
-    if s is None:
-        return l
-    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else latest_date
-    limit = 200 if limit is None or limit < 1 else limit
-    while d < last and d < latest_date and len(l) < limit:
+    while d < last  and len(l) < limit:
         d += timedelta(days=1)
         l.append(datetime.strftime(d, '%Y-%m-%d'))
-    if debug_setting > 0 and len(l) > 1:
+    if debug_setting > 0 and len(l) > 1 and not quiet:
         print(f"Date range from {l[0]} to {l[-1]} has {len(l)} days")
     return l
 
@@ -910,7 +988,7 @@ def date_list(s = None, e = None, limit = None, today = False):
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
 ##################################################################################################
 
-pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower']
+pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower', 'meterPower2']
 
 # get pvoutput data for upload to pvoutput api or via Bulk Loader.
 
@@ -918,31 +996,44 @@ def get_pvoutput(d = None, tou = 1):
     global debug_setting
     if d is None:
         d = date_list()[0]
-    # get power information for day
-    values = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=2)
-    if values is None:
+    # get raw power data for the day
+    vars = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=1)
+    if vars is None:
         return None
+    # merge meterPower2 into pvPower:
+    pv_index = pvoutput_vars.index('pvPower')
+    ct2_index = pvoutput_vars.index('meterPower2')
+    for i, data in enumerate(vars[ct2_index]['data']):
+        vars[pv_index]['data'][i]['value'] += data['value'] / 0.92
+    vars[pv_index]['kwh'] += vars[ct2_index]['kwh']
+    pv_max = max(d['value'] for d in vars[pv_index]['data'])
+    max_index = [d['value'] for d in vars[pv_index]['data']].index(pv_max)
+    vars[pv_index]['max'] = pv_max
+    vars[pv_index]['max_time'] = vars[pv_index]['data'][max_index]['time'][11:16]
+    # generate output
     generate = ''
     export = ','
+    power = ',,'
     export_tou = ',,,'
     consume = ','
     grid = ',,,,'
-    for v in values:     # process list of power / energy values
-        standard = int(v['kwh'] * 1000)
+    for v in vars:     # process list of power / energy values
+        wh = int(v['kwh'] * 1000)
         peak = int(v['kwh_peak'] * 1000)
         off_peak = int(v['kwh_off'] * 1000)
         if v['variable'] == 'pvPower':
-            generate = f"{v['date'].replace('-','')},{standard},"
+            generate = f"{v['date'].replace('-','')},{wh},"
+            power = f"{int(v['max'] * 1000)},{v['max_time']},"
         elif v['variable'] == 'feedinPower':
-            export = f"{standard}," if tou == 0 else f","
-            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0"
+            export = f"{wh}," if tou == 0 else f","
+            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0"
         elif v['variable'] == 'loadsPower':
-            consume = f"{standard},"
+            consume = f"{wh},"
         elif v['variable'] == 'gridConsumptionPower':
-            grid = f"0,0,{standard},0," if tou == 0 else f"{peak},{off_peak},{standard - peak - off_peak},0,"
+            grid = f"0,0,{wh},0," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0,"
     if generate == '':
         return None
-    return generate + export + ',,,,,,' + grid + consume + export_tou
+    return generate + export + power + ',,,,' + grid + consume + export_tou
 
 pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
 pv_api_key = None
@@ -954,7 +1045,7 @@ def set_pvoutput(d = None, tou = 1, today = False):
     if d is None:
         d = date_list(today = today)[0]
     if pv_api_key is None or pv_system_id is None or pv_api_key == '<your api key>' or pv_system_id == '<your system id>':
-        print(f"** please enter your PV Output api_key and system_id")
+        print(f"pv_api_key / pv_system_id not set, exiting")
         return None
     headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': pv_system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
@@ -1002,17 +1093,11 @@ class Solcast :
     """ 
 
     def __init__(self, days = 7, reload = 2) :
-        # days sets the number of days to get for forecasts and estimated.
+        # days sets the number of days to get for forecasts and estimated
+        # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
         global debug_setting, solcast_url, solcast_api_key, solcast_rids, solcast_save, solcast_cal
-        if solcast_api_key is None:
-            print(f"** no api key provided")
-            return None
-        self.credentials = HTTPBasicAuth(solcast_api_key, '')
-        if solcast_rids is None:
-            print(f"** no rids provided")
-            return None
         data_sets = ['forecasts', 'estimated_actuals']
         self.data = {}
         self.today =datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
@@ -1027,10 +1112,17 @@ class Solcast :
             elif reload == 2 and 'date' in self.data and self.data['date'] != self.today:
                 self.data = {}
             elif debug_setting > 0:
-                print(f"Using data for {self.data['date']} from {solcast_save}")
+                print(f"Using forecast for {self.data['date']} from {solcast_save}")
         if len(self.data) == 0 :
+            if solcast_api_key is None or solcast_api_key == '<your api key>':
+                print(f"solcast_api_key not set, exiting")
+                return
+            if solcast_rids is None or type(solcast_rids) != list or len(solcast_rids) < 1:
+                print(f"solcast_rids not set, exiting")
+                return
             if debug_setting > 0:
-                print(f"Loading data from solcast.com.au for {self.today}")
+                print(f"Getting forecast for {self.today} from solcast.com.au")
+            self.credentials = HTTPBasicAuth(solcast_api_key, '')
             self.data['date'] = self.today
             params = {'format' : 'json', 'hours' : 168, 'period' : 'PT30M'}     # always get 168 x 30 min values
             for t in data_sets :
@@ -1038,7 +1130,10 @@ class Solcast :
                 for rid in solcast_rids :
                     response = requests.get(solcast_url + 'rooftop_sites/' + rid + '/' + t, auth = self.credentials, params = params)
                     if response.status_code != 200 :
-                        print(f"** response code getting {t} for {rid} from {response.url} was {response.status_code}")
+                        if response.status_code == 429:
+                            print(f"   Solcast API call limit reached for today")
+                        else:
+                            print(f"** solcast response code getting {t} was {response.status_code}")
                         return
                     self.data[t][rid] = response.json().get(t)
             if solcast_save is not None :

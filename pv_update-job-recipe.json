@@ -15,7 +15,7 @@
       "install": "random-user-agent foxesscloud"
     }
   },
-  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\n\nimport foxesscloud.foxesscloud as f\nprint(f\"foxesscloud version = {f.version}\")\n\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = $FOX_DEVICE_SN\n\nf.pv_api_key = $PV_API_KEY\nf.pv_system_id = $PV_SYSTEM_ID\n\nf.solcast_api_key = $SOLCAST_API_KEY\nf.solcast_rids = $SOLCAST_RIDS\n\nf.set_pvoutput(tou=1, today=False)\nf.set_pvoutput(tou=1, today=True)\n\nf.charge_needed($CHARGE_PARAMS)\n\nEOF\n",
+  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\nimport foxesscloud.foxesscloud as f\n\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = ${FOX_DEVICE_SN:-None}\n\nf.pv_api_key = ${PV_API_KEY:-None}\nf.pv_system_id = ${PV_SYSTEM_ID:-None}\n\nf.solcast_api_key = ${SOLCAST_API_KEY:-None}\nf.solcast_rids = ${SOLCAST_RIDS:-None}\n\nf.set_pvoutput(tou=1, today=False)\nf.set_pvoutput(tou=1, today=True)\n\nf.charge_needed($CHARGE_PARAMS)\n\nEOF\n",
   "git_repositories": [],
   "shared_folders": [],
   "secrets": [
