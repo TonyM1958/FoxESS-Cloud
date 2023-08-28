@@ -95,7 +95,7 @@ Raw data reports inverter variables, collected every 5 minutes, on a given date 
 f.get_raw(time_span, d, v, energy)
 ```
 
-+ time_span determines the period covered by the data, for example, 'hour' or 'day'
++ time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
 + v is a variable, or list of variables (see below)
 + energy is optional - see following section.
@@ -115,6 +115,7 @@ Setting the optional parameter 'energy' when calling get_raw() provides daily en
 
 + energy = 1: energy stats (kwh) are calculated
 + energy = 2: energy stats (kwh) are calculated and raw power data is removed to save space
++ energy = 3: as (2) but cumulative hourly state is also generated
 
 The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
 
@@ -124,6 +125,10 @@ In addition to daily energy totals, it implements peak and off-peak time of use 
 + off_peak2: 00:00 to 00:00 - adds energy to kwh_off
 + peak: 16:00 to 19:00 - adds energy to kwh_peak
 + other times: calculate from kwh - kwh_peak - kwh_off
+
+When energy is estimated, the following attributes are also added:
++ max: the maximum power value in kW
++ max_time: the time when the maximum power value occured (HH:MM)
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -146,11 +151,14 @@ Note that reporting by 'day' produces inaccurate hourly data, where the sum does
 The result data for each variable include the following attributes:
 
 + 'variable': name of the data set
++ 'data': dictionary of 'index' and 'value' for each data point
 + 'date': that was used to produce the report
 + 'count': the number of data items
 + 'sum': the sum of the data items
-+ 'max': the biggest data value
-+ 'min': the smallest data value
++ 'max': the biggest value in 'data'
++ 'max_index': the index of the biggest value in 'data'
++ 'min': the smallest value in 'data'
++ 'min_index': the index of the smallest value in 'data'
 + 'total': corrected total of the data items
 + 'average': corrected average of the data items
 
@@ -221,7 +229,7 @@ f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_a
 ```
 
 All the parameters are optional:
-+  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au
++  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au if credentials are available
 +  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 +  contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
 +  charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
@@ -231,15 +239,18 @@ All the parameters are optional:
 +  run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
 +  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 
-If annual_consumption is not provided, an estimate will be calcuated using the average of the last 7 days consumption based on the load power reported by the inverter. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, annual_consumption can be provided. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings  for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
+If forecast is not provided and data is not available from Solcast, the average of the last 7 days generated will be used based on the power reported for PV and CT2 inputs.
+
+If annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, annual_consumption can be provided. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings  for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
 
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 ```
 
-Note: calls to the Solcast API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
 ## Version Info
 
+0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data. Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>
 0.2.8: Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot<br>
 0.2.3: Added charge_needed() and solcast forcast<br>
