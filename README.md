@@ -3,7 +3,7 @@ This site contains sample python code for accessing the Fox cloud data via the R
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
 ## Setup
-To initialise a Jupyter Lab notebook, copy the following text:
+To initialise a Jupyter Lab notebook, copy the following text and edit the configuration variables needed to add your values:
 
 ```
 !pip install random-user-agent --root-user-action=ignore --quiet
