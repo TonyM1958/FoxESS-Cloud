@@ -22,9 +22,9 @@ f.solcast_api_key = "<your api key"
 f.solcast_rids = ["<your rid 1>","<your rid 2>"]
 ```
 
-Optionally, you can add f.debug_setting to provide more information on what is happening:
+You can also use 'f.debug_setting = n' to control actions and the level of information reported:
 + 0: silent mode
-+ 1: information reporting
++ 1: information reporting (default)
 + 2: more debug information and updating of inverter settings is disabled
 
 ## Site, Logger and Device Information
