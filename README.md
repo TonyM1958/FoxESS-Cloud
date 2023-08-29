@@ -103,7 +103,7 @@ f.get_raw(time_span, d, v, energy)
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'
 + d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
 + v is a variable, or list of variables (see below)
-+ energy is optional - see following section.
++ content is optional - see following section.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -118,9 +118,9 @@ result=f.get_raw('day', d=d, v=f.power_vars)
 
 Setting the optional parameter 'energy' when calling get_raw() provides daily energy stats from the power data
 
-+ energy = 1: energy stats (kwh) are calculated
-+ energy = 2: energy stats (kwh) are calculated and raw power data is removed to save space
-+ energy = 3: as (2) but cumulative hourly state is also generated
++ content = 1: energy stats (kwh) are calculated
++ content = 2: energy stats (kwh) are calculated and raw power data is removed to save space
++ content = 3: as (2) but cumulative hourly state is also generated
 
 The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
 
@@ -134,6 +134,8 @@ In addition to daily energy totals, it implements peak and off-peak time of use 
 When energy is estimated, the following attributes are also added:
 + max: the maximum power value in kW
 + max_time: the time when the maximum power value occured (HH:MM)
++ min: the minimum power value in kW
++ min_time: the time when the minimum power value occured (HH:MM)
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -256,6 +258,7 @@ Note: if using Solcast, calls to the API for hobby accounts are very limited so 
 
 ## Version Info
 
+0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
 0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data. Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>
 0.2.8: Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot<br>
 0.2.3: Added charge_needed() and solcast forcast<br>

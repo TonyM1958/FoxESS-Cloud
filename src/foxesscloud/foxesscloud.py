@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.0"
+version = "0.3.1"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -574,13 +574,16 @@ def set_work_mode(mode):
 ##################################################################################################
 # get raw data values
 # returns a list of variables and their values / attributes
-# energy 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data, 3: add state
+# content 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data, 3: add state
 ##################################################################################################
 
 # generationPower must be first
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower', 'meterPower2']
 #  names to use after integration to kWh. List must be in the same order as above. input_daily is additional and must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
+
+# option to flip CT2 - correct polarity is +ve for generation and -ve for load
+flip_ct2 = False
 
 # convert a time to decimal hours
 def decimal_hours(s):
@@ -591,8 +594,8 @@ off_peak1 = {'start': 2.0, 'end': 5.0}
 off_peak2 = {'start': 0.0, 'end': 0.0}
 peak = {'start': 16.0, 'end': 19.0 }
 
-def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak
+def get_raw(time_span = 'hour', d = None, v = None, content = 0):
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2
     if get_device() is None:
         return None
     if d is None:
@@ -600,7 +603,7 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
     if time_span == 'week':
         result_list = []
         for d in date_list(e=d, span='week', quiet=True):
-            result = get_raw('day', d=d, v=v, energy=energy)
+            result = get_raw('day', d=d, v=v, content=content)
             if result is None:
                 return None
             result_list += result
@@ -624,20 +627,23 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         print(f"** no raw data")
         return None
     # integrate kW to kWh based on 5 minute samples
-    if energy == 0:
+    if content == 0:
         return result
     if debug_setting > 1:
         print(f"estimating kwh from raw data")
     # copy generationPower to produce inputPower data
-    generation_name = power_vars[0]
     input_name = None
-    if generation_name in v:
+    if 'generationPower' in v:
         input_name = energy_vars[-1]
-        input_result = deepcopy(result[v.index(generation_name)])
+        input_result = deepcopy(result[v.index('generationPower')])
         input_result['name'] = input_name
         for y in input_result['data']:
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
         result.append(input_result)
+    # check if we need to flip CT2
+    if flip_ct2 and 'meterPower2' in v:
+        for x in result[v.index('meterPower2')]['data']:
+            x['value'] = -x['value']
     for v in [v for v in result if v['unit'] == 'kW']:
         d = None
         kwh = 0.0       # kwh total
@@ -646,25 +652,26 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         hour = 0
         max = None
         max_time = None
+        min = None
+        min_time = None
         v['date'] = v['data'][0]['time'][0:10]
-        v['state'] = [{}]
+        if content == 3:
+            v['state'] = [{}]
         for y in v['data']:
-            if max is None or y['value'] > max:
-                max = y['value']
-                max_time = y['time'][11:16]
+            power = y['value']
+            max = power if max is None or power > max else max
+            min = power if min is None or power < min else min
+            e = power / 12        # convert 5 minute sample kW to kWh energy
             h = decimal_hours(y['time'][11:19]) # time
-            z = y['value'] / 12             # 12 x 5 minute samples = 1 hour
-            if z >= 0.0:
-                kwh += z
+            if e >= 0.0:
+                kwh += e
                 if h >= off_peak1['start'] and h < off_peak1['end']:
-                    kwh_off += z
+                    kwh_off += e
                 elif h >= off_peak2['start'] and h < off_peak2['end']:
-                    kwh_off += z
+                    kwh_off += e
                 elif h >= peak['start'] and h < peak['end']:
-                    kwh_peak += z
-            else:
-                y['value'] = 0.0            # remove ignored values
-            if energy == 3:
+                    kwh_peak += e
+            if content == 3:
                 if int(h) > hour:    # new hour
                     v['state'].append({})
                     hour += 1
@@ -673,9 +680,11 @@ def get_raw(time_span = 'hour', d = None, v = None, energy = 0):
         v['kwh'] = round(kwh,3)
         v['kwh_off'] = round(kwh_off,3)
         v['kwh_peak'] = round(kwh_peak,3)
-        v['max'] = max
-        v['max_time'] = max_time
-        if energy >= 2:
+        v['max'] = round(max, 3)
+        v['max_time'] = v['data'][[y['value'] for y in v['data']].index(max)]['time'][11:16]
+        v['min'] = round(min, 3)
+        v['min_time'] = v['data'][[y['value'] for y in v['data']].index(min)]['time'][11:16]
+        if content >= 2:
             if input_name is None or v['name'] != input_name:
                 v['name'] = energy_vars[power_vars.index(v['variable'])]
             v['unit'] = 'kWh'
@@ -850,29 +859,29 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         print(f"   Current SoC = {soc}%")
         print(f"   Residual = {residual}kWh")
         print(f"   Available = {available}kWh")
-    # get forecast info
+    # get forecast / history info
     expected = None
+    forecast_values = None
     if forecast is not None:
         expected = round(forecast,1)
     elif solcast_api_key is not None and solcast_api_key != '<your api key>':
-        forecast = Solcast(days=2)
-        expected = round(forecast.daily[tomorrow]['kwh'], 3) if hasattr(forecast, 'daily') else None
-    if expected is None:
-        if debug_setting > 1:
-            print('getting PV generation for last 7 days')
-        history = get_raw('week', v=['pvPower','meterPower2'], energy=2)
-        history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
-        sum_pv = sum(history_pv)
-        history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
-        sum_ct2 = sum(history_ct2)
-        if debug_setting > 0:
-            print(f"Generation history over last 7 days:")
-            print(f"   PV: {history_pv} kWh")
-            if sum_ct2 > 0.0:
-                print(f"  CT2: {history_ct2} kWh")
-        expected = round(sum_pv / 7 + sum_ct2 / 7, 1)
-    if debug_setting > 0:
-        print(f"   Average generation = {expected}kWh")
+        forecast = Solcast(quiet=True)
+        if hasattr(forecast, 'daily'):
+            forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
+            print(f"Forecast for next 5 days:")
+            print(f"   Solar: {forecast_values} kWh")
+            print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
+    history = get_raw('week', v=['pvPower','meterPower2'], content=2)
+    history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
+    sum_pv = sum(history_pv)
+    history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
+    sum_ct2 = sum(history_ct2)
+    print(f"Generation over last 7 days:")
+    print(f"   PV enery: {history_pv} kWh")
+    if sum_ct2 > 0.0:
+        print(f"  CT2 energy: {history_ct2} kWh")
+    generation = round(sum_pv / 7 + sum_ct2 / 7, 1)
+    print(f"   Average generation = {generation}kWh")
     # get consumption info
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 1)
@@ -884,16 +893,21 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         history_sum = sum(history_load)
         consumption = round(sum(history_load) / 7, 1)
         if debug_setting > 0:
-            print(f"Consumption history over last 7 days:")
+            print(f"Consumption over last 7 days:")
             print(f"   Load: {history_load} kWh")
             print(f"   Average consumption = {consumption}kWh")
+    # choose expected value
+    if expected is None:
+        expected = forecast_values[0] if forecast_values is not None else generation
+    if debug_setting > 0:
+        print(f"Forecast generation tomorrow = {expected}kWh")
     # calculate charge to add to battery
     charge = round(consumption - available - expected / contingency, 1)
     if charge < 0.0:
-        print(f"Estimate of surplus generation is {-charge} kWh:")
+        print(f"Result: surplus generation = {-charge} kWh:")
         charge = 0.0
     else:
-        print(f"Estimate of charge needed is {charge}kWh:")
+        print(f"Result: charge needed = {charge}kWh:")
         if (residual + charge) > capacity:
             print(f"  ** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
     # calculate charge time
@@ -906,7 +920,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     if hours > 0 and hours < 0.25:
         hours = 0.25
     if debug_setting > 0:
-        print(f"   Charge time is {hours} hours using {charge_power}kW charge power")
+        print(f"   Charge time needed is {hours} hours at {charge_power}kW charge power")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
@@ -997,14 +1011,14 @@ def get_pvoutput(d = None, tou = 1):
     if d is None:
         d = date_list()[0]
     # get raw power data for the day
-    vars = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, energy=1)
+    vars = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, content = 1)
     if vars is None:
         return None
     # merge meterPower2 into pvPower:
     pv_index = pvoutput_vars.index('pvPower')
     ct2_index = pvoutput_vars.index('meterPower2')
     for i, data in enumerate(vars[ct2_index]['data']):
-        vars[pv_index]['data'][i]['value'] += data['value'] / 0.92
+        vars[pv_index]['data'][i]['value'] += data['value'] / 0.92 if data['value'] > 0.0 else 0
     vars[pv_index]['kwh'] += vars[ct2_index]['kwh']
     pv_max = max(d['value'] for d in vars[pv_index]['data'])
     max_index = [d['value'] for d in vars[pv_index]['data']].index(pv_max)
@@ -1092,7 +1106,7 @@ class Solcast :
     Load Solcast Estimate / Actuals / Forecast daily yield
     """ 
 
-    def __init__(self, days = 7, reload = 2) :
+    def __init__(self, days = 7, reload = 2, quiet = False) :
         # days sets the number of days to get for forecasts and estimated
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
@@ -1111,7 +1125,7 @@ class Solcast :
                 print(f"No data in {solcast_save}")
             elif reload == 2 and 'date' in self.data and self.data['date'] != self.today:
                 self.data = {}
-            elif debug_setting > 0:
+            elif debug_setting > 0 and not quiet:
                 print(f"Using forecast for {self.data['date']} from {solcast_save}")
         if len(self.data) == 0 :
             if solcast_api_key is None or solcast_api_key == '<your api key>':
@@ -1120,7 +1134,7 @@ class Solcast :
             if solcast_rids is None or type(solcast_rids) != list or len(solcast_rids) < 1:
                 print(f"solcast_rids not set, exiting")
                 return
-            if debug_setting > 0:
+            if debug_setting > 0 and not quiet:
                 print(f"Getting forecast for {self.today} from solcast.com.au")
             self.credentials = HTTPBasicAuth(solcast_api_key, '')
             self.data['date'] = self.today
