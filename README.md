@@ -24,7 +24,7 @@ f.solcast_rids = ["my.solcast_rid1","my.solcast_rid2"]
 
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
-For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for foxesscloud.com, and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values or you will get a syntax error.
+For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login) and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
 ## User Information
 Load information about the user:
