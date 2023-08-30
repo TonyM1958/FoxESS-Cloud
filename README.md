@@ -184,6 +184,36 @@ d = '2023-06-17'
 result=f.get_report('month', d=d)
 ```
 
+## Charge Needed
+
+Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
+
+```
+f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
+```
+
+All the parameters are optional:
++ forecast: the kWh expected tomorrow (optional, see below)
++ annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
++ contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
++ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
++ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is '02:00'
++ end_by: time when charging must stop. The default is '05:00'
++ force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
++ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
++ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
++ update_settings: allow charge_needed to update inverter settings. The default is False 
+
+If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the manual forecast, solcast forecast or average of the last 7 days, in that order, depending on what is available.
+
+If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
+
+```
+f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
+```
+
+Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+
 # PV Output
 These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
@@ -261,35 +291,6 @@ f.set_pvoutput(d, system_id, today)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
 
 
-## Charge Needed
-
-Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
-
-```
-f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
-```
-
-All the parameters are optional:
-+ forecast: the kWh expected tomorrow (optional, see below)
-+ annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
-+ contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
-+ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
-+ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is '02:00'
-+ end_by: time when charging must stop. The default is '05:00'
-+ force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
-+ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
-+ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
-+ update_settings: allow charge_needed to update inverter settings. The default is False 
-
-If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the manual forecast, solcast forecast or average of the last 7 days, in that order, depending on what is available.
-
-If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
-
-```
-f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
-```
-
-Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
 ## Troubleshooting
 
