@@ -1150,7 +1150,7 @@ def set_pvoutput(d = None, tou = 1, today = False):
             csv = set_pvoutput(x, tou=tou)
             if csv is None:
                 return None
-            print(f"{csv} - uploaded OK")
+            print(f"{csv}  # uploaded OK")
         return
     if pv_api_key is None or pv_system_id is None or pv_api_key == '<your api key>' or pv_system_id == '<your system id>':
         print(f"pv_api_key / pv_system_id not set, exiting")
