@@ -1,8 +1,8 @@
 
 # Fox ESS Cloud
-username = "<your username>"
-password = "<your username>"
-device_sn = ""
+fox_username = "<your username>"
+fox_password = "<your username>"
+fox_device_sn = ""
 
 # PV Output
 pv_api_key = "<your api key>"

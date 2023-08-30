@@ -11,23 +11,20 @@ To initialise a Jupyter Lab notebook, copy the following text and edit the confi
 import foxesscloud.foxesscloud as f
 
 # add your info here
-f.username = "<your username>"
-f.password = "<your password"
-f.device_sn = "<your serial number>"
+f.username = "my.fox_username"
+f.password = "my.fox_password"
+f.device_sn = "my.fox_device_sn"
 
-f.pv_api_key = "<your api key>"
-f.pv_system_id = "<your system id>"
+f.pv_api_key = "my.pv_api_key"
+f.pv_system_id = "my.pv_system_id"
 
-f.solcast_api_key = "<your api key"
-f.solcast_rids = ["<your rid 1>","<your rid 2>"]
+f.solcast_api_key = "my.solcast_api_key"
+f.solcast_rids = ["my.solcast_rid1","my.solcast_rid2"]
 ```
 
-You don't have to configure all of the settings, your Fox ESS Cloud username, password and device serial number are the minimum required to access your inverter
+You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
-You can add 'f.debug_setting = n' anywhere to control actions and the level of information reported by the foxesscloud module:
-+ 0: silent mode (minimal output)
-+ 1: information reporting (default)
-+ 2: more debug information, updating of inverter settings is disabled
+For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for foxesscloud.com, and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values or you will get a syntax error.
 
 ## User Information
 Load information about the user:
@@ -202,15 +199,6 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + span: the range of dates. One of 'day', 'week', 'month' or 'year'
 + today: if set to True allows today to be included, otherwise, date list will stop at yesterday
 
-
-Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. The times used can be updated if required. The default TOU period settings are stored in three global variables, shown below. The values are decimal hours:
-
-```
-f.off_peak1 = {'start': 2.0, 'end': 5.0}
-f.off_peak2 = {'start': 0.0, 'end': 0.0}
-f.peak = {'start': 16.0, 'end': 19.0 }
-```
-
 Functions that can be used to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
 
 ```
@@ -225,16 +213,30 @@ Where:
 + ss: is optional. When True, time strings include seconds HH:MM:SS, otherwise they are hours and minutes 'HH:MM' 
 
 
+Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. A number of different per-configured tariffs are provided:
++ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00
++ intelligent_octopus: off peak from 23:30 to 05:30
++ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
++ octopus_go: off peak from 00:30 to 04:30
+
+The time of use periods are held in tou_periods. For example, the default setting is:
+
+```
+f.tou_periods = f.octopus_flux
+```
+
+To disable time of use, set f.tou_periods = None
+
+
 ## Get PV Output Data
 
 Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
 
 ```
-f.get_pvoutput(d, tou)
+f.get_pvoutput(d)
 ```
 
 + d is the date or a list of dates, to get data for. The default is yesterday
-+ tou controls time of use. Set to 0 to remove time of use from the upload data
 
 You can copy and paste the output data to the pvoutput data CSV Loader, using the following settings:
 
@@ -243,7 +245,7 @@ You can copy and paste the output data to the pvoutput data CSV Loader, using th
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
-f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'), tou=1)
+f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'))
 ```
 
 ## Set PV Output Data
@@ -251,11 +253,10 @@ f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'), tou=1)
 Loads CSV data directly using the PV Ouput API:
 
 ```
-f.set_pvoutput(d, tou, system_id, today)
+f.set_pvoutput(d, system_id, today)
 ```
 
 + d is optional and is the date, or a list of dates, to upload. For default, see today below
-+ tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
 
@@ -290,8 +291,23 @@ f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 
 Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
+## Troubleshooting
+
+If needed, you can add the following setting to increase the level of information reported by the foxesscloud module:
+
+```
+f.debug_setting = 2
+```
+
+This setting can be:
++ 0: silent mode (minimal output)
++ 1: information reporting (default)
++ 2: more debug information, updating of inverter settings is disabled
+
+
 ## Version Info
 
+0.3.3: Updated Jupyter notebooks and default parameter values. Added tariffs and tou_periods with settings for Octopus Flux, Intelligent, Cosy and Go<br>
 0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>
 0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
 0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data. Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>

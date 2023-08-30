@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  28 August 2023
+Updated:  30 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.2"
+version = "0.3.3"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -62,7 +62,7 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    if username is None or password is None or username == '<your username>' or password == '<your password>':
+    if username is None or password is None or username == '<my.fox_username>' or password == 'my.fox_password':
         print(f"** please setup your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
@@ -642,14 +642,36 @@ def hours_time(h, ss = False):
     n = 8 if ss else 5
     return f"{int(h):02}:{int(h * 60 % 60):02}:{int(h * 3600 % 60):02}"[:n]
 
+# time periods for Octopus Flux
+octopus_flux = {'name': 'Octopus Flux',
+    'off_peak1': {'start': 2.0, 'end': 5.0},
+    'off_peak2': {'start': 0.0, 'end': 0.0},
+    'peak': {'start': 16.0, 'end': 19.0 }}
 
-# time periods settings for TOU allocation.
-off_peak1 = {'start': 2.0, 'end': 5.0}
-off_peak2 = {'start': 0.0, 'end': 0.0}
-peak = {'start': 16.0, 'end': 19.0 }
+# time periods for Intelligent Octopus
+intelligent_octopus = {'name': 'Intelligent Octopus',
+    'off_peak1': {'start': 23.5, 'end': 24.0},
+    'off_peak2': {'start': 0.0, 'end': 05.5},
+    'peak': {'start': 0.0, 'end': 0.0 }}
+
+# time periods for Octopus Cosy
+octopus_cosy = {'name': 'Octopus Cosy',
+    'off_peak1': {'start': 4.0, 'end': 7.0},
+    'off_peak2': {'start': 13.0, 'end': 16.0},
+    'peak': {'start': 16.0, 'end': 19.0 }}
+
+# time periods for Octopus Go
+octopus_go = {'name': 'Octopus Go',
+    'off_peak1': {'start': 0.5, 'end': 4.5},
+    'off_peak2': {'start': 0.0, 'end': 0.0},
+    'peak': {'start': 0.0, 'end': 0.0 }}
+
+tariffs = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go]
+
+tou_periods = octopus_flux
 
 def get_raw(time_span = 'hour', d = None, v = None, content = 0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods
     if get_device() is None:
         return None
     if d is None:
@@ -720,12 +742,13 @@ def get_raw(time_span = 'hour', d = None, v = None, content = 0):
             h = time_hours(y['time'][11:19]) # time
             if e >= 0.0:
                 kwh += e
-                if h >= off_peak1['start'] and h < off_peak1['end']:
-                    kwh_off += e
-                elif h >= off_peak2['start'] and h < off_peak2['end']:
-                    kwh_off += e
-                elif h >= peak['start'] and h < peak['end']:
-                    kwh_peak += e
+                if tou_periods is not None:
+                    if h >= tou_periods['off_peak1']['start'] and h < tou_periods['off_peak1']['end']:
+                        kwh_off += e
+                    elif h >= tou_periods['off_peak2']['start'] and h < tou_periods['off_peak2']['end']:
+                        kwh_off += e
+                    elif h >= tou_periods['peak']['start'] and h < tou_periods['peak']['end']:
+                        kwh_peak += e
             if content == 3:
                 if int(h) > hour:    # new hour
                     v['state'].append({})
@@ -900,7 +923,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     end_by = time_hours(end_by)
     now = datetime.now()
     if now.hour < run_after:
-        print(f"{datetime.strftime(now, '%H:%M')}, not time yet, run_after = {run_after}")
+        print(f"Not time to run yet, time is {datetime.strftime(now, '%H:%M')}, run_after = {run_after}")
         return None
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     # get battery info
@@ -923,7 +946,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     forecast_values = None
     if forecast is not None:
         expected = round(forecast,1)
-    elif solcast_api_key is not None and solcast_api_key != '<your api key>':
+    elif solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
         forecast = Solcast(quiet=True)
         if hasattr(forecast, 'daily'):
             forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
@@ -1083,14 +1106,14 @@ pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower',
 
 # get pvoutput data for upload to pvoutput api or via Bulk Loader.
 
-def get_pvoutput(d = None, tou = 1):
+def get_pvoutput(d = None, tou = None):
     global debug_setting
     if d is None:
         d = date_list()[0]
     if type(d) is list:
         print(f"\n---------- get_pvoutput ----------")
         for x in d:
-            csv = get_pvoutput(x, tou)
+            csv = get_pvoutput(x)
             if csv is None:
                 return None
             print(csv)
@@ -1124,12 +1147,12 @@ def get_pvoutput(d = None, tou = 1):
             generate = f"{v['date'].replace('-','')},{wh},"
             power = f"{int(v['max'] * 1000)},{v['max_time']},"
         elif v['variable'] == 'feedinPower':
-            export = f"{wh}," if tou == 0 else f","
-            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0"
+            export = f"{wh}," if tou_periods is None else f","
+            export_tou = f",,," if tou_periods is None else f"{peak},{off_peak},{wh - peak - off_peak},0"
         elif v['variable'] == 'loadsPower':
             consume = f"{wh},"
         elif v['variable'] == 'gridConsumptionPower':
-            grid = f"0,0,{wh},0," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0,"
+            grid = f"0,0,{wh},0," if tou_periods is None else f"{peak},{off_peak},{wh - peak - off_peak},0,"
     if generate == '':
         return None
     csv = generate + export + power + ',,,,' + grid + consume + export_tou
@@ -1152,7 +1175,7 @@ def set_pvoutput(d = None, tou = 1, today = False):
                 return None
             print(f"{csv}  # uploaded OK")
         return
-    if pv_api_key is None or pv_system_id is None or pv_api_key == '<your api key>' or pv_system_id == '<your system id>':
+    if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
         print(f"pv_api_key / pv_system_id not set, exiting")
         return None
     headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': pv_system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
@@ -1221,7 +1244,7 @@ class Solcast :
             elif debug_setting > 0 and not quiet:
                 print(f"Using forecast for {self.data['date']} from {solcast_save}")
         if len(self.data) == 0 :
-            if solcast_api_key is None or solcast_api_key == '<your api key>':
+            if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
                 print(f"solcast_api_key not set, exiting")
                 return
             if solcast_rids is None or type(solcast_rids) != list or len(solcast_rids) < 1:
