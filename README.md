@@ -190,8 +190,6 @@ result=f.get_report('month', d=d)
 # PV Output
 These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
-Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories.
-
 ```
 f.date_list(s, e, limit, span, today)
 ```
@@ -203,6 +201,28 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + limit: maximum number of days. The default is 200
 + span: the range of dates. One of 'day', 'week', 'month' or 'year'
 + today: if set to True allows today to be included, otherwise, date list will stop at yesterday
+
+
+Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. The times used can be updated if required. The default TOU period settings are stored in three global variables, shown below. The values are decimal hours:
+
+```
+f.off_peak1 = {'start': 2.0, 'end': 5.0}
+f.off_peak2 = {'start': 0.0, 'end': 0.0}
+f.peak = {'start': 16.0, 'end': 19.0 }
+```
+
+Functions that can be used to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
+
+```
+f.time_hours(s, d)
+f.hours_time(h, ss)
+```
+
+Where:
++ s: is the time string
++ d: is optional and is the default time if s is None
++ h: is decimal hours
++ ss: is optional. When True, time strings include seconds HH:MM:SS, otherwise they are hours and minutes 'HH:MM' 
 
 
 ## Get PV Output Data
