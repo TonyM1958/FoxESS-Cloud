@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.3"
+version = "0.3.4"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -644,24 +644,28 @@ def hours_time(h, ss = False):
 
 # time periods for Octopus Flux
 octopus_flux = {'name': 'Octopus Flux',
+    'charge': {'start': 2.0, 'end': 5.0},
     'off_peak1': {'start': 2.0, 'end': 5.0},
     'off_peak2': {'start': 0.0, 'end': 0.0},
     'peak': {'start': 16.0, 'end': 19.0 }}
 
 # time periods for Intelligent Octopus
 intelligent_octopus = {'name': 'Intelligent Octopus',
+    'charge': {'start': 23.5, 'end': 5.5},
     'off_peak1': {'start': 23.5, 'end': 24.0},
-    'off_peak2': {'start': 0.0, 'end': 05.5},
+    'off_peak2': {'start': 0.0, 'end': 5.5},
     'peak': {'start': 0.0, 'end': 0.0 }}
 
 # time periods for Octopus Cosy
 octopus_cosy = {'name': 'Octopus Cosy',
+    'charge': {'start': 4.0, 'end': 7.0},
     'off_peak1': {'start': 4.0, 'end': 7.0},
     'off_peak2': {'start': 13.0, 'end': 16.0},
     'peak': {'start': 16.0, 'end': 19.0 }}
 
 # time periods for Octopus Go
 octopus_go = {'name': 'Octopus Go',
+    'charge': {'start': 0.5, 'end': 4.5},
     'off_peak1': {'start': 0.5, 'end': 4.5},
     'off_peak2': {'start': 0.0, 'end': 0.0},
     'peak': {'start': 0.0, 'end': 0.0 }}
@@ -909,9 +913,9 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25,
-        start_at = '02:00', end_by = '05:00', force_charge = False,
+        start_at = None, end_by = None, force_charge = False,
         charge_power = None, efficiency = 0.92, run_after = 22, update_settings = False):
-    global device, seasonality, solcast_api_key, debug_setting
+    global device, seasonality, solcast_api_key, debug_setting, tou_periods
     print(f"\n---------- charge_needed ----------")
     args = locals()
     s = ''
@@ -919,8 +923,8 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         s += f"\n   {k} = {args[k]}"
     if len(s) > 0:
         print(f"Parameters: {s}")
-    start_at = time_hours(start_at)
-    end_by = time_hours(end_by)
+    start_at = time_hours(start_at, tou_periods['charge']['start'] if tou_periods is not None else 2)
+    end_by = time_hours(end_by, tou_periods['charge']['end'] if tou_periods is not None else 5)
     now = datetime.now()
     if now.hour < run_after:
         print(f"Not time to run yet, time is {datetime.strftime(now, '%H:%M')}, run_after = {run_after}")
@@ -1261,7 +1265,7 @@ class Solcast :
                     response = requests.get(solcast_url + 'rooftop_sites/' + rid + '/' + t, auth = self.credentials, params = params)
                     if response.status_code != 200 :
                         if response.status_code == 429:
-                            print(f"   Solcast API call limit reached for today")
+                            print(f"\nSolcast API call limit reached for today")
                         else:
                             print(f"** solcast response code getting {t} was {response.status_code}")
                         return

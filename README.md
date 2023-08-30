@@ -124,7 +124,7 @@ result=f.get_raw('day', d=d, v=f.power_vars)
 
 ## Estimated Energy
 
-Setting the optional parameter 'energy' when calling get_raw() provides daily energy stats from the power data
+Setting the optional parameter 'content' when calling get_raw() provides daily energy stats from the power data
 
 + content = 1: energy stats (kwh) are calculated
 + content = 2: energy stats (kwh) are calculated and raw power data is removed to save space
@@ -132,18 +132,34 @@ Setting the optional parameter 'energy' when calling get_raw() provides daily en
 
 The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
 
-In addition to daily energy totals, it implements peak and off-peak time of use (TOU). The time periods are set by global variables: off_peak1, off_peak2 and peak. The default settings are:
-
-+ off_peak1: 02:00 to 05:00 - adds energy to kwh_off
-+ off_peak2: 00:00 to 00:00 - adds energy to kwh_off
-+ peak: 16:00 to 19:00 - adds energy to kwh_peak
-+ other times: calculate from kwh - kwh_peak - kwh_off
-
 When energy is estimated, the following attributes are also added:
 + max: the maximum power value in kW
 + max_time: the time when the maximum power value occured (HH:MM)
 + min: the minimum power value in kW
 + min_time: the time when the minimum power value occured (HH:MM)
+
+## Time of Use Periods
+
+Time Of Use (TOU) periods are used for grid import and export, splitting energy data into off-peak, peak and shoulder categories in PV Output.
+
++ off_peak: adds energy to kwh_off
++ peak: adds energy to kwh_peak
++ other times: calculate from kwh - kwh_peak - kwh_off
+
+TOU periods also hold the time window use for battery charging.
+
+There are a number of pre-configured TOU periods:
+
++ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00
++ intelligent_octopus: off peak from 23:30 to 05:30
++ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
++ octopus_go: off peak from 00:30 to 04:30
+
+The default setting is:
+
+```
+f.tou_periods = f.octopus_flux
+```
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -197,8 +213,8 @@ All the parameters are optional:
 + annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 + contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
 + charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
-+ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is '02:00'
-+ end_by: time when charging must stop. The default is '05:00'
++ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is set by the tariff
++ end_by: time when charging must stop. The default is set by the tariff
 + force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
 + efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
@@ -241,22 +257,6 @@ Where:
 + d: is optional and is the default time if s is None
 + h: is decimal hours
 + ss: is optional. When True, time strings include seconds HH:MM:SS, otherwise they are hours and minutes 'HH:MM' 
-
-
-Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. A number of different per-configured tariffs are provided:
-+ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00
-+ intelligent_octopus: off peak from 23:30 to 05:30
-+ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
-+ octopus_go: off peak from 00:30 to 04:30
-
-The time of use periods are held in tou_periods. For example, the default setting is:
-
-```
-f.tou_periods = f.octopus_flux
-```
-
-To disable time of use, set f.tou_periods = None
-
 
 ## Get PV Output Data
 
