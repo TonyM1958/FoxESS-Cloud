@@ -22,10 +22,21 @@ f.solcast_api_key = "<your api key"
 f.solcast_rids = ["<your rid 1>","<your rid 2>"]
 ```
 
-You can also use 'f.debug_setting = n' to control actions and the level of information reported:
-+ 0: silent mode
+You don't have to configure all of the settings, your Fox ESS Cloud username, password and device serial number are the minimum required to access your inverter
+
+You can add 'f.debug_setting = n' anywhere to control actions and the level of information reported by the foxesscloud module:
++ 0: silent mode (minimal output)
 + 1: information reporting (default)
-+ 2: more debug information and updating of inverter settings is disabled
++ 2: more debug information, updating of inverter settings is disabled
+
+## User Information
+Load information about the user:
+
+```
+f.get_info()
+```
+
+This set the variable f.info and returns a dictionary containing user information.
 
 ## Site, Logger and Device Information
 Load information about a site, data logger or inverter (device):
@@ -84,11 +95,11 @@ set_min() takes the min_soc settings from battery_settings and applies these to 
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
 + ch1: enable charge from grid for period 1 (True or False)
-+ st1: the start time for period 1 in decimal hours e.g. 1.5 = 1:30am, 2am = 2.0
-+ en1: the end time for period 1 in decimal hours
++ st1: the start time for period 1
++ en1: the end time for period 1
 + ch2: enable charge from grid for period 2 (True or False)
-+ st2: the start time for period 2 in decimal hours
-+ en2: the end time for period 2 in decimal hours
++ st2: the start time for period 2
++ en2: the end time for period 2
 
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
@@ -101,7 +112,7 @@ f.get_raw(time_span, d, v, energy)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'
-+ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
++ d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
 + v is a variable, or list of variables (see below)
 + content is optional - see following section.
 
@@ -148,7 +159,7 @@ f.get_report(report_type, d, v)
 + when 'week' is selected, energy is reported for the 7 days up to and including the date;
 + when 'month' is selected, energy is reported each day through the month;
 + when 'year' is selected, energy is reported each month through the year
-+ d is a text string containing a date and time in the format 'yyyy-mm-dd hh:mm:ss'. The default is yesterday
++ d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
 + v is a variable, or list of variables. The default is to use report_vars
 
 The list of variables that can be reported on is stored in f.report_vars.
@@ -182,14 +193,17 @@ These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.o
 Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories.
 
 ```
-f.date_list(s, e, limit, today)
+f.date_list(s, e, limit, span, today)
 ```
 
-+ returns a list of dates from s to e inclusive
-+ dates are in the format 'YYYY-MM-DD'
-+ will not return dates in the future
-+ limit is optional and sets the maximum number of days. The default is 200
-+ today = True is optional and sets the latest date to today instead of yesterday
+Returns a list of dates in the format 'YYYY-MM-DD'. This function will not return dates in the future. The last date will be yesterday or today (if today is True). All parameters are optional:
+
++ s: start date
++ e: end date
++ limit: maximum number of days. The default is 200
++ span: the range of dates. One of 'day', 'week', 'month' or 'year'
++ today: if set to True allows today to be included, otherwise, date list will stop at yesterday
+
 
 ## Get PV Output Data
 
@@ -199,19 +213,18 @@ Returns CSV upload data using the [API format](https://pvoutput.org/help/api_spe
 f.get_pvoutput(d, tou)
 ```
 
-+ d is the start date with the format 'YYYY-MM-DD'. The default is yesterday
++ d is the date or a list of dates, to get data for. The default is yesterday
 + tou controls time of use. Set to 0 to remove time of use from the upload data
-+ copy this data to the pvoutput data CSV Loader, using the following settings:
+
+You can copy and paste the output data to the pvoutput data CSV Loader, using the following settings:
 
 ![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/21459cdc-a943-4e9d-a204-7efd45a422d8)
 
 For example, this Jupyer Lab cell will provide a CSV data upload for June 2023:
 
 ```
-for d in f.date_list('2023-06-01', '2023-06-30'):
-    print(f.get_pvoutput(d, tou=1))
+f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'), tou=1)
 ```
-+ if you have more than 1 inverter, you will need to call get_device(sn='xxxxx') to select the correct device first.
 
 ## Set PV Output Data
 
@@ -221,7 +234,7 @@ Loads CSV data directly using the PV Ouput API:
 f.set_pvoutput(d, tou, system_id, today)
 ```
 
-+ d is optional and is the date to upload in the format 'YYYY-MM-DD'. For default, see today below
++ d is optional and is the date, or a list of dates, to upload. For default, see today below
 + tou is optional and controls time of use calculation. Set to 0 to disable time of use in the upload data. The default is 1
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
@@ -236,19 +249,20 @@ f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_a
 ```
 
 All the parameters are optional:
-+  forecast: the kWh expected tomorrow. By default, forecast data is loaded from solcast.com.au if credentials are available
-+  annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
-+  contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
-+  charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
-+  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours. The default is 2 (2am)
-+  end_by: time in hours when charging will stop. The default is 5 (5am)
-+  force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
-+  run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
-+  efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
++ forecast: the kWh expected tomorrow (optional, see below)
++ annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
++ contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
++ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
++ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is '02:00'
++ end_by: time when charging must stop. The default is '05:00'
++ force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
++ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
++ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
++ update_settings: allow charge_needed to update inverter settings. The default is False 
 
-If forecast is not provided and data is not available from Solcast, the average of the last 7 days generated will be used based on the power reported for PV and CT2 inputs.
+If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the manual forecast, solcast forecast or average of the last 7 days, in that order, depending on what is available.
 
-If annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, annual_consumption can be provided. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings  for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
+If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
 
 ```
 f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
@@ -258,6 +272,7 @@ Note: if using Solcast, calls to the API for hobby accounts are very limited so 
 
 ## Version Info
 
+0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>
 0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
 0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data. Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>
 0.2.8: Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot<br>

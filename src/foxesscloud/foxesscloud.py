@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.1"
+version = "0.3.2"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -79,6 +79,40 @@ def get_token():
         print(f"** no token  in result data")
     token['valid_from'] = time_now
     return token['value']
+
+##################################################################################################
+# get user / access info
+##################################################################################################
+
+info = None
+
+def get_info():
+    global token, debug_setting, info
+    if get_token() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting access")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/user/info", headers=headers)
+    if response.status_code != 200:
+        print(f"** info response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no info result")
+        return None
+    info = result
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/user/access", headers=headers)
+    if response.status_code != 200:
+        print(f"** access response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no access result")
+        return None
+    info['access'] = result['access']
+    return info
+
 
 ##################################################################################################
 # get list of sites
@@ -395,6 +429,8 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
             st1 = 0
             en1 = 0
             ch1 = False
+        st1 = time_hours(st1)
+        en1 = time_hours(en1)
         battery_settings['times'][0]['enableCharge'] = True
         battery_settings['times'][0]['enableGrid'] = ch1
         battery_settings['times'][0]['startTime']['hour'] = int(st1)
@@ -407,6 +443,8 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
             st2 = 0
             en2 = 0
             ch2 = False
+        st2 = time_hours(st2)
+        en2 = time_hours(en2)
         battery_settings['times'][1]['enableCharge'] = True
         battery_settings['times'][1]['enableGrid'] = ch2
         battery_settings['times'][1]['startTime']['hour'] = int(st2)
@@ -585,9 +623,25 @@ energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_
 # option to flip CT2 - correct polarity is +ve for generation and -ve for load
 flip_ct2 = False
 
-# convert a time to decimal hours
-def decimal_hours(s):
-    return sum(float(t) / x for x, t in zip([1, 60, 3600], s.split(":")))
+# convert time string HH:MM:SS to decimal hours
+def time_hours(s, d = None):
+    if s is None:
+        s = d
+    if type(s) is float:
+        return s
+    elif type(s) is int:
+        return float(s)
+    elif type(s) is str and s.replace(':', '').isnumeric() and s.count(':') <= 2:
+        s += ':00' if s.count(':') == 1 else ''
+        return sum(float(t) / x for x, t in zip([1, 60, 3600], s.split(":")))
+    print(f"** invalid time string for time_hours()")
+    return None
+
+# convert decimal hours to time string HH:MM:SS
+def hours_time(h, ss = False):
+    n = 8 if ss else 5
+    return f"{int(h):02}:{int(h * 60 % 60):02}:{int(h * 3600 % 60):02}"[:n]
+
 
 # time periods settings for TOU allocation.
 off_peak1 = {'start': 2.0, 'end': 5.0}
@@ -600,6 +654,7 @@ def get_raw(time_span = 'hour', d = None, v = None, content = 0):
         return None
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
+    time_span = time_span.lower()
     if time_span == 'week':
         result_list = []
         for d in date_list(e=d, span='week', quiet=True):
@@ -662,7 +717,7 @@ def get_raw(time_span = 'hour', d = None, v = None, content = 0):
             max = power if max is None or power > max else max
             min = power if min is None or power < min else min
             e = power / 12        # convert 5 minute sample kW to kWh energy
-            h = decimal_hours(y['time'][11:19]) # time
+            h = time_hours(y['time'][11:19]) # time
             if e >= 0.0:
                 kwh += e
                 if h >= off_peak1['start'] and h < off_peak1['end']:
@@ -701,6 +756,7 @@ def get_report(report_type = 'day', d = None, v = None ):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         return None
+    report_type = report_type.lower()
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
@@ -830,14 +886,18 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25,
-        start_at = 2.0, end_by = 5.0, force_charge = False,
-        charge_power = None, efficiency = 0.92, run_after = 22):
+        start_at = '02:00', end_by = '05:00', force_charge = False,
+        charge_power = None, efficiency = 0.92, run_after = 22, update_settings = False):
     global device, seasonality, solcast_api_key, debug_setting
-    if debug_setting > 0:
-        print(f"Parameters:")
-        args = locals()
-        for k in args.keys():
-            print(f"   {k} = {args[k]}")
+    print(f"\n---------- charge_needed ----------")
+    args = locals()
+    s = ''
+    for k in [k for k in args.keys() if args[k] is not None]:
+        s += f"\n   {k} = {args[k]}"
+    if len(s) > 0:
+        print(f"Parameters: {s}")
+    start_at = time_hours(start_at)
+    end_by = time_hours(end_by)
     now = datetime.now()
     if now.hour < run_after:
         print(f"{datetime.strftime(now, '%H:%M')}, not time yet, run_after = {run_after}")
@@ -852,13 +912,12 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     capacity = round(residual * 100 / soc if soc > 0 else residual, 1)
     reserve = round(capacity * min / 100, 1)
     available = round(residual - reserve, 1)
-    if debug_setting > 0:
-        print(f"Battery:")
-        print(f"   Capacity = {capacity}kWh")
-        print(f"   Min SoC on Grid = {min}%")
-        print(f"   Current SoC = {soc}%")
-        print(f"   Residual = {residual}kWh")
-        print(f"   Available = {available}kWh")
+    print(f"\nBattery:")
+    print(f"   Capacity = {capacity}kWh")
+    print(f"   Min SoC on Grid = {min}%")
+    print(f"   Current SoC = {soc}%")
+    print(f"   Residual = {residual}kWh")
+    print(f"   Available = {available}kWh")
     # get forecast / history info
     expected = None
     forecast_values = None
@@ -868,7 +927,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         forecast = Solcast(quiet=True)
         if hasattr(forecast, 'daily'):
             forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
-            print(f"Forecast for next 5 days:")
+            print(f"\nSolcast forecast for next 5 days:")
             print(f"   Solar: {forecast_values} kWh")
             print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
     history = get_raw('week', v=['pvPower','meterPower2'], content=2)
@@ -876,38 +935,40 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     sum_pv = sum(history_pv)
     history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
     sum_ct2 = sum(history_ct2)
-    print(f"Generation over last 7 days:")
-    print(f"   PV enery: {history_pv} kWh")
+    print(f"\nGeneration over last 7 days:")
+    print(f"   PV energy: {history_pv} kWh")
     if sum_ct2 > 0.0:
         print(f"  CT2 energy: {history_ct2} kWh")
     generation = round(sum_pv / 7 + sum_ct2 / 7, 1)
     print(f"   Average generation = {generation}kWh")
+    # choose expected value
+    if expected is not None:
+        print(f"\nManual forecast for tomorrow = {expected}kWh")
+    else:
+        expected = forecast_values[0] if forecast_values is not None else generation
+        print(f"\nForecast generation tomorrow = {expected}kWh")
     # get consumption info
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 1)
         if debug_setting > 0:
-            print(f"Estimate of consumption = {consumption}kWh")
+            print(f"\nEstimate of consumption = {consumption}kWh")
     else:
         history = get_report('week', v='loads')[0]['data']
         history_load = [round(h['value'], 1) for h in history]
         history_sum = sum(history_load)
         consumption = round(sum(history_load) / 7, 1)
         if debug_setting > 0:
-            print(f"Consumption over last 7 days:")
+            print(f"\nConsumption over last 7 days:")
             print(f"   Load: {history_load} kWh")
             print(f"   Average consumption = {consumption}kWh")
-    # choose expected value
-    if expected is None:
-        expected = forecast_values[0] if forecast_values is not None else generation
-    if debug_setting > 0:
-        print(f"Forecast generation tomorrow = {expected}kWh")
     # calculate charge to add to battery
     charge = round(consumption - available - expected / contingency, 1)
+    print(f"\nComparing forecast, consumption and available energy:")
     if charge < 0.0:
-        print(f"Result: surplus generation = {-charge} kWh:")
+        print(f"   => generation surplus = {-charge} kWh:")
         charge = 0.0
     else:
-        print(f"Result: charge needed = {charge}kWh:")
+        print(f"   => charge needed = {charge}kWh:")
         if (residual + charge) > capacity:
             print(f"  ** charge needed exceeds battery capacity by {charge - capacity + residual}kWh")
     # calculate charge time
@@ -919,13 +980,15 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     # don't charge for less than 15 minutes
     if hours > 0 and hours < 0.25:
         hours = 0.25
-    if debug_setting > 0:
-        print(f"   Charge time needed is {hours} hours at {charge_power}kW charge power")
+    if hours > 0:
+        print(f"   => charge time needed is {hours} hours at {charge_power}kW charge power")
+    else:
+        print(f"   => no charging needed")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
     if end1 > end_by:
-        print(f"** charge end time {end1} exceeds end by {end_by}")
+        print(f"** charge end time {hours_time(end1)} exceeds end by {hours_time(end_by)}")
         end1 = end_by
     if force_charge:
         start2 = round_time(end1 + 1 / 60)
@@ -935,7 +998,11 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         start2 = 0
         end2 = 0
     # setup charging
-    set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
+    if update_settings:
+        print()
+        set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
+    else:
+        print(f"\nNo changes have been made to your inverter settings")
     return None
 
 
@@ -951,18 +1018,25 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
 # span: 'week', 'month' or 'year' generated dates that span a week, month or year
 # quiet: do not print results if True
 
-def date_list(s = None, e = None, limit = None, today = False, span = None, quiet = False):
+def date_list(s = None, e = None, limit = None, span = None, today = False, quiet = False):
     global debug_setting
     latest_date = datetime.date(datetime.now())
     if not today:
         latest_date -= timedelta(days=1)
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else None
+    if first is None and last is None:
+        last = latest_date
     if span is not None:
+        span = span.lower()
         limit = 366 if limit is None else limit
-        if first is None and last is None:
-            last = latest_date
-        if span == 'week':
+        if span == 'day':
+            limit = 1
+        elif span == '2days':
+            # e.g. yesterday and today
+            last = first + timedelta(days=1) if first is not None else last
+            first = last - timedelta(days=1) if first is None else first
+        elif span == 'week':
             # number of days in a week less 1 day
             last = first + timedelta(days=6) if first is not None else last
             first = last - timedelta(days=6) if first is None else first
@@ -984,6 +1058,9 @@ def date_list(s = None, e = None, limit = None, today = False, span = None, quie
                 days = (last - last.replace(year=last.year-1,day=28 if last.month==2 and last.day==29 else last.day)).days - 1
             last = first + timedelta(days=days) if first is not None else last
             first = last - timedelta(days=days) if first is None else first
+        else:
+            print(f"** span '{span}' was not recognised")
+            return None
     else:
         limit = 200 if limit is None or limit < 1 else limit
     last = latest_date if last is None or last > latest_date else last
@@ -1010,6 +1087,14 @@ def get_pvoutput(d = None, tou = 1):
     global debug_setting
     if d is None:
         d = date_list()[0]
+    if type(d) is list:
+        print(f"\n---------- get_pvoutput ----------")
+        for x in d:
+            csv = get_pvoutput(x, tou)
+            if csv is None:
+                return None
+            print(csv)
+        return
     # get raw power data for the day
     vars = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, content = 1)
     if vars is None:
@@ -1047,7 +1132,8 @@ def get_pvoutput(d = None, tou = 1):
             grid = f"0,0,{wh},0," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0,"
     if generate == '':
         return None
-    return generate + export + power + ',,,,' + grid + consume + export_tou
+    csv = generate + export + power + ',,,,' + grid + consume + export_tou
+    return csv
 
 pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
 pv_api_key = None
@@ -1058,6 +1144,14 @@ def set_pvoutput(d = None, tou = 1, today = False):
     global pv_url, pv_api_key, pv_system_id, debug_setting
     if d is None:
         d = date_list(today = today)[0]
+    if type(d) is list:
+        print(f"\n---------- set_pvoutput ----------")
+        for x in d[:10]:
+            csv = set_pvoutput(x, tou=tou)
+            if csv is None:
+                return None
+            print(f"{csv} - uploaded OK")
+        return
     if pv_api_key is None or pv_system_id is None or pv_api_key == '<your api key>' or pv_system_id == '<your system id>':
         print(f"pv_api_key / pv_system_id not set, exiting")
         return None
@@ -1065,13 +1159,12 @@ def set_pvoutput(d = None, tou = 1, today = False):
     csv = get_pvoutput(d, tou)
     if csv is None:
         return None
-    if debug_setting > 0:
-        print(f"{csv}")
     response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
-        print(f"** put_pvoutput response code: {result}")
-    return result
+        print(f"** set_pvoutput response code: {result}")
+        return None
+    return csv
 
 
 ##################################################################################################
