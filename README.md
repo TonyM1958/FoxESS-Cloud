@@ -104,13 +104,13 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-f.get_raw(time_span, d, v, energy)
+f.get_raw(time_span, d, v, summary)
 ```
 
-+ time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'
-+ d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
++ time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
++ d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is today's date and time
 + v is a variable, or list of variables (see below)
-+ content is optional - see following section.
++ summary is optional - see following section.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -121,22 +121,26 @@ d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
 ```
 
-## Estimated Energy
+## Summary of Raw Data
 
-Setting the optional parameter 'content' when calling get_raw() provides daily energy stats from the power data
+Setting the optional parameter 'summary' when calling get_raw() provides a summary of the raw data
 
-+ content = 1: energy stats (kwh) are calculated
-+ content = 2: energy stats (kwh) are calculated and raw power data is removed to save space
-+ content = 3: as (2) but cumulative hourly state is also generated
++ summary = 1: summary is calculated
++ summary = 2: summary is calculated and raw data is removed to save time / space
++ summary = 3: as (2) but for energy only, an hourly cumulative state is also generated, similar to the state used in Home Assistant long term statistics
 
-The transform performs a Riemann sum of the power data, integrating kW over the day to estimate energy in kWh. Comparison with the inverter built-in energy meters indicates the estimates are within 3%.
+The summary includes the following attributes:
++ count: the number of data points
++ average: the average value of the data points
++ max: the maximum value of the data points
++ max_time: the time when the maximum value occured (HH:MM)
++ min: the minimum value of the data points
++ min_time: the time when the minimum value occured (HH:MM)
 
-When energy is estimated, the following attributes are also added:
-+ max: the maximum power value in kW
-+ max_time: the time when the maximum power value occured (HH:MM)
-+ min: the minimum power value in kW
-+ min_time: the time when the minimum power value occured (HH:MM)
-
+For power values, the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
++ kwh: the total energy generated or consumed
++ kwh_off: the energy consumed or generated during the off-peak time of use
++ kwh_peak: the energy consumed or generated during the peak time of use
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -186,20 +190,20 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, annual_consumption, contingency, charge_power, start_at, end_by, force_charge, run_after, efficiency)
+f.charge_needed(forecast, annual_consumption, contingency, start_at, end_by, force_charge, charge_power, efficiency, run_after, update_setings)
 ```
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 + contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
-+ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
 + start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is set by the tariff
 + end_by: time when charging must stop. The default is set by the tariff
-+ force_charge: if set to True, any remaining time between start_at and end_by has force charge set to preserve the battery. If false, force charge is not set
-+ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
++ force_charge: if set to 1, any remaining time between start_at and end_by has force charge set to preserve the battery. If 0, force charge is not set
++ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
 + efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
-+ update_settings: allow charge_needed to update inverter settings. The default is False 
++ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
++ update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 
 If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the manual forecast, solcast forecast or average of the last 7 days, in that order, depending on what is available.
 
@@ -223,28 +227,34 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + e: end date
 + limit: maximum number of days. The default is 200
 + span: the range of dates. One of 'day', 'week', 'month' or 'year'
-+ today: if set to True allows today to be included, otherwise, date list will stop at yesterday
++ today: if set to 1 allows today to be included, otherwise, date list will stop at yesterday
+
 
 ## Time of Use
 
-Time Of Use (TOU) periods are applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. A number of different per-configured tariffs are provided:
-+ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00, charging from 02:00 to 05:00
-+ intelligent_octopus: off peak from 23:30 to 05:30, charging from 23:30 to 05:00
-+ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, charging from 04:00 to 07:00
-+ octopus_go: off peak from 00:30 to 04:30, charging from 00:30 to 04:30
+Time Of Use (TOU) periods set when your battery can be charged and can be applied to the grid import and export data uploaded to PV Ouptut.
 
-The tariff in use held in tou_periods. The default setting is:
+There are a number of different per-configured tariffs:
++ f.octous_flux: charging from 02:00 to 05:00, off-peak from 02:00 to 05:00, peak from 16:00 to 19:00
++ f.intelligent_octopus: charging from 23:30 to 05:00. off-peak from 23:30 to 05:30
++ f.octopus_cosy: charging from 04:00 to 07:00, off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
++ f.octopus_go: charging rofm 00:30 to 04:30, off peak from 00:30 to 04:30
+
+Custom periods can be configured for specific times if required:
++ f.custom_periods: charging from 02:00 to 05:00, no off-peak or peak times
+
+A complete list of the tariffs available is held in f.tariff_list
+
+The active tariff in held in 'f.tou_periods'. Another global variable 'f.force_charge' can be set if you want your battery to be held for the whole of the charge period. The default settings are:
 
 ```
 f.tou_periods = f.octopus_flux
+f.force_charge = False
 ```
 
-To ignore TOU when generating data, set f.tou_periods = None.
+Note: when TOU is applied, energy values are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
 
-f.custom_periods can be used to configure specific times if required:
-+ custom_periods: no peak or off peak, charging from 02:00 to 05:00
-
-Period time settings are held as decimal hours. Functions that can be used to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
+Time period settings are held as decimal hours. Functions are available to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
 
 ```
 f.time_hours(s, d)
@@ -267,10 +277,11 @@ These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.o
 Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
 
 ```
-f.get_pvoutput(d)
+f.get_pvoutput(d, tou)
 ```
 
 + d is the date or a list of dates, to get data for. The default is yesterday
++ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
 
 You can copy and paste the output data to the pvoutput data CSV Loader, using the following settings:
 
@@ -287,13 +298,13 @@ f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'))
 Loads CSV data directly using the PV Ouput API:
 
 ```
-f.set_pvoutput(d, system_id, today)
+f.set_pvoutput(d, system_id, today, tou)
 ```
 
 + d is optional and is the date, or a list of dates, to upload. For default, see today below
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
-
++ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
 
 
 ## Troubleshooting

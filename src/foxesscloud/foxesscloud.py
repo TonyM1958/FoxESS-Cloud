@@ -5,7 +5,7 @@ Updated:  30 August 2023
 By:       Tony Matthews
 """
 ##################################################################################################
-# Sample code for getting and setting inverter data via the Fox ESS cloud web site, including
+# Code for getting and setting inverter data via the Fox ESS cloud web site, including
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
@@ -31,7 +31,9 @@ operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
 user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
 
 ##################################################################################################
-# foxesscloud.com web site access
+##################################################################################################
+# Fox ESS Cloud API Section
+##################################################################################################
 ##################################################################################################
 
 token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=1).seconds, 'user_agent': None, 'lang': 'en'}
@@ -44,6 +46,7 @@ def query_date(d, offset = None):
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+# global username and password settings
 username = None
 password = None
 
@@ -63,12 +66,12 @@ def get_token():
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     if username is None or password is None or username == '<my.fox_username>' or password == 'my.fox_password':
-        print(f"** please setup your Fox ESS Cloud username and password")
+        print(f"** please configure your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
     if response.status_code != 200:
-        print(f"** could not login to Fox ESS Cloud - response code: {response.status_code}")
+        print(f"** could not login to Fox ESS Cloud - check your username and password - got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -95,7 +98,7 @@ def get_info():
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/user/info", headers=headers)
     if response.status_code != 200:
-        print(f"** info response code: {response.status_code}")
+        print(f"** get_info() got info response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -104,7 +107,7 @@ def get_info():
     info = result
     response = requests.get(url="https://www.foxesscloud.com/c/v0/user/access", headers=headers)
     if response.status_code != 200:
-        print(f"** access response code: {response.status_code}")
+        print(f"** get_info() got access response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -133,7 +136,7 @@ def get_site(name=None):
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
     response = requests.post(url="https://www.foxesscloud.com/c/v1/plant/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
-        print(f"** sites list response code: {response.status_code}")
+        print(f"** get_sites() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -152,7 +155,7 @@ def get_site(name=None):
                     n = i
                     break
         if n is None:
-            print(f"** please pick a name from the list")
+            print(f"\nget_site(): please provide a name from the list:")
             for s in site_list:
                 print(f"Name={s['name']}")
             return None
@@ -180,7 +183,7 @@ def get_logger(sn=None):
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/module/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
-        print(f"** logger list response code: {response.status_code}")
+        print(f"** get_logger() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -199,7 +202,7 @@ def get_logger(sn=None):
                     n = i
                     break
         if n is None:
-            print(f"** please pick a serial number from the list")
+            print(f"\nget_logger(): please provide a serial number from this list:")
             for l in logger_list:
                 print(f"SN={l['moduleSN']}, Plant={l['plantName']}, StationID={l['stationID']}")
             return None
@@ -235,7 +238,7 @@ def get_device(sn=None):
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
-        print(f"** device list response code: {response.status_code}")
+        print(f"** get_device() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -256,7 +259,7 @@ def get_device(sn=None):
                 n = i
                 break
         if n is None:
-            print(f"** please pick a serial number from this list")
+            print(f"\nget_device(): please provide a serial number from this list:")
             for d in device_list:
                 print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
             return None
@@ -308,7 +311,7 @@ def get_vars():
     # v1 api required for full list with {name, variable, unit}
     response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** variables response code: {response.status_code}")
+        print(f"** get_vars() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -336,7 +339,7 @@ def get_firmware():
     params = {'deviceID': device_id}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/addressbook", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** firmware response code: {response.status_code}")
+        print(f"** get_firmware() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -365,7 +368,7 @@ def get_battery():
     params = {'id': device_id}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** battery response code: {response.status_code}")
+        print(f"** get_battery() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -388,7 +391,7 @@ def get_charge():
     params = {'sn': device_sn}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/time/get", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** get charge response code: {response.status_code}")
+        print(f"** get_charge() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -408,7 +411,7 @@ def get_charge():
 # set charge times from battery_settings or parameters
 ##################################################################################################
 
-# helper to format time period structures
+# helper to format time period structure
 def time_period(t):
     result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d} - {t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
     if t['enableGrid']:
@@ -420,7 +423,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     if get_device() is None:
         return None
     if battery_settings.get('times') is None or len(battery_settings['times']) != 2:
-        print(f"** invalid battery settings")
+        print(f"** set_charge(): invalid battery settings")
         print(battery_settings)
         return None
     # configure time period 1
@@ -455,7 +458,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         print(battery_settings)
         return None
     if debug_setting > 0:
-        print(f"Setting time periods:")
+        print(f"\nSetting time periods:")
         print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
         print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
     # set charge times
@@ -463,7 +466,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/time/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
-        print(f"** set charge response code: {response.status_code}")
+        print(f"** set_charge() got response code: {response.status_code}")
         return None
     result = response.json().get('errno')
     if result != 0:
@@ -486,7 +489,7 @@ def get_min():
     params = {'sn': device_sn}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/soc/get", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** get min soc response code: {response.status_code}")
+        print(f"** get_min() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -523,7 +526,7 @@ def set_min(minGridSoc = None, minSoc = None):
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/soc/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
-        print(f"** set min response code: {response.status_code}")
+        print(f"** set_min() got response code: {response.status_code}")
         return None
     result = response.json().get('errno')
     if result != 0:
@@ -560,7 +563,7 @@ def get_work_mode():
     params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
     if response.status_code != 200:
-        print(f"** get work mode response code: {response.status_code}")
+        print(f"** get_work_mode() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -598,7 +601,7 @@ def set_work_mode(mode):
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/setting/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
-        print(f"** set work mode response code: {response.status_code}")
+        print(f"** set_work_mode() got response code: {response.status_code}")
         return None
     result = response.json().get('errno')
     if result != 0:
@@ -609,19 +612,317 @@ def set_work_mode(mode):
     work_mode = mode
     return work_mode
 
+
 ##################################################################################################
 # get raw data values
 # returns a list of variables and their values / attributes
-# content 0: raw data, 1: estimate kwh, 2: estimate kwh and drop raw data, 3: add state
+# time_span = 'hour', 'day', 'week'. For 'week', gets history of 7 days up to and including d
+# d = day 'YYYY-MM-DD'. Can also include 'HH:MM' in 'hour' mode
+# v = list of variables to get
+# summary = 0: raw data, 1: add max, min, sum, 2: summarise and drop raw data, 3: calculate state
 ##################################################################################################
 
-# generationPower must be first
+# variables that cover inverter power data: generationPower must be first
 power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPower','batChargePower', 'batDischargePower', 'pvPower', 'meterPower2']
-#  names to use after integration to kWh. List must be in the same order as above. input_daily is additional and must be last
+#  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 # option to flip CT2 - correct polarity is +ve for generation and -ve for load
 flip_ct2 = False
+
+def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods
+    if get_device() is None:
+        return None
+    time_span = time_span.lower()
+    if d is None:
+        d = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
+    if time_span == 'week':
+        result_list = []
+        for d in date_list(e=d, span='week'):
+            result = get_raw('day', d=d, v=v, summary=summary)
+            if result is None:
+                return None
+            result_list += result
+        return result_list
+    if v is None:
+        if raw_vars is None:
+            raw_vars = get_vars()
+        v = [x['variable'] for x in raw_vars]
+    elif type(v) is not list:
+        v = [v]
+    if debug_setting > 1:
+        print(f"getting raw data")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
+    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
+    if response.status_code != 200:
+        print(f"** get_raw() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no raw data")
+        return None
+    # integrate kW to kWh based on 5 minute samples
+    if summary == 0:
+        return result
+    if debug_setting > 1:
+        print(f"calculating summary data")
+    # copy generationPower to produce inputPower data
+    input_name = None
+    if 'generationPower' in v:
+        input_name = energy_vars[-1]
+        input_result = deepcopy(result[v.index('generationPower')])
+        input_result['name'] = input_name
+        for y in input_result['data']:
+            y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
+        result.append(input_result)
+    # check if we need to flip CT2
+    if flip_ct2 and 'meterPower2' in v:
+        for x in result[v.index('meterPower2')]['data']:
+            x['value'] = -x['value']
+    for var in result:
+        energy = var['unit'] == 'kW'
+        hour = 0
+        if energy:
+            kwh = 0.0       # kwh total
+            kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
+            kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
+        sum = 0.0
+        count = 0
+        max = None
+        max_time = None
+        min = None
+        min_time = None
+        if summary == 3 and energy:
+            var['state'] = [{}]
+        for y in var['data']:
+            h = time_hours(y['time'][11:19]) # time
+            value = y['value']
+            sum += value
+            count += 1
+            max = value if max is None or value > max else max
+            min = value if min is None or value < min else min
+            if energy and value >= 0.0:
+                e = value / 12        # convert 5 minute sample kW to kWh energy
+                kwh += e
+                if tou_periods is not None:
+                    if h >= tou_periods['off_peak1']['start'] and h < tou_periods['off_peak1']['end']:
+                        kwh_off += e
+                    elif h >= tou_periods['off_peak2']['start'] and h < tou_periods['off_peak2']['end']:
+                        kwh_off += e
+                    elif h >= tou_periods['peak']['start'] and h < tou_periods['peak']['end']:
+                        kwh_peak += e
+                    elif h >= tou_periods['peak2']['start'] and h < tou_periods['peak2']['end']:
+                        kwh_peak += e
+            if summary == 3 and energy:
+                if int(h) > hour:    # new hour
+                    var['state'].append({})
+                    hour += 1
+                var['state'][hour]['time'] = y['time'][11:16]
+                var['state'][hour]['state'] = round(kwh,3)
+        if energy:
+            var['kwh'] = round(kwh,3)
+            var['kwh_off'] = round(kwh_off,3)
+            var['kwh_peak'] = round(kwh_peak,3)
+        var['date'] = d[0:10]
+        var['count'] = count
+        var['average'] = round(sum / count, 3) if count > 0 else None
+        var['max'] = round(max, 3) if max is not None else None
+        var['max_time'] = var['data'][[y['value'] for y in var['data']].index(max)]['time'][11:16] if max is not None else None
+        var['min'] = round(min, 3) if min is not None else None
+        var['min_time'] = var['data'][[y['value'] for y in var['data']].index(min)]['time'][11:16] if min is not None else None
+        if summary >= 2:
+            if energy and (input_name is None or var['name'] != input_name):
+                var['name'] = energy_vars[power_vars.index(var['variable'])]
+            if energy:
+                var['unit'] = 'kWh'
+            del var['data']
+    return result
+
+##################################################################################################
+# get energy report data in kWh
+##################################################################################################
+# report_type = 'day', 'week', 'month', 'year'
+# d = day 'YYYY-MM-DD'
+# v = list of report variables to get
+# totals = True, do a quick total energy report for a day
+
+report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
+
+def get_report(report_type = 'day', d = None, v = None, totals = False ):
+    global token, device_id, var_list, debug_setting, report_vars
+    if get_device() is None:
+        return None
+    report_type = report_type.lower()
+    if totals and report_type != 'day':
+        totals = False
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    if d is None:
+        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
+    if v is None:
+        v = report_vars
+    elif type(v) is not list:
+        v = [v]
+    if debug_setting > 1:
+        print(f"getting report data")
+    current_date = query_date(None)
+    main_date = query_date(d)
+    side_result = None
+    if report_type in ('day', 'week'):
+        # side report needed
+        side_date = query_date(d, -7) if report_type == 'week' else main_date
+        if report_type == 'day' or main_date['month'] != side_date['month']:
+            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
+            response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
+            if response.status_code != 200:
+                print(f"** get_report() side report got response code: {response.status_code}")
+                return None
+            side_result = response.json().get('result')
+            if side_result is None:
+                print(f"** no side report data")
+                return None
+    if not totals:
+        query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
+        response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
+        if response.status_code != 200:
+            print(f"** get_report() main report got response code: {response.status_code}")
+            return None
+        result = response.json().get('result')
+        if result is None:
+            print(f"** no main report data")
+            return None
+        # prune results back to only valid, complete data for day, week, month or year
+        if report_type == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
+            for var in result:
+                # prune current day to hours that are valid
+                var['data'] = var['data'][:int(current_date['hour'])]
+        if report_type == 'week':
+            for i, var in enumerate(result):
+                # prune results to days required
+                var['data'] = var['data'][:int(main_date['day'])]
+                if side_result is not None:
+                    # prepend side results (previous month) if required
+                    var['data'] = side_result[i]['data'][int(side_date['day']):] + var['data']
+                # prune to week required
+                var['data'] = var['data'][-7:]
+        elif report_type == 'month' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month']:
+            for var in result:
+                # prune current month to days that are valid
+                var['data'] = var['data'][:int(current_date['day'])]
+        elif report_type == 'year' and main_date['year'] == current_date['year']:
+            for var in result:
+                # prune current year to months that are valid
+                var['data'] = var['data'][:int(current_date['month'])]
+    else:
+        # fake result for quick daily totals only
+        result = []
+        for x in v:
+            result.append({'variable': x, 'data': []})
+    # calculate and add summary data
+    for i, var in enumerate(result):
+        count = 0
+        sum = 0.0
+        max = None
+        min = None
+        for y in var['data']:
+            value = y['value']
+            count += 1
+            sum += value
+            max = value if max is None or value > max else max
+            min = value if min is None or value < min else min
+        # correct day total from side report
+        var['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
+        if not totals:
+            var['sum'] = round(sum,3)
+            var['average'] = round(var['total'] / count, 3) if count > 0 else None
+            var['date'] = d
+            var['count'] = count
+            var['max'] = round(max,3) if max is not None else None
+            var['max_index'] = [y['value'] for y in var['data']].index(max) if max is not None else None
+            var['min'] = round(min,3) if min is not None else None
+            var['min_index'] = [y['value'] for y in var['data']].index(min) if min is not None else None
+    return result
+
+
+##################################################################################################
+# get earnings data
+##################################################################################################
+
+def get_earnings():
+    global token, device_id, var_list, debug_setting, report_vars
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting earnings")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    params = {'deviceID': device_id}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/earnings", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_earnings() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** no earnings data")
+        return None
+    return result
+
+
+##################################################################################################
+##################################################################################################
+# Operations section
+##################################################################################################
+##################################################################################################
+
+##################################################################################################
+# time of user (TOU)
+# time values are decimal hours
+##################################################################################################
+
+# time periods for Octopus Flux
+octopus_flux = {'name': 'Octopus Flux',
+    'charge': {'start': 2.0, 'end': 5.0, 'force': 0},
+    'off_peak1': {'start': 2.0, 'end': 5.0},
+    'off_peak2': {'start': 0.0, 'end': 0.0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 }}
+
+# time periods for Intelligent Octopus
+intelligent_octopus = {'name': 'Intelligent Octopus',
+    'charge': {'start': 23.5, 'end': 5.5, 'force': 0},
+    'off_peak1': {'start': 23.5, 'end': 24.0},
+    'off_peak2': {'start': 0.0, 'end': 5.5},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 }}
+
+# time periods for Octopus Cosy
+octopus_cosy = {'name': 'Octopus Cosy',
+    'charge': {'start': 4.0, 'end': 7.0, 'force': 0},
+    'off_peak1': {'start': 4.0, 'end': 7.0},
+    'off_peak2': {'start': 13.0, 'end': 16.0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 }}
+
+# time periods for Octopus Go
+octopus_go = {'name': 'Octopus Go',
+    'charge': {'start': 0.5, 'end': 4.5, 'force': 0},
+    'off_peak1': {'start': 0.5, 'end': 4.5},
+    'off_peak2': {'start': 0.0, 'end': 0.0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 }}
+
+# custom time periods / template
+custom_periods = {'name': 'Custom',
+    'charge': {'start': 2.0, 'end': 5.0, 'force': 0},
+    'off_peak1': {'start': 0.0, 'end': 0.0},
+    'off_peak2': {'start': 0.0, 'end': 0.0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 }}
+
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
+
+# global setting for tariff to use and charging
+tou_periods = octopus_flux
 
 # convert time string HH:MM:SS to decimal hours
 def time_hours(s, d = None):
@@ -641,251 +942,6 @@ def time_hours(s, d = None):
 def hours_time(h, ss = False):
     n = 8 if ss else 5
     return f"{int(h):02}:{int(h * 60 % 60):02}:{int(h * 3600 % 60):02}"[:n]
-
-# time periods for Octopus Flux
-octopus_flux = {'name': 'Octopus Flux',
-    'charge': {'start': 2.0, 'end': 5.0},
-    'off_peak1': {'start': 2.0, 'end': 5.0},
-    'off_peak2': {'start': 0.0, 'end': 0.0},
-    'peak': {'start': 16.0, 'end': 19.0 }}
-
-# time periods for Intelligent Octopus
-intelligent_octopus = {'name': 'Intelligent Octopus',
-    'charge': {'start': 23.5, 'end': 5.5},
-    'off_peak1': {'start': 23.5, 'end': 24.0},
-    'off_peak2': {'start': 0.0, 'end': 5.5},
-    'peak': {'start': 0.0, 'end': 0.0 }}
-
-# time periods for Octopus Cosy
-octopus_cosy = {'name': 'Octopus Cosy',
-    'charge': {'start': 4.0, 'end': 7.0},
-    'off_peak1': {'start': 4.0, 'end': 7.0},
-    'off_peak2': {'start': 13.0, 'end': 16.0},
-    'peak': {'start': 16.0, 'end': 19.0 }}
-
-# time periods for Octopus Go
-octopus_go = {'name': 'Octopus Go',
-    'charge': {'start': 0.5, 'end': 4.5},
-    'off_peak1': {'start': 0.5, 'end': 4.5},
-    'off_peak2': {'start': 0.0, 'end': 0.0},
-    'peak': {'start': 0.0, 'end': 0.0 }}
-
-tariffs = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go]
-
-tou_periods = octopus_flux
-
-def get_raw(time_span = 'hour', d = None, v = None, content = 0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods
-    if get_device() is None:
-        return None
-    if d is None:
-        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
-    time_span = time_span.lower()
-    if time_span == 'week':
-        result_list = []
-        for d in date_list(e=d, span='week', quiet=True):
-            result = get_raw('day', d=d, v=v, content=content)
-            if result is None:
-                return None
-            result_list += result
-        return result_list
-    if v is None:
-        if raw_vars is None:
-            raw_vars = get_vars()
-        v = [x['variable'] for x in raw_vars]
-    elif type(v) is not list:
-        v = [v]
-    if debug_setting > 1:
-        print(f"getting raw data")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
-    if response.status_code != 200:
-        print(f"** raw data response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no raw data")
-        return None
-    # integrate kW to kWh based on 5 minute samples
-    if content == 0:
-        return result
-    if debug_setting > 1:
-        print(f"estimating kwh from raw data")
-    # copy generationPower to produce inputPower data
-    input_name = None
-    if 'generationPower' in v:
-        input_name = energy_vars[-1]
-        input_result = deepcopy(result[v.index('generationPower')])
-        input_result['name'] = input_name
-        for y in input_result['data']:
-            y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
-        result.append(input_result)
-    # check if we need to flip CT2
-    if flip_ct2 and 'meterPower2' in v:
-        for x in result[v.index('meterPower2')]['data']:
-            x['value'] = -x['value']
-    for v in [v for v in result if v['unit'] == 'kW']:
-        d = None
-        kwh = 0.0       # kwh total
-        kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
-        kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
-        hour = 0
-        max = None
-        max_time = None
-        min = None
-        min_time = None
-        v['date'] = v['data'][0]['time'][0:10]
-        if content == 3:
-            v['state'] = [{}]
-        for y in v['data']:
-            power = y['value']
-            max = power if max is None or power > max else max
-            min = power if min is None or power < min else min
-            e = power / 12        # convert 5 minute sample kW to kWh energy
-            h = time_hours(y['time'][11:19]) # time
-            if e >= 0.0:
-                kwh += e
-                if tou_periods is not None:
-                    if h >= tou_periods['off_peak1']['start'] and h < tou_periods['off_peak1']['end']:
-                        kwh_off += e
-                    elif h >= tou_periods['off_peak2']['start'] and h < tou_periods['off_peak2']['end']:
-                        kwh_off += e
-                    elif h >= tou_periods['peak']['start'] and h < tou_periods['peak']['end']:
-                        kwh_peak += e
-            if content == 3:
-                if int(h) > hour:    # new hour
-                    v['state'].append({})
-                    hour += 1
-                v['state'][hour]['time'] = y['time'][11:16]
-                v['state'][hour]['state'] = round(kwh,3)
-        v['kwh'] = round(kwh,3)
-        v['kwh_off'] = round(kwh_off,3)
-        v['kwh_peak'] = round(kwh_peak,3)
-        v['max'] = round(max, 3)
-        v['max_time'] = v['data'][[y['value'] for y in v['data']].index(max)]['time'][11:16]
-        v['min'] = round(min, 3)
-        v['min_time'] = v['data'][[y['value'] for y in v['data']].index(min)]['time'][11:16]
-        if content >= 2:
-            if input_name is None or v['name'] != input_name:
-                v['name'] = energy_vars[power_vars.index(v['variable'])]
-            v['unit'] = 'kWh'
-            del v['data']
-    return result
-
-##################################################################################################
-# get energy report data in kWh
-##################################################################################################
-
-report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
-
-def get_report(report_type = 'day', d = None, v = None ):
-    global token, device_id, var_list, debug_setting, report_vars
-    if get_device() is None:
-        return None
-    report_type = report_type.lower()
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    if d is None:
-        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
-    if v is None:
-        v = report_vars
-    elif type(v) is not list:
-        v = [v]
-    if debug_setting > 1:
-        print(f"getting report data")
-    current = query_date(None)
-    main = query_date(d)
-    side_result = None
-    if report_type in ('day', 'week'):
-        # side report needed
-        side = query_date(d, -7) if report_type == 'week' else main
-        if report_type == 'day' or main['month'] != side['month']:
-            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': side}
-            response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
-            if response.status_code != 200:
-                print(f"** side report data response code: {response.status_code}")
-                return None
-            side_result = response.json().get('result')
-            if side_result is None:
-                print(f"** no side report data")
-                return None
-    query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
-    if response.status_code != 200:
-        print(f"** main report data response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no main report data")
-        return None
-    # prune results back to only valid, complete data for day, week, month or year
-    if report_type == 'day' and main['year'] == current['year'] and main['month'] == current['month'] and main['day'] == current['day']:
-        for v in result:
-            # prune current day to hours that are valid
-            v['data'] = v['data'][:int(current['hour'])]
-    if report_type == 'week':
-        for i, v in enumerate(result):
-            # prune results to days required
-            v['data'] = v['data'][:int(main['day'])]
-            if side_result is not None:
-                # prepend side results (previous month) if required
-                v['data'] = side_result[i]['data'][int(side['day']):] + v['data']
-            # prune to week required
-            v['data'] = v['data'][-7:]
-    elif report_type == 'month' and main['year'] == current['year'] and main['month'] == current['month']:
-        for v in result:
-            # prune current month to days that are valid
-            v['data'] = v['data'][:int(current['day'])]
-    elif report_type == 'year' and main['year'] == current['year']:
-        for v in result:
-            # prune current year to months that are valid
-            v['data'] = v['data'][:int(current['month'])]
-    # calculate and add summary data
-    for i, v in enumerate(result):
-        count = 0
-        sum = 0.0
-        max = None
-        min = None
-        for y in v['data']:
-            value = y['value']
-            count += 1
-            sum += value
-            max = value if max is None or value > max else max
-            min = value if min is None or value < min else min
-        v['sum'] = round(sum,3)
-        # correct total using daily value from 'month' report
-        v['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main['day'])-1]['value']
-        v['average'] = round(v['total'] / count, 3) if count > 0 else None
-        v['date'] = d
-        v['count'] = count
-        v['max'] = round(max,3)
-        v['max_index'] = [y['value'] for y in v['data']].index(max)
-        v['min'] = round(min,3)
-        v['min_index'] = [y['value'] for y in v['data']].index(min)
-    return result
-
-
-##################################################################################################
-# get earnings data
-##################################################################################################
-
-def get_earnings():
-    global token, device_id, var_list, debug_setting, report_vars
-    if get_device() is None:
-        return None
-    if debug_setting > 1:
-        print(f"getting earnings")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    params = {'deviceID': device_id}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/earnings", params=params, headers=headers)
-    if response.status_code != 200:
-        print(f"** earnings data response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no earnings data")
-        return None
-    return result
 
 
 ##################################################################################################
@@ -911,25 +967,32 @@ seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 #  charge_power: the kW of charge that will be applied
 #  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
 #  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
+#  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25,
-        start_at = None, end_by = None, force_charge = False,
-        charge_power = None, efficiency = 0.92, run_after = 22, update_settings = False):
+        start_at = None, end_by = None, force_charge = None,
+        charge_power = None, efficiency = 0.92, run_after = 22, update_settings = 0):
     global device, seasonality, solcast_api_key, debug_setting, tou_periods
     print(f"\n---------- charge_needed ----------")
+    # validate parameters
     args = locals()
     s = ''
     for k in [k for k in args.keys() if args[k] is not None]:
         s += f"\n   {k} = {args[k]}"
     if len(s) > 0:
         print(f"Parameters: {s}")
-    start_at = time_hours(start_at, tou_periods['charge']['start'] if tou_periods is not None else 2)
-    end_by = time_hours(end_by, tou_periods['charge']['end'] if tou_periods is not None else 5)
     now = datetime.now()
     if now.hour < run_after:
         print(f"Not time to run yet, time is {datetime.strftime(now, '%H:%M')}, run_after = {run_after}")
         return None
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
+    start_at = time_hours(start_at, tou_periods['charge']['start'] if tou_periods is not None else 2.0)
+    end_by = time_hours(end_by, tou_periods['charge']['end'] if tou_periods is not None else 5.0)
+    if force_charge is None:
+        force_charge = tou_periods['charge']['force'] if tou_periods is not None else None
+        force_charge = 0 if force_charge is None else force_charge
+    force_charge = 1 if force_charge == 1 or force_charge == True else 0
+    update_settings = 1 if update_settings == 1 or update_settings == True else 0
     # get battery info
     get_settings()
     get_battery()
@@ -957,7 +1020,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
             print(f"\nSolcast forecast for next 5 days:")
             print(f"   Solar: {forecast_values} kWh")
             print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
-    history = get_raw('week', v=['pvPower','meterPower2'], content=2)
+    history = get_raw('week', v=['pvPower','meterPower2'], summary=2)
     history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
     sum_pv = sum(history_pv)
     history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
@@ -1017,7 +1080,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     if end1 > end_by:
         print(f"** charge end time {hours_time(end1)} exceeds end by {hours_time(end_by)}")
         end1 = end_by
-    if force_charge:
+    if force_charge == 1:
         start2 = round_time(end1 + 1 / 60)
         start2 = end_by if start2 > end_by else start2
         end2 = end_by
@@ -1025,30 +1088,28 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         start2 = 0
         end2 = 0
     # setup charging
-    if update_settings:
-        print()
+    if update_settings == 1:
         set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
     else:
         print(f"\nNo changes have been made to your inverter settings")
     return None
 
-
-
 ##################################################################################################
-# PV Output
+# Date Ranges
 ##################################################################################################
 
-# generate a list of up to 200 dates, where the last date is not later than yesterday or today
+# generate a list of dates, where the last date is not later than yesterday or today
 # s and e: start and end dates using the format 'YYYY-MM-DD'
 # limit: limits the total number of days (default is 200)
-# today: True defaults the date to today as the last date, otherwise, yesterday
+# today: 1 defaults the date to today as the last date, otherwise, yesterday
 # span: 'week', 'month' or 'year' generated dates that span a week, month or year
 # quiet: do not print results if True
 
-def date_list(s = None, e = None, limit = None, span = None, today = False, quiet = False):
+def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = True):
     global debug_setting
     latest_date = datetime.date(datetime.now())
-    if not today:
+    today = 0 if today == False else 1 if today == True else today
+    if today == 0:
         latest_date -= timedelta(days=1)
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else None
@@ -1098,44 +1159,58 @@ def date_list(s = None, e = None, limit = None, span = None, today = False, quie
     while d < last  and len(l) < limit:
         d += timedelta(days=1)
         l.append(datetime.strftime(d, '%Y-%m-%d'))
-    if debug_setting > 0 and len(l) > 1 and not quiet:
-        print(f"Date range from {l[0]} to {l[-1]} has {len(l)} days")
     return l
+
+
+##################################################################################################
+##################################################################################################
+# PV Output Section
+##################################################################################################
+##################################################################################################
 
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
 ##################################################################################################
 
-pvoutput_vars = ['pvPower', 'feedinPower', 'loadsPower', 'gridConsumptionPower', 'meterPower2']
+# get pvoutput data for upload to pvoutput api or via Bulk Loader
+# tou: 0 = no time of use, 1 = use time of use periods if available
 
-# get pvoutput data for upload to pvoutput api or via Bulk Loader.
-
-def get_pvoutput(d = None, tou = None):
-    global debug_setting
+def get_pvoutput(d = None, tou = 0):
     if d is None:
         d = date_list()[0]
+    tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
+    tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"\n---------- get_pvoutput ----------")
+        print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
+        if tou == 1:
+            print(f"Time of use: {tou_periods['name']}\n")
         for x in d:
             csv = get_pvoutput(x)
             if csv is None:
                 return None
             print(csv)
         return
-    # get raw power data for the day
-    vars = get_raw('day', d=d + ' 00:00:00', v = pvoutput_vars, content = 1)
-    if vars is None:
+    # get quick report of totals for the day
+    v = ['loads'] if tou else ['loads', 'feedin', 'gridConsumption']
+    report_data = [] if tou else get_report('day', d=d, v = v, totals = True)
+    if report_data is None:
         return None
-    # merge meterPower2 into pvPower:
-    pv_index = pvoutput_vars.index('pvPower')
-    ct2_index = pvoutput_vars.index('meterPower2')
-    for i, data in enumerate(vars[ct2_index]['data']):
-        vars[pv_index]['data'][i]['value'] += data['value'] / 0.92 if data['value'] > 0.0 else 0
-    vars[pv_index]['kwh'] += vars[ct2_index]['kwh']
-    pv_max = max(d['value'] for d in vars[pv_index]['data'])
-    max_index = [d['value'] for d in vars[pv_index]['data']].index(pv_max)
-    vars[pv_index]['max'] = pv_max
-    vars[pv_index]['max_time'] = vars[pv_index]['data'][max_index]['time'][11:16]
+    # get raw power data for the day
+    v = ['pvPower', 'meterPower2'] + (['feedinPower', 'gridConsumptionPower'] if tou else [])
+    raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
+    if raw_data is None:
+        return None
+    # merge raw_data for meterPower2 into pvPower:
+    pv_index = v.index('pvPower')
+    ct2_index = v.index('meterPower2')
+    for i, data in enumerate(raw_data[ct2_index]['data']):
+        raw_data[pv_index]['data'][i]['value'] += data['value'] / 0.92 if data['value'] > 0.0 else 0
+    raw_data[pv_index]['kwh'] += raw_data[ct2_index]['kwh']
+    pv_max = max(data['value'] for data in raw_data[pv_index]['data'])
+    max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
+    raw_data[pv_index]['max'] = pv_max
+    raw_data[pv_index]['max_time'] = raw_data[pv_index]['data'][max_index]['time'][11:16]
     # generate output
     generate = ''
     export = ','
@@ -1143,20 +1218,29 @@ def get_pvoutput(d = None, tou = None):
     export_tou = ',,,'
     consume = ','
     grid = ',,,,'
-    for v in vars:     # process list of power / energy values
-        wh = int(v['kwh'] * 1000)
-        peak = int(v['kwh_peak'] * 1000)
-        off_peak = int(v['kwh_off'] * 1000)
-        if v['variable'] == 'pvPower':
-            generate = f"{v['date'].replace('-','')},{wh},"
-            power = f"{int(v['max'] * 1000)},{v['max_time']},"
-        elif v['variable'] == 'feedinPower':
-            export = f"{wh}," if tou_periods is None else f","
-            export_tou = f",,," if tou_periods is None else f"{peak},{off_peak},{wh - peak - off_peak},0"
-        elif v['variable'] == 'loadsPower':
+    for var in raw_data:     # process list of raw_data values (with TOU)
+        wh = int(var['kwh'] * 1000)
+        peak = int(var['kwh_peak'] * 1000)
+        off_peak = int(var['kwh_off'] * 1000)
+        if var['variable'] == 'pvPower':
+            generate = f"{var['date'].replace('-','')},{wh},"
+            power = f"{int(var['max'] * 1000)},{var['max_time']},"
+        elif var['variable'] == 'feedinPower':
+            export = f"{wh}," if tou == 0 else f","
+            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0"
+        elif var['variable'] == 'loadsPower':
             consume = f"{wh},"
-        elif v['variable'] == 'gridConsumptionPower':
-            grid = f"0,0,{wh},0," if tou_periods is None else f"{peak},{off_peak},{wh - peak - off_peak},0,"
+        elif var['variable'] == 'gridConsumptionPower':
+            grid = f"0,0,{wh},0," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0,"
+    for var in report_data:     # process list of report_data values (no TOU)
+        wh = int(var['total'] * 1000)
+        if var['variable'] == 'feedin':
+            export = f"{wh},"
+            export_tou = f",,,"
+        elif var['variable'] == 'loads':
+            consume = f"{wh},"
+        elif var['variable'] == 'gridConsumption':
+            grid = f"0,0,{wh},0,"
     if generate == '':
         return None
     csv = generate + export + power + ',,,,' + grid + consume + export_tou
@@ -1166,22 +1250,27 @@ pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
 pv_api_key = None
 pv_system_id = None
 
-# set data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 1, today = False):
-    global pv_url, pv_api_key, pv_system_id, debug_setting
+# upload data for a day using pvoutput api
+def set_pvoutput(d = None, tou = 0):
+    global pv_url, pv_api_key, pv_system_id
+    if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
+        print(f"** set_pvoutput: pv_api_key / pv_system_id not set")
+        return None
     if d is None:
-        d = date_list(today = today)[0]
+        d = date_list(span='2days', today = 1)
+    tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
+    tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"\n---------- set_pvoutput ----------")
+        print(f"Date range {d[0]} to {d[-1]} has {len(d)} days\n")
+        if tou == 1 :
+            print(f"Time of use: {tou_periods['name']}\n")
         for x in d[:10]:
-            csv = set_pvoutput(x, tou=tou)
+            csv = set_pvoutput(x)
             if csv is None:
                 return None
             print(f"{csv}  # uploaded OK")
         return
-    if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
-        print(f"pv_api_key / pv_system_id not set, exiting")
-        return None
     headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': pv_system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if csv is None:
@@ -1189,13 +1278,15 @@ def set_pvoutput(d = None, tou = 1, today = False):
     response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
-        print(f"** set_pvoutput response code: {result}")
+        print(f"** set_pvoutput got response code: {result}")
         return None
     return csv
 
 
 ##################################################################################################
-# Solar forecast using solcast.com.au
+##################################################################################################
+# Solcast Section
+##################################################################################################
 ##################################################################################################
 
 def c_int(i):
@@ -1210,6 +1301,10 @@ def c_float(n):
         return float(0)
     return float(n)
 
+##################################################################################################
+# Code for loading and displaying yield forecasts from Solcast.com.au.
+##################################################################################################
+
 # solcast settings
 solcast_url = 'https://api.solcast.com.au/'
 solcast_api_key = None
@@ -1218,8 +1313,6 @@ solcast_save = 'solcast.json'
 solcast_cal = 1.0
 page_width = 100        # maximum text string for display
 figure_width = 24       # width of plots
-
-# This is the code used for loading and displaying yield forecasts from Solcast.com.au.
 
 class Solcast :
     """
@@ -1249,13 +1342,13 @@ class Solcast :
                 print(f"Using forecast for {self.data['date']} from {solcast_save}")
         if len(self.data) == 0 :
             if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
-                print(f"solcast_api_key not set, exiting")
+                print(f"\nSolcast: solcast_api_key not set, exiting")
                 return
             if solcast_rids is None or type(solcast_rids) != list or len(solcast_rids) < 1:
-                print(f"solcast_rids not set, exiting")
+                print(f"\nSolcast: solcast_rids not set, exiting")
                 return
             if debug_setting > 0 and not quiet:
-                print(f"Getting forecast for {self.today} from solcast.com.au")
+                print(f"Getting forecast for {self.today} from solcast.com")
             self.credentials = HTTPBasicAuth(solcast_api_key, '')
             self.data['date'] = self.today
             params = {'format' : 'json', 'hours' : 168, 'period' : 'PT30M'}     # always get 168 x 30 min values
@@ -1267,7 +1360,7 @@ class Solcast :
                         if response.status_code == 429:
                             print(f"\nSolcast API call limit reached for today")
                         else:
-                            print(f"** solcast response code getting {t} was {response.status_code}")
+                            print(f"Solcast: response code getting {t} was {response.status_code}")
                         return
                     self.data[t][rid] = response.json().get(t)
             if solcast_save is not None :
@@ -1292,7 +1385,7 @@ class Solcast :
                             self.daily[date]['kwh'] += c_float(f.get('pv_estimate')) / 2      # 30 minute kw yield / 2 = kwh
                             self.daily[date][rid].append(time)
                         elif debug_setting > 1 :
-                                print(f"** overlapping data was ignored for {rid} in {t} at {date} {time}")
+                                print(f"Solcast: overlapping data was ignored for {rid} in {t} at {date} {time}")
         # ignore first and last dates as these forecast and estimate only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -1310,7 +1403,7 @@ class Solcast :
     def __str__(self) :
         # return printable Solcast info
         global debug_setting
-        s = f'Solcast yield for {self.days} days'
+        s = f'\nSolcast yield for {self.days} days'
         if self.cal is not None and self.cal != 1.0 :
             s += f", calibration = {self.cal}"
         s += f" (E = estimated, F = forecasts):\n\n"
@@ -1324,12 +1417,12 @@ class Solcast :
             for r in self.rids :
                 n = len(self.daily[k][r])
                 if n != 48 and debug_setting > 0:
-                    print(f" ** {k} rid {r} should have 48 x 30 min values. {n} values found")
+                    print(f"Solcast: {k} rid {r} should have 48 x 30 min values. {n} values found")
         return s
 
     def plot_daily(self) :
         if not hasattr(self, 'daily') :
-            print(f"** no daily data available")
+            print(f"Solcast: ** no daily data available")
             return
         figwidth = 12 * self.days / 7
         self.figsize = (figwidth, figwidth/3)     # size of charts
