@@ -98,7 +98,6 @@ set_charge() takes the charge times from the battery_settings and applies these 
 + st2: the start time for period 2
 + en2: the end time for period 2
 
-
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
 ## Raw Data
@@ -145,6 +144,7 @@ When energy is estimated, the following attributes are also added:
 + min: the minimum power value in kW
 + min_time: the time when the minimum power value occured (HH:MM)
 
+
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
@@ -184,6 +184,10 @@ d = '2023-06-17'
 result=f.get_report('month', d=d)
 ```
 
+# Built-in Utilities and Operations
+
+The previous section provides functions that can be used to access and control your inverter. This section covers utilities and operations that build upon these functions.
+
 ## Charge Needed
 
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
@@ -214,8 +218,7 @@ f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
 
 Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
-# PV Output
-These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
+## Date Ranges
 
 ```
 f.date_list(s, e, limit, span, today)
@@ -229,7 +232,26 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + span: the range of dates. One of 'day', 'week', 'month' or 'year'
 + today: if set to True allows today to be included, otherwise, date list will stop at yesterday
 
-Functions that can be used to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
+## Time of Use
+
+Time Of Use (TOU) periods are applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. A number of different per-configured tariffs are provided:
++ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00, charging from 02:00 to 05:00
++ intelligent_octopus: off peak from 23:30 to 05:30, charging from 23:30 to 05:00
++ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, charging from 04:00 to 07:00
++ octopus_go: off peak from 00:30 to 04:30, charging from 00:30 to 04:30
+
+The tariff in use held in tou_periods. The default setting is:
+
+```
+f.tou_periods = f.octopus_flux
+```
+
+To ignore TOU when generating data, set f.tou_periods = None.
+
+f.custom_periods can be used to configure specific times if required:
++ custom_periods: no peak or off peak, charging from 02:00 to 05:00
+
+Period time settings are held as decimal hours. Functions that can be used to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
 
 ```
 f.time_hours(s, d)
@@ -237,25 +259,14 @@ f.hours_time(h, ss)
 ```
 
 Where:
-+ s: is the time string
++ s: is a time string ('HH:MM' or 'HH:MM:SS')
 + d: is optional and is the default time if s is None
-+ h: is decimal hours
++ h: is decimal hours (e.g 1.5)
 + ss: is optional. When True, time strings include seconds HH:MM:SS, otherwise they are hours and minutes 'HH:MM' 
 
 
-Time Of Use (TOU) is applied to the grid import and export data, splitting the energy data into off-peak, peak and shoulder categories. A number of different per-configured tariffs are provided:
-+ octous_flux: off peak from 02:00 to 05:00, peak from 16:00 to 19:00
-+ intelligent_octopus: off peak from 23:30 to 05:30
-+ octopus_cosy: off peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
-+ octopus_go: off peak from 00:30 to 04:30
-
-The time of use periods are held in tou_periods. For example, the default setting is:
-
-```
-f.tou_periods = f.octopus_flux
-```
-
-To disable time of use, set f.tou_periods = None
+# PV Output
+These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
 
 ## Get PV Output Data
