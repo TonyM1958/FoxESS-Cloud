@@ -146,23 +146,27 @@ For power values, the summary performs a Riemann sum of the data, integrating kW
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
 ```
-f.get_report(report_type, d, v)
+f.get_report(report_type, d, v, totals)
 ```
 + report_type sets the period covered by the report and is one of 'day', 'week', 'month', 'year':
-+ when 'day' is selected, energy is reported each hour through the day;
-+ when 'week' is selected, energy is reported for the 7 days up to and including the date;
-+ when 'month' is selected, energy is reported each day through the month;
++ when 'day' is selected, energy is reported each hour through the day
++ when 'week' is selected, energy is reported for the 7 days up to and including the date
++ when 'month' is selected, energy is reported each day through the month
 + when 'year' is selected, energy is reported each month through the year
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
 + v is a variable, or list of variables. The default is to use report_vars
++ totals=1 quick report with just total for a day. report_type must be 'day' or this parameter will be ignored
 
 The list of variables that can be reported on is stored in f.report_vars.
 
 Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
 
-The result data for each variable include the following attributes:
-
+The result data for each variable include the following attributes when totals=1:
 + 'variable': name of the data set
++ 'total': corrected total of the data items
+
+When totals=0, the following attributes are also available:
+
 + 'data': dictionary of 'index' and 'value' for each data point
 + 'date': that was used to produce the report
 + 'count': the number of data items
@@ -171,7 +175,6 @@ The result data for each variable include the following attributes:
 + 'max_index': the index of the biggest value in 'data'
 + 'min': the smallest value in 'data'
 + 'min_index': the index of the smallest value in 'data'
-+ 'total': corrected total of the data items
 + 'average': corrected average of the data items
 
 For example, this Jupyter Lab cell will report energy data by day for the month of June 2023:
@@ -323,6 +326,7 @@ This setting can be:
 
 ## Version Info
 
+0.3.4: updated report_data for quick totals. Boolean parameters accept 0/1 or True/False<br>
 0.3.3: Updated Jupyter notebooks and default parameter values. Added tariffs and tou_periods with settings for Octopus Flux, Intelligent, Cosy and Go<br>
 0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>
 0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
