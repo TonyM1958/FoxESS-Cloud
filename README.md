@@ -2,7 +2,8 @@
 This site contains sample python code for accessing the Fox cloud data via the REST API used by the Fox ESS Cloud web site and app.
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
-** This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS. You make use of this code at your own risk, There is no warrany express or implied **
+**This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.**
+Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
 
 ## Setup
 To initialise a Jupyter Lab notebook, copy the following text and edit the configuration variables needed to add your values:
