@@ -235,9 +235,9 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 
 ## Time of Use
 
-Time Of Use (TOU) periods set when your battery can be charged and can be applied to the grid import and export data uploaded to PV Ouptut.
+Time Of Use (TOU) periods configure when your battery can be charged and can be use to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
-There are a number of different per-configured tariffs:
+There are a number of different pre-configured tariffs:
 + f.octous_flux: charging from 02:00 to 05:00, off-peak from 02:00 to 05:00, peak from 16:00 to 19:00
 + f.intelligent_octopus: charging from 23:30 to 05:00. off-peak from 23:30 to 05:30
 + f.octopus_cosy: charging from 04:00 to 07:00, off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
@@ -246,13 +246,12 @@ There are a number of different per-configured tariffs:
 Custom periods can be configured for specific times if required:
 + f.custom_periods: charging from 02:00 to 05:00, no off-peak or peak times
 
-A complete list of the tariffs available is held in f.tariff_list
+A list of the tariffs is held in f.tariff_list
 
-The active tariff in held in 'f.tou_periods'. Another global variable 'f.force_charge' can be set if you want your battery to be held for the whole of the charge period. The default settings are:
+The active tariff in configured in 'f.tou_periods'. The default setting is:
 
 ```
 f.tou_periods = f.octopus_flux
-f.force_charge = False
 ```
 
 Note: when TOU is applied, energy values are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
