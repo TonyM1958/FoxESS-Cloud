@@ -630,7 +630,7 @@ energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_
 # option to flip CT2 - correct polarity is +ve for generation and -ve for load
 flip_ct2 = 0
 # max power in kW that we expect to see
-max_power_kw = 100
+max_power_kw = 50
 
 def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
