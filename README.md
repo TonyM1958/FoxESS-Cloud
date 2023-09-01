@@ -5,8 +5,10 @@ There is also a Jupyter Lab notebook with examples of how to run the sample code
 **This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.**
 Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
 
+# Cloud API
+
 ## Setup
-To initialise a Jupyter Lab notebook, copy the following text and edit the configuration variables needed to add your values:
+To initialise a Jupyter Lab notebook to use the cloud API, copy the following text and edit the configuration variables needed to add your values:
 
 ```
 !pip install random-user-agent --root-user-action=ignore --quiet
@@ -28,6 +30,8 @@ f.solcast_rids = ["my.solcast_rid1","my.solcast_rid2"]
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
 For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login) and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
+
+Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
 ## User Information
 Load information about the user:
@@ -113,7 +117,7 @@ f.get_raw(time_span, d, v, summary)
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is today's date and time
 + v is a variable, or list of variables (see below)
-+ summary is optional - see following section.
++ summary is optional - see below
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -124,10 +128,9 @@ d = '2023-06-17 00:00:00'
 result=f.get_raw('day', d=d, v=f.power_vars)
 ```
 
-## Summary of Raw Data
-
 Setting the optional parameter 'summary' when calling get_raw() provides a summary of the raw data
 
++ summary = 0: basic raw_data, no summary
 + summary = 1: summary is calculated
 + summary = 2: summary is calculated and raw data is removed to save time / space
 + summary = 3: as (2) but for energy only, an hourly cumulative state is also generated, similar to the state used in Home Assistant long term statistics
@@ -149,7 +152,7 @@ For power values, the summary performs a Riemann sum of the data, integrating kW
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
 ```
-f.get_report(report_type, d, v, totals)
+f.get_report(report_type, d, v, summary)
 ```
 + report_type sets the period covered by the report and is one of 'day', 'week', 'month', 'year':
 + when 'day' is selected, energy is reported each hour through the day
@@ -158,19 +161,25 @@ f.get_report(report_type, d, v, totals)
 + when 'year' is selected, energy is reported each month through the year
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
 + v is a variable, or list of variables. The default is to use report_vars
-+ totals=1 quick report with just total for a day. report_type must be 'day' or this parameter will be ignored
++ summary is optional - see below
 
 The list of variables that can be reported on is stored in f.report_vars.
 
 Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
 
-The result data for each variable include the following attributes when totals=1:
+Setting the optional parameter 'summary' when calling get_report() provides a summary of the report data:
+
++ summary = 0: basic report data, no summary. report_type cannot be 'week'
++ summary = 1: summary is calculated
++ summary = 2: corrected total only is reported to save time / space. report_type must be 'day'
+
+The result data for each variable includes the following attributes when summary=2
 + 'variable': name of the data set
 + 'total': corrected total of the data items
 
-When totals=0, the following attributes are also available:
+When summary=1, the following items are also added:
 
-+ 'data': dictionary of 'index' and 'value' for each data point
++ 'data': 'index' and 'value' of each data point
 + 'date': that was used to produce the report
 + 'count': the number of data items
 + 'sum': the sum of the data items
