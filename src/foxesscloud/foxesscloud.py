@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  30 August 2023
+Updated:  1 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.4"
+version = "0.3.5"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -628,10 +628,12 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 # option to flip CT2 - correct polarity is +ve for generation and -ve for load
-flip_ct2 = False
+flip_ct2 = 0
+# max power in kW that we expect to see
+max_power_kw = 100
 
 def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -678,7 +680,7 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
         result.append(input_result)
     # check if we need to flip CT2
-    if flip_ct2 and 'meterPower2' in v:
+    if flip_ct2 == 1 and 'meterPower2' in v:
         for x in result[v.index('meterPower2')]['data']:
             x['value'] = -x['value']
     for var in result:
@@ -699,6 +701,10 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
         for y in var['data']:
             h = time_hours(y['time'][11:19]) # time
             value = y['value']
+            # check for extreme values
+            if energy and value > max_power_kw:
+                print(f"** raw_data(): max_power exceeded for {var} at {y['time']}, value = {value}")
+                value = 0
             sum += value
             count += 1
             max = value if max is None or value > max else max
@@ -707,13 +713,13 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
                 e = value / 12        # convert 5 minute sample kW to kWh energy
                 kwh += e
                 if tou_periods is not None:
-                    if h >= tou_periods['off_peak1']['start'] and h < tou_periods['off_peak1']['end']:
+                    if hour_in (h, tou_periods['off_peak1']):
                         kwh_off += e
-                    elif h >= tou_periods['off_peak2']['start'] and h < tou_periods['off_peak2']['end']:
+                    elif hour_in(h, tou_periods['off_peak2']):
                         kwh_off += e
-                    elif h >= tou_periods['peak']['start'] and h < tou_periods['peak']['end']:
+                    elif hour_in(h, tou_periods['peak']):
                         kwh_peak += e
-                    elif h >= tou_periods['peak2']['start'] and h < tou_periods['peak2']['end']:
+                    elif hour_in(h, tou_periods['peak2']):
                         kwh_peak += e
             if summary == 3 and energy:
                 if int(h) > hour:    # new hour
@@ -746,17 +752,21 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
 # report_type = 'day', 'week', 'month', 'year'
 # d = day 'YYYY-MM-DD'
 # v = list of report variables to get
-# totals = True, do a quick total energy report for a day
+# summary = 0, 1, 2: do a quick total energy report for a day
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
-def get_report(report_type = 'day', d = None, v = None, totals = False ):
+def get_report(report_type = 'day', d = None, v = None, summary = 1):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         return None
+    # validate parameters
     report_type = report_type.lower()
-    if totals and report_type != 'day':
-        totals = False
+    summary = 1 if summary == True else 0 if summary == False else summary
+    if summary == 2 and report_type != 'day':
+        summary = 1
+    if summary == 0 and report_type == 'week':
+        report_type = 'day'
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
@@ -769,7 +779,7 @@ def get_report(report_type = 'day', d = None, v = None, totals = False ):
     current_date = query_date(None)
     main_date = query_date(d)
     side_result = None
-    if report_type in ('day', 'week'):
+    if report_type in ('day', 'week') and summary > 0:
         # side report needed
         side_date = query_date(d, -7) if report_type == 'week' else main_date
         if report_type == 'day' or main_date['month'] != side_date['month']:
@@ -782,7 +792,7 @@ def get_report(report_type = 'day', d = None, v = None, totals = False ):
             if side_result is None:
                 print(f"** no side report data")
                 return None
-    if not totals:
+    if summary < 2:
         query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
         if response.status_code != 200:
@@ -815,10 +825,12 @@ def get_report(report_type = 'day', d = None, v = None, totals = False ):
                 # prune current year to months that are valid
                 var['data'] = var['data'][:int(current_date['month'])]
     else:
-        # fake result for quick daily totals only
+        # fake result for summary only report
         result = []
         for x in v:
             result.append({'variable': x, 'data': []})
+    if summary == 0:
+        return result
     # calculate and add summary data
     for i, var in enumerate(result):
         count = 0
@@ -833,7 +845,7 @@ def get_report(report_type = 'day', d = None, v = None, totals = False ):
             min = value if min is None or value < min else min
         # correct day total from side report
         var['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
-        if not totals:
+        if summary < 2:
             var['sum'] = round(sum,3)
             var['average'] = round(var['total'] / count, 3) if count > 0 else None
             var['date'] = d
@@ -942,6 +954,25 @@ def time_hours(s, d = None):
 def hours_time(h, ss = False):
     n = 8 if ss else 5
     return f"{int(h):02}:{int(h * 60 % 60):02}:{int(h * 3600 % 60):02}"[:n]
+
+# True if a decimal hour is within a time period
+def hour_in(h, period):
+    if period is None:
+        return False
+    s = period['start']
+    e = period['end']
+    return h >= s and h < e if s <= e else h >=s and h <= e
+
+# Return the hours in a time period with optional value check
+def period_hours(period, check = None, value = 1):
+    if period is None:
+        return 0
+    if check is not None and period[check] != value:
+        return 0
+    return round_time(period['end'] - period['start'])
+
+def format_period(period):
+    return f"{hours_time(period['start'])} - {hours_time(period['end'])}"
 
 
 ##################################################################################################
@@ -1193,7 +1224,7 @@ def get_pvoutput(d = None, tou = 0):
         return
     # get quick report of totals for the day
     v = ['loads'] if tou else ['loads', 'feedin', 'gridConsumption']
-    report_data = [] if tou else get_report('day', d=d, v = v, totals = True)
+    report_data = [] if tou else get_report('day', d=d, v = v, summary = 2)
     if report_data is None:
         return None
     # get raw power data for the day
