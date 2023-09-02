@@ -67,7 +67,7 @@
     "instance_type": "medium",
     "command": "python script.py",
     "start_dind": false,
-    "schedule": "5 8,13,18,23 * * *",
+    "schedule": "5 7,12,17,21 * * *",
     "concurrency_policy": "Allow",
     "backoff_limit": 0
   },
