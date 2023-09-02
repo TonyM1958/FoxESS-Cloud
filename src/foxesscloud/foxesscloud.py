@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  1 September 2023
+Updated:  2 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.5"
+version = "0.3.6"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -435,7 +435,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         st1 = time_hours(st1)
         en1 = time_hours(en1)
         battery_settings['times'][0]['enableCharge'] = True
-        battery_settings['times'][0]['enableGrid'] = ch1
+        battery_settings['times'][0]['enableGrid'] = True if ch1 == True or ch1 == 1 else False
         battery_settings['times'][0]['startTime']['hour'] = int(st1)
         battery_settings['times'][0]['startTime']['minute'] = int(60 * (st1 - int(st1)))
         battery_settings['times'][0]['endTime']['hour'] = int(en1)
@@ -449,7 +449,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         st2 = time_hours(st2)
         en2 = time_hours(en2)
         battery_settings['times'][1]['enableCharge'] = True
-        battery_settings['times'][1]['enableGrid'] = ch2
+        battery_settings['times'][1]['enableGrid'] = True if ch2 == True or ch2 == 1 else False
         battery_settings['times'][1]['startTime']['hour'] = int(st2)
         battery_settings['times'][1]['startTime']['minute'] = int(60 * (st2 - int(st2)))
         battery_settings['times'][1]['endTime']['hour'] = int(en2)
@@ -653,6 +653,11 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
         v = [x['variable'] for x in raw_vars]
     elif type(v) is not list:
         v = [v]
+    for var in v:
+        if var not in [x['variable'] for x in raw_vars]:
+            print(f"** get_raw(): invalid variable '{var}'")
+            print(f"{[x['variable'] for x in raw_vars]}")
+            return None
     if debug_setting > 1:
         print(f"getting raw data")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
@@ -690,6 +695,7 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
             kwh = 0.0       # kwh total
             kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
+            kwh_neg = 0.0
         sum = 0.0
         count = 0
         max = None
@@ -703,24 +709,28 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
             value = y['value']
             # check for extreme values
             if energy and value > max_power_kw:
-                print(f"** raw_data(): max_power exceeded for {var} at {y['time']}, value = {value}")
+                if debug_setting > 1:
+                    print(f"# warning: max_power exceeded for {var} at {y['time']}, value = {value}")
                 value = 0
             sum += value
             count += 1
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
-            if energy and value >= 0.0:
+            if energy:
                 e = value / 12        # convert 5 minute sample kW to kWh energy
-                kwh += e
-                if tou_periods is not None:
-                    if hour_in (h, tou_periods['off_peak1']):
-                        kwh_off += e
-                    elif hour_in(h, tou_periods['off_peak2']):
-                        kwh_off += e
-                    elif hour_in(h, tou_periods['peak']):
-                        kwh_peak += e
-                    elif hour_in(h, tou_periods['peak2']):
-                        kwh_peak += e
+                if e > 0.0:
+                    kwh += e
+                    if tou_periods is not None:
+                        if hour_in (h, tou_periods['off_peak1']):
+                            kwh_off += e
+                        elif hour_in(h, tou_periods['off_peak2']):
+                            kwh_off += e
+                        elif hour_in(h, tou_periods['peak']):
+                            kwh_peak += e
+                        elif hour_in(h, tou_periods['peak2']):
+                            kwh_peak += e
+                else:
+                    kwh_neg -= e
             if summary == 3 and energy:
                 if int(h) > hour:    # new hour
                     var['state'].append({})
@@ -731,6 +741,7 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
             var['kwh'] = round(kwh,3)
             var['kwh_off'] = round(kwh_off,3)
             var['kwh_peak'] = round(kwh_peak,3)
+            var['kwh_neg'] = round(kwh_neg,3)
         var['date'] = d[0:10]
         var['count'] = count
         var['average'] = round(sum / count, 3) if count > 0 else None
@@ -739,7 +750,7 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
         var['min'] = round(min, 3) if min is not None else None
         var['min_time'] = var['data'][[y['value'] for y in var['data']].index(min)]['time'][11:16] if min is not None else None
         if summary >= 2:
-            if energy and (input_name is None or var['name'] != input_name):
+            if energy and var['variable'] in power_vars and (input_name is None or var['name'] != input_name):
                 var['name'] = energy_vars[power_vars.index(var['variable'])]
             if energy:
                 var['unit'] = 'kWh'
@@ -774,6 +785,11 @@ def get_report(report_type = 'day', d = None, v = None, summary = 1):
         v = report_vars
     elif type(v) is not list:
         v = [v]
+    for var in v:
+        if var not in report_vars:
+            print(f"** get_report(): invalid variable '{var}'")
+            print(f"{report_vars}")
+            return None
     if debug_setting > 1:
         print(f"getting report data")
     current_date = query_date(None)
@@ -887,54 +903,15 @@ def get_earnings():
 ##################################################################################################
 
 ##################################################################################################
-# time of user (TOU)
-# time values are decimal hours
+# Time and charge period functions
 ##################################################################################################
+# times are held either as text HH:MM or HH:MM:SS or as decimal hours e.g. 01.:30 = 1.5
+# deimal hours allows maths operations to be performed simply
 
-# time periods for Octopus Flux
-octopus_flux = {'name': 'Octopus Flux',
-    'charge': {'start': 2.0, 'end': 5.0, 'force': 0},
-    'off_peak1': {'start': 2.0, 'end': 5.0},
-    'off_peak2': {'start': 0.0, 'end': 0.0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 }}
-
-# time periods for Intelligent Octopus
-intelligent_octopus = {'name': 'Intelligent Octopus',
-    'charge': {'start': 23.5, 'end': 5.5, 'force': 0},
-    'off_peak1': {'start': 23.5, 'end': 24.0},
-    'off_peak2': {'start': 0.0, 'end': 5.5},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 }}
-
-# time periods for Octopus Cosy
-octopus_cosy = {'name': 'Octopus Cosy',
-    'charge': {'start': 4.0, 'end': 7.0, 'force': 0},
-    'off_peak1': {'start': 4.0, 'end': 7.0},
-    'off_peak2': {'start': 13.0, 'end': 16.0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 }}
-
-# time periods for Octopus Go
-octopus_go = {'name': 'Octopus Go',
-    'charge': {'start': 0.5, 'end': 4.5, 'force': 0},
-    'off_peak1': {'start': 0.5, 'end': 4.5},
-    'off_peak2': {'start': 0.0, 'end': 0.0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 }}
-
-# custom time periods / template
-custom_periods = {'name': 'Custom',
-    'charge': {'start': 2.0, 'end': 5.0, 'force': 0},
-    'off_peak1': {'start': 0.0, 'end': 0.0},
-    'off_peak2': {'start': 0.0, 'end': 0.0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 }}
-
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
-
-# global setting for tariff to use and charging
-tou_periods = octopus_flux
+# roll over decimal times after maths and round to 1 minute
+def round_time(h):
+    h += 24 if h < 0 else -24 if h > 24 else 0
+    return int(h) + round(60 * (h - int(h)), 0) / 60
 
 # convert time string HH:MM:SS to decimal hours
 def time_hours(s, d = None):
@@ -976,33 +953,98 @@ def format_period(period):
 
 
 ##################################################################################################
-# calculate charge needed from current battery charge, forecast yield and expected load
+# time of user (TOU)
+# time values are decimal hours
 ##################################################################################################
 
-# roll over 24 hours times and round times to 1 minute for time in decimal hours
-def round_time(h):
-    if h > 24:
-        h -= 24
-    return int(h) + round(60 * (h - int(h)), 0) / 60
+# time periods for Octopus Flux
+octopus_flux = {'name': 'Octopus Flux',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'charge': {'start': 2.0, 'end': 5.0, 'min_h': 0.5},
+    'solcast': {'start': 21.0}
+    }
 
-# how consumption varies by month across a year. Total of all 12 values must be 12.0
-seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
+# time periods for Intelligent Octopus
+intelligent_octopus = {'name': 'Intelligent Octopus',
+    'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'charge': {'start': 23.5, 'end': 5.5, 'min_h': 0.5},
+    'solcast': {'start': 21.0}
+    }
+
+# time periods for Octopus Cosy
+octopus_cosy = {'name': 'Octopus Cosy',
+    'off_peak1': {'start': 4.0, 'end': 7.0, 'force': 1},
+    'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'charge': {'start': 4.0, 'end': 7.0, 'min_h': 0.5},
+    'solcast': {'start': 21.0}
+    }   
+
+# time periods for Octopus Go
+octopus_go = {'name': 'Octopus Go',
+    'off_peak1': {'start': 0.5, 'end': 4.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'charge': {'start': 0.5, 'end': 4.5, 'min_h': 0.5},
+    'solcast': {'start': 21.0}
+    }
+
+# custom time periods / template
+custom_periods = {'name': 'Custom',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'charge': {'start': 2.0, 'end': 5.0, 'min_h': 0.5},
+    'solcast': {'start': 21.0}
+    }
+
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
+tou_periods = octopus_flux
+
+# how consumption varies by month across a year. Total of 12 values must be 120
+# month                J   F   M   A   M   J   J   A   S   O   N   D
+high_seasonality =   [13, 12, 11, 10,  9,  8,  9,  9, 10, 11, 12, 13]
+medium_seasonality = [11, 11, 10, 10,  9,  9,  9,  9, 10, 10, 11, 12]
+no_seasonality =     [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+seasonality_list = [high_seasonality, medium_seasonality, no_seasonality]
+seasonality = medium_seasonality
+
+# how consumption varies by hour across a day. Total of 24 values must be 120
+# from hour       00  01  02  03  04  05  06  07  08  09  10  11  12  13  14  15  16  17  18  19  20  21  22  23
+high_profile =   [20, 20, 20, 20, 20, 20, 40, 50, 70, 70, 70, 50, 50, 50, 50, 70, 99, 99, 99, 70, 40, 35, 30, 30]
+medium_profile = [28, 28, 28, 28, 28, 28, 36, 49, 65, 70, 65, 49, 44, 44, 49, 63, 92, 99, 92, 63, 47, 39, 33, 31]
+no_profile =     [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+daily_consumption = medium_profile
+
+
+##################################################################################################
+# calculate charge needed from current battery charge, forecast yield and expected load
+##################################################################################################
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
 #  annual_consumption: the kWh consumed each year via the inverter
-#  contingency: a factor to add to allow for variations. 1.0 is no variation. Default is 1.25
-#  start_at: time in hours when charging will start e.g. 1:30 = 1.5 hours
+#  contingency: a factor to add to allow for variations. Default is 25%
+#  start_at: time in hours when charging will start
 #  end_by: time in hours when charging will stop
-#  force_charge: if True, the remainder of the time, force charge is set. If false, force charge is not set
+#  force_charge: if True, force charge is set. If false, force charge is not set
 #  charge_power: the kW of charge that will be applied
-#  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
-#  run_after: the time in hours when calculation should take place. The default is 20 or 8pm.
+#  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 92%
+#  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25,
+def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         start_at = None, end_by = None, force_charge = None,
-        charge_power = None, efficiency = 0.92, run_after = 22, update_settings = 0):
+        charge_power = None, efficiency = 92, run_after = None, update_settings = 0):
     global device, seasonality, solcast_api_key, debug_setting, tou_periods
     print(f"\n---------- charge_needed ----------")
     # validate parameters
@@ -1012,18 +1054,32 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         s += f"\n   {k} = {args[k]}"
     if len(s) > 0:
         print(f"Parameters: {s}")
-    now = datetime.now()
-    if now.hour < run_after:
-        print(f"Not time to run yet, time is {datetime.strftime(now, '%H:%M')}, run_after = {run_after}")
-        return None
-    tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     start_at = time_hours(start_at, tou_periods['charge']['start'] if tou_periods is not None else 2.0)
     end_by = time_hours(end_by, tou_periods['charge']['end'] if tou_periods is not None else 5.0)
+    run_after = time_hours(run_after, 21)
     if force_charge is None:
-        force_charge = tou_periods['charge']['force'] if tou_periods is not None else None
-        force_charge = 0 if force_charge is None else force_charge
-    force_charge = 1 if force_charge == 1 or force_charge == True else 0
-    update_settings = 1 if update_settings == 1 or update_settings == True else 0
+        force_charge = 0
+    # convert any boolean flag values
+    force_charge = 1 if force_charge == True else 0 if force_charge == False else force_charge
+    update_settings = 1 if update_settings == True else 0 if update_settings == False else update_settings
+    # check time and set mode
+    now = datetime.now()
+    tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
+    hour_now = time_hours(f"{now.hour:02}:{now.minute:02}")
+    # get consumption info
+    if annual_consumption is not None:
+        consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
+        if debug_setting > 0:
+            print(f"\nEstimate of consumption = {consumption}kWh")
+    else:
+        history = get_report('week', v='loads')[0]['data']
+        history_load = [round(h['value'], 1) for h in history]
+        history_sum = sum(history_load)
+        consumption = round(sum(history_load) / 7, 1)
+        if debug_setting > 0:
+            print(f"\nConsumption over last 7 days:")
+            print(f"   Load: {history_load} kWh")
+            print(f"   Average consumption = {consumption}kWh)")
     # get battery info
     get_settings()
     get_battery()
@@ -1039,18 +1095,22 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     print(f"   Current SoC = {soc}%")
     print(f"   Residual = {residual}kWh")
     print(f"   Available = {available}kWh")
-    # get forecast / history info
+    # get forecast
     expected = None
     forecast_values = None
     if forecast is not None:
         expected = round(forecast,1)
     elif solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
-        forecast = Solcast(quiet=True)
-        if hasattr(forecast, 'daily'):
-            forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
-            print(f"\nSolcast forecast for next 5 days:")
-            print(f"   Solar: {forecast_values} kWh")
-            print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
+        if hour_now >= tou_periods['solcast']['start']:
+            forecast = Solcast(quiet=True)
+            if hasattr(forecast, 'daily'):
+                forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
+                print(f"\nSolcast forecast for next 5 days:")
+                print(f"   Solar: {forecast_values} kWh")
+                print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
+        else:
+            print(f"\nSolcast forecast will run after {hours_time(tou_periods['solcast']['start'])}")
+    # get PV generation history
     history = get_raw('week', v=['pvPower','meterPower2'], summary=2)
     history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
     sum_pv = sum(history_pv)
@@ -1068,22 +1128,8 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
     else:
         expected = forecast_values[0] if forecast_values is not None else generation
         print(f"\nForecast generation tomorrow = {expected}kWh")
-    # get consumption info
-    if annual_consumption is not None:
-        consumption = round(annual_consumption / 365 * seasonality[now.month - 1], 1)
-        if debug_setting > 0:
-            print(f"\nEstimate of consumption = {consumption}kWh")
-    else:
-        history = get_report('week', v='loads')[0]['data']
-        history_load = [round(h['value'], 1) for h in history]
-        history_sum = sum(history_load)
-        consumption = round(sum(history_load) / 7, 1)
-        if debug_setting > 0:
-            print(f"\nConsumption over last 7 days:")
-            print(f"   Load: {history_load} kWh")
-            print(f"   Average consumption = {consumption}kWh")
     # calculate charge to add to battery
-    charge = round(consumption - available - expected / contingency, 1)
+    charge = round(consumption * (1 + contingency / 100) - available - expected, 1)
     print(f"\nComparing forecast, consumption and available energy:")
     if charge < 0.0:
         print(f"   => generation surplus = {-charge} kWh:")
@@ -1097,10 +1143,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 1.25
         charge_power = device.get('power')
         if charge_power is None:
             charge_power = 3.7
-    hours = round_time(charge / charge_power / efficiency)
+    hours = round_time(charge / charge_power * 100 / efficiency)
     # don't charge for less than 15 minutes
-    if hours > 0 and hours < 0.25:
-        hours = 0.25
+    if hours > 0 and hours < tou_periods['charge']['min_h']:
+        hours = tou_periods['charge']['min_h']
     if hours > 0:
         print(f"   => charge time needed is {hours} hours at {charge_power}kW charge power")
     else:
@@ -1212,10 +1258,11 @@ def get_pvoutput(d = None, tou = 0):
     tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
     tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
-        print(f"\n---------- get_pvoutput ----------")
+        print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1:
-            print(f"Time of use: {tou_periods['name']}\n")
+            print(f" Time of use: {tou_periods['name']}")
+        print(f"------------------------------------------------")
         for x in d:
             csv = get_pvoutput(x)
             if csv is None:
@@ -1224,7 +1271,7 @@ def get_pvoutput(d = None, tou = 0):
         return
     # get quick report of totals for the day
     v = ['loads'] if tou else ['loads', 'feedin', 'gridConsumption']
-    report_data = [] if tou else get_report('day', d=d, v = v, summary = 2)
+    report_data = [] if tou else get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
     # get raw power data for the day
@@ -1254,7 +1301,9 @@ def get_pvoutput(d = None, tou = 0):
         peak = int(var['kwh_peak'] * 1000)
         off_peak = int(var['kwh_off'] * 1000)
         if var['variable'] == 'pvPower':
-            generate = f"{var['date'].replace('-','')},{wh},"
+            generation = wh
+            date = var['date'].replace('-','')
+            generate = f"{date},{generation},"
             power = f"{int(var['max'] * 1000)},{var['max_time']},"
         elif var['variable'] == 'feedinPower':
             export = f"{wh}," if tou == 0 else f","
@@ -1266,6 +1315,10 @@ def get_pvoutput(d = None, tou = 0):
     for var in report_data:     # process list of report_data values (no TOU)
         wh = int(var['total'] * 1000)
         if var['variable'] == 'feedin':
+            # check exported is less than generated
+            if wh > generation:
+                print(f"# warning: {date} Exported {wh}Wh is more than Generated")
+                wh = generation
             export = f"{wh},"
             export_tou = f",,,"
         elif var['variable'] == 'loads':
@@ -1285,17 +1338,18 @@ pv_system_id = None
 def set_pvoutput(d = None, tou = 0):
     global pv_url, pv_api_key, pv_system_id
     if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
-        print(f"** set_pvoutput: pv_api_key / pv_system_id not set")
+        print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
     if d is None:
         d = date_list(span='2days', today = 1)
     tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
     tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
-        print(f"\n---------- set_pvoutput ----------")
-        print(f"Date range {d[0]} to {d[-1]} has {len(d)} days\n")
+        print(f"\n--------------- set_pvoutput -----------------")
+        print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1 :
             print(f"Time of use: {tou_periods['name']}\n")
+        print(f"------------------------------------------------")
         for x in d[:10]:
             csv = set_pvoutput(x)
             if csv is None:
@@ -1309,6 +1363,9 @@ def set_pvoutput(d = None, tou = 0):
     response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
+        if result == 401:
+            print(f"** access denied for pvoutput.org. Check 'pv_api_key' and 'pv_system_id' are correct")
+            return None
         print(f"** set_pvoutput got response code: {result}")
         return None
     return csv

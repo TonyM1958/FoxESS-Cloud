@@ -145,8 +145,9 @@ The summary includes the following attributes:
 
 For power values, the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
 + kwh: the total energy generated or consumed
-+ kwh_off: the energy consumed or generated during the off-peak time of use
-+ kwh_peak: the energy consumed or generated during the peak time of use
++ kwh_off: the total energy consumed or generated during the off-peak time of use
++ kwh_peak: the total energy consumed or generated during the peak time of use
++ kwh_neg: the total energy from -ve power flow (all other totals are based on +ve power flow)
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
