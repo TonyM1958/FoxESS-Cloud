@@ -111,13 +111,15 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-f.get_raw(time_span, d, v, summary)
+f.get_raw(time_span, d, v, summary, save, load)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is today's date and time
 + v is a variable, or list of variables (see below)
 + summary is optional - see below
++ save: set to the root part of a filename to save the results
++ load: set to the full filename to load previously saved results
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -153,7 +155,7 @@ For power values, the summary performs a Riemann sum of the data, integrating kW
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
 ```
-f.get_report(report_type, d, v, summary)
+f.get_report(report_type, d, v, summary, save, load)
 ```
 + report_type sets the period covered by the report and is one of 'day', 'week', 'month', 'year':
 + when 'day' is selected, energy is reported each hour through the day
@@ -163,6 +165,8 @@ f.get_report(report_type, d, v, summary)
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is yesterday
 + v is a variable, or list of variables. The default is to use report_vars
 + summary is optional - see below
++ save: set to the root part of a filename to save the results
++ load: set to the full filename to load previously saved results
 
 The list of variables that can be reported on is stored in f.report_vars.
 
@@ -338,6 +342,8 @@ This setting can be:
 
 ## Version Info
 
+0.3.7: Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw()<br>
+0.3.6: Added max_power_kw check in get_raw() and check exported > generation in get_pvoutput(). Some updates to charge_needed()<br>
 0.3.4: updated report_data for quick totals. Boolean parameters accept 0/1 or True/False<br>
 0.3.3: Updated Jupyter notebooks and default parameter values. Added tariffs and tou_periods with settings for Octopus Flux, Intelligent, Cosy and Go<br>
 0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>

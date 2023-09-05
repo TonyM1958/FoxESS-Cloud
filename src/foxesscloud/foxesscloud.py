@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.6"
+version = "0.3.7"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -615,11 +615,14 @@ def set_work_mode(mode):
 
 ##################################################################################################
 # get raw data values
+##################################################################################################
 # returns a list of variables and their values / attributes
 # time_span = 'hour', 'day', 'week'. For 'week', gets history of 7 days up to and including d
 # d = day 'YYYY-MM-DD'. Can also include 'HH:MM' in 'hour' mode
 # v = list of variables to get
 # summary = 0: raw data, 1: add max, min, sum, 2: summarise and drop raw data, 3: calculate state
+# save = "xxxxx": save the raw results to xxxxx_raw_<time_span>_<d>.json
+# load= "<file>": load the raw results from <file>
 ##################################################################################################
 
 # variables that cover inverter power data: generationPower must be first
@@ -632,17 +635,17 @@ flip_ct2 = 0
 # max power in kW that we expect to see
 max_power_kw = 50
 
-def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
+def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
     if d is None:
-        d = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
+        d = datetime.strftime(datetime.now() - timedelta(minutes=5), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
     if time_span == 'week':
         result_list = []
         for d in date_list(e=d, span='week'):
-            result = get_raw('day', d=d, v=v, summary=summary)
+            result = get_raw('day', d=d, v=v, summary=summary, save=save)
             if result is None:
                 return None
             result_list += result
@@ -660,19 +663,29 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
             return None
     if debug_setting > 1:
         print(f"getting raw data")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
-    query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
-    if response.status_code != 200:
-        print(f"** get_raw() got response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        print(f"** no raw data")
-        return None
-    # integrate kW to kWh based on 5 minute samples
-    if summary == 0:
+    if load is None:
+        headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+        query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
+        response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
+        if response.status_code != 200:
+            print(f"** get_raw() got response code: {response.status_code}")
+            return None
+        result = response.json().get('result')
+        if result is None:
+            print(f"** no raw data")
+            return None
+    else:
+        file = open(load)
+        result = json.load(file)
+        file.close()
+    if save is not None:
+        file_name = save + "_raw_" + time_span + "_" + d[0:10].replace('-','') + ".json"
+        file = open(file_name, 'w')
+        json.dump(result, file, indent=4, ensure_ascii= False)
+        file.close()
+    if summary == 0 or time_span == 'hour':
         return result
+    # integrate kW to kWh based on 5 minute samples
     if debug_setting > 1:
         print(f"calculating summary data")
     # copy generationPower to produce inputPower data
@@ -707,16 +720,15 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
         for y in var['data']:
             h = time_hours(y['time'][11:19]) # time
             value = y['value']
-            # check for extreme values
-            if energy and value > max_power_kw:
-                if debug_setting > 1:
-                    print(f"# warning: max_power exceeded for {var} at {y['time']}, value = {value}")
-                value = 0
             sum += value
             count += 1
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
             if energy:
+                if value > max_power_kw:
+                    if debug_setting > 1:
+                        print(f"** max_power exceeded for {var} at {y['time']}, value = {value}")
+                    value = 0
                 e = value / 12        # convert 5 minute sample kW to kWh energy
                 if e > 0.0:
                     kwh += e
@@ -731,17 +743,16 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
                             kwh_peak += e
                 else:
                     kwh_neg -= e
-            if summary == 3 and energy:
-                if int(h) > hour:    # new hour
-                    var['state'].append({})
-                    hour += 1
-                var['state'][hour]['time'] = y['time'][11:16]
-                var['state'][hour]['state'] = round(kwh,3)
-        if energy:
-            var['kwh'] = round(kwh,3)
-            var['kwh_off'] = round(kwh_off,3)
-            var['kwh_peak'] = round(kwh_peak,3)
-            var['kwh_neg'] = round(kwh_neg,3)
+                if summary == 3:
+                    if int(h) > hour:    # new hour
+                        var['state'].append({})
+                        hour += 1
+                    var['state'][hour]['time'] = y['time'][11:16]
+                    var['state'][hour]['state'] = round(kwh,3)
+                var['kwh'] = round(kwh,3)
+                var['kwh_off'] = round(kwh_off,3)
+                var['kwh_peak'] = round(kwh_peak,3)
+                var['kwh_neg'] = round(kwh_neg,3)
         var['date'] = d[0:10]
         var['count'] = count
         var['average'] = round(sum / count, 3) if count > 0 else None
@@ -764,10 +775,13 @@ def get_raw(time_span = 'hour', d = None, v = None, summary = 0):
 # d = day 'YYYY-MM-DD'
 # v = list of report variables to get
 # summary = 0, 1, 2: do a quick total energy report for a day
+# save = "xxxxx": save the report results to xxxxx_raw_<time_span>_<d>.json
+# load= "<file>": load the report results from <file>
+##################################################################################################
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
-def get_report(report_type = 'day', d = None, v = None, summary = 1):
+def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         return None
@@ -845,6 +859,15 @@ def get_report(report_type = 'day', d = None, v = None, summary = 1):
         result = []
         for x in v:
             result.append({'variable': x, 'data': []})
+    if load is not None:
+        file = open(load)
+        result = json.load(file)
+        file.close()
+    elif save is not None:
+        file_name = save + "_rep_" + report_type + "_" + d.replace('-','') + ".json"
+        file = open(file_name, 'w')
+        json.dump(result, file, indent=4, ensure_ascii= False)
+        file.close()
     if summary == 0:
         return result
     # calculate and add summary data
@@ -1046,7 +1069,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         start_at = None, end_by = None, force_charge = None,
         charge_power = None, efficiency = 92, run_after = None, update_settings = 0):
     global device, seasonality, solcast_api_key, debug_setting, tou_periods
-    print(f"\n---------- charge_needed ----------")
+    print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
     s = ''
@@ -1432,9 +1455,11 @@ class Solcast :
             if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
                 print(f"\nSolcast: solcast_api_key not set, exiting")
                 return
-            if solcast_rids is None or type(solcast_rids) != list or len(solcast_rids) < 1:
-                print(f"\nSolcast: solcast_rids not set, exiting")
+            if solcast_rids is None:
+                print(f"\nSolcast: no solcast_rids, exiting")
                 return
+            if type(solcast_rids) is not list:
+                solcast_rids = [solcast_rids]
             if debug_setting > 0 and not quiet:
                 print(f"Getting forecast for {self.today} from solcast.com")
             self.credentials = HTTPBasicAuth(solcast_api_key, '')
