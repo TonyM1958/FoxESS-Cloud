@@ -325,6 +325,57 @@ f.set_pvoutput(d, system_id, today, tou)
 + today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
 + tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
 
+# Solar Forecasting
+
+# Solcast
+
+Get and display solar data from your solcast.com account using your API key:
+
+```
+f.solcast_api_key = "my.solcast_api_key"
+fcast = f.Solcast()
+fcast.plot_daily()
+```
+
+Returns a 7 day forecast. Optional parameters are:
++ days: number of days to get. The default is 7
++ estimated: whether to get history / estimated data. 1 = yes, 0 = no. Default is 0.
++ reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
++ quiet: True to stop Solcast producing progress messages
+
+Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
+
+# Forecast.solar
+
+Get and display solar data from forecast.solar:
+
+```
+f.solar_array('South', lat=51.1789, lon=-1.8262, kwp=3.2)
+fcast = f.Solar()
+fcast.plot_daily()
+```
+
+Returns a forecast for today and tomorrow. Optional parameters are:
++ reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
++ quiet: set to True to stop Solar producing progress messages
+
+Forecast data is saved to f.solar_save. The default is 'solar.txt'.
+
+You need to configure your solar arrays by calling f.solar_array(). This takes the following parameters:
++ name: the name of each of your arrays
++ lat: the latitude where the array is located. The default is Stonehenge.
++ lon: the longitude where the array is located. The default is Stonehenge.
++ dec: the declination of the array - 0 is lying flat and 90 is vertical. Default is 30
++ az: azimuth of the array. 0 is pointing due South, -90 is pointing East, 90 is pointing West. The default is 0
++ kwp: the size of the array in kWp. The default is 5kWp
++ dam: damping factor. Default is None
++ inv: inverter power limit (when the array will clip). The default is None
++ hor: a list of values describing obstructions on the horizon
+
+Add one array for each string attached to your inverter. If your solar production is limited by clipping, set the inverter power so the forecast better matches your generation..
+
+See the [API documentation](https://doc.forecast.solar/api) for more information on parameter values.
+
 
 ## Troubleshooting
 
@@ -342,6 +393,8 @@ This setting can be:
 
 ## Version Info
 
+0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>
+       Changed Solcast to load rids instead of manually entering them. Added Solar (forecast.solar)<br>
 0.3.7: Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw()<br>
 0.3.6: Added max_power_kw check in get_raw() and check exported > generation in get_pvoutput(). Some updates to charge_needed()<br>
 0.3.4: updated report_data for quick totals. Boolean parameters accept 0/1 or True/False<br>

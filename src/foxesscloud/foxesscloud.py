@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  2 September 2023
+Updated:  7 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.7"
+version = "0.3.8"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -632,8 +632,6 @@ energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_
 
 # option to flip CT2 - correct polarity is +ve for generation and -ve for load
 flip_ct2 = 0
-# max power in kW that we expect to see
-max_power_kw = 50
 
 def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
@@ -679,7 +677,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
         result = json.load(file)
         file.close()
     if save is not None:
-        file_name = save + "_raw_" + time_span + "_" + d[0:10].replace('-','') + ".json"
+        file_name = save + "_raw_" + time_span + "_" + d[0:10].replace('-','') + ".txt"
         file = open(file_name, 'w')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
@@ -725,10 +723,6 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
             if energy:
-                if value > max_power_kw:
-                    if debug_setting > 1:
-                        print(f"** max_power exceeded for {var} at {y['time']}, value = {value}")
-                    value = 0
                 e = value / 12        # convert 5 minute sample kW to kWh energy
                 if e > 0.0:
                     kwh += e
@@ -864,7 +858,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         result = json.load(file)
         file.close()
     elif save is not None:
-        file_name = save + "_rep_" + report_type + "_" + d.replace('-','') + ".json"
+        file_name = save + "_rep_" + report_type + "_" + d.replace('-','') + ".txt"
         file = open(file_name, 'w')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
@@ -987,7 +981,8 @@ octopus_flux = {'name': 'Octopus Flux',
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'charge': {'start': 2.0, 'end': 5.0, 'min_h': 0.5},
-    'solcast': {'start': 21.0}
+    'solcast': {'start': 21.0},
+    'solar': {'start': 21.0}
     }
 
 # time periods for Intelligent Octopus
@@ -997,7 +992,8 @@ intelligent_octopus = {'name': 'Intelligent Octopus',
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'charge': {'start': 23.5, 'end': 5.5, 'min_h': 0.5},
-    'solcast': {'start': 21.0}
+    'solcast': {'start': 21.0},
+    'solar': {'start': 21.0}
     }
 
 # time periods for Octopus Cosy
@@ -1007,7 +1003,8 @@ octopus_cosy = {'name': 'Octopus Cosy',
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'charge': {'start': 4.0, 'end': 7.0, 'min_h': 0.5},
-    'solcast': {'start': 21.0}
+    'solcast': {'start': 21.0},
+    'solar': {'start': 21.0}
     }   
 
 # time periods for Octopus Go
@@ -1017,7 +1014,8 @@ octopus_go = {'name': 'Octopus Go',
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'charge': {'start': 0.5, 'end': 4.5, 'min_h': 0.5},
-    'solcast': {'start': 21.0}
+    'solcast': {'start': 21.0},
+    'solar': {'start': 21.0}
     }
 
 # custom time periods / template
@@ -1027,7 +1025,8 @@ custom_periods = {'name': 'Custom',
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'charge': {'start': 2.0, 'end': 5.0, 'min_h': 0.5},
-    'solcast': {'start': 21.0}
+    'solcast': {'start': 21.0},
+    'solar': {'start': 21.0}
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
@@ -1068,7 +1067,7 @@ daily_consumption = medium_profile
 def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         start_at = None, end_by = None, force_charge = None,
         charge_power = None, efficiency = 92, run_after = None, update_settings = 0):
-    global device, seasonality, solcast_api_key, debug_setting, tou_periods
+    global device, seasonality, solcast_api_key, debug_setting, tou_periods, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -1120,19 +1119,31 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     print(f"   Available = {available}kWh")
     # get forecast
     expected = None
-    forecast_values = None
+    fsolcast_values = None
+    fsolar_values = None
+    # manual forecast value
     if forecast is not None:
         expected = round(forecast,1)
-    elif solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
+    # get data from Solcast
+    if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
         if hour_now >= tou_periods['solcast']['start']:
-            forecast = Solcast(quiet=True)
-            if hasattr(forecast, 'daily'):
-                forecast_values = [round(forecast.daily[k]['kwh'],1) for k in forecast.keys if forecast.daily[k]['forecast']][1:6]
+            fsolcast = Solcast(quiet=True, estimated=0)
+            if hasattr(fsolcast, 'daily'):
+                solcast_values = [round(fsolcast.daily[k]['kwh'],1) for k in fsolcast.keys if fsolcast.daily[k]['forecast'] == True][1:6]
                 print(f"\nSolcast forecast for next 5 days:")
-                print(f"   Solar: {forecast_values} kWh")
-                print(f"   Average forecast: {round(sum(forecast_values)/5, 1)} kWh")
+                print(f"   Forecast: {solcast_values} kWh")
+                print(f"   Average forecast: {round(sum(solcast_values)/5, 1)} kWh")
         else:
             print(f"\nSolcast forecast will run after {hours_time(tou_periods['solcast']['start'])}")
+    # get data from forecast.solar
+    if solar_arrays is not None:
+        if hour_now >= tou_periods['solar']['start']:
+            fsolar = Solar(quiet=True)
+            if hasattr(fsolar, 'daily'):
+                solar_values = [round(fsolar.daily[k],1) for k in fsolar.daily.keys()]
+                print(f"\nSolar forecast: {solar_values[1]} kWh")
+        else:
+            print(f"\nSolar forecast will run after {hours_time(tou_periods['solar']['start'])}")
     # get PV generation history
     history = get_raw('week', v=['pvPower','meterPower2'], summary=2)
     history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
@@ -1147,10 +1158,16 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     print(f"   Average generation = {generation}kWh")
     # choose expected value
     if expected is not None:
-        print(f"\nManual forecast for tomorrow = {expected}kWh")
+        print(f"\nUsing manual forecast = {expected}kWh for tomorrow")
+    elif fsolcast_values is not None:
+        expected = fsolcast_values[0]
+        print(f"\nUsing Solcast forecast = {expected}kWh for tomorrow")
+    elif fsolar_values is not None:
+        expected = fsolar_values[0]
+        print(f"\nUsing forecast.solar = {expected}kWh for tomorrow")
     else:
-        expected = forecast_values[0] if forecast_values is not None else generation
-        print(f"\nForecast generation tomorrow = {expected}kWh")
+        expected = generation
+        print(f"\nUsing average generation = {expected}kWh for tomorrow")
     # calculate charge to add to battery
     charge = round(consumption * (1 + contingency / 100) - available - expected, 1)
     print(f"\nComparing forecast, consumption and available energy:")
@@ -1268,6 +1285,10 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
 ##################################################################################################
 ##################################################################################################
 
+# validate pv power data by checking it does not exceed a limit. Used to cover the situation where
+# Fox returns PV Voltage instead of PV Power. For example, over 100v instead of under 100kW.
+max_pv_power = 100
+
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
 ##################################################################################################
@@ -1302,6 +1323,8 @@ def get_pvoutput(d = None, tou = 0):
     raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None:
         return None
+    if raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
+        return(f"# error: {d.replace('-','')} No generation data")
     # merge raw_data for meterPower2 into pvPower:
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
@@ -1312,6 +1335,9 @@ def get_pvoutput(d = None, tou = 0):
     max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
     raw_data[pv_index]['max'] = pv_max
     raw_data[pv_index]['max_time'] = raw_data[pv_index]['data'][max_index]['time'][11:16]
+    # validation check: max_pv_power against max pvPower (including meterPower2)
+    if pv_max > max_pv_power:
+        return(f"# error: {d.replace('-','')} validation failed - PV power ({pv_max}kWh) exceeds max_pv_power ({max_pv_power}kWh)")
     # generate output
     generate = ''
     export = ','
@@ -1340,7 +1366,7 @@ def get_pvoutput(d = None, tou = 0):
         if var['variable'] == 'feedin':
             # check exported is less than generated
             if wh > generation:
-                print(f"# warning: {date} Exported {wh}Wh is more than Generated")
+                print(f"# warning: {date} Exported {wh}Wh is more than Generation")
                 wh = generation
             export = f"{wh},"
             export_tou = f",,,"
@@ -1383,6 +1409,8 @@ def set_pvoutput(d = None, tou = 0):
     csv = get_pvoutput(d, tou)
     if csv is None:
         return None
+    if csv[0] == '#':
+        return csv
     response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     result = response.status_code
     if result != 200:
@@ -1419,8 +1447,8 @@ def c_float(n):
 # solcast settings
 solcast_url = 'https://api.solcast.com.au/'
 solcast_api_key = None
-solcast_rids = []
-solcast_save = 'solcast.json'
+solcast_rids = []       # no longer used, rids loaded from solcast.com
+solcast_save = 'solcast.txt'
 solcast_cal = 1.0
 page_width = 100        # maximum text string for display
 figure_width = 24       # width of plots
@@ -1430,56 +1458,64 @@ class Solcast :
     Load Solcast Estimate / Actuals / Forecast daily yield
     """ 
 
-    def __init__(self, days = 7, reload = 2, quiet = False) :
-        # days sets the number of days to get for forecasts and estimated
+    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0) :
+        # days sets the number of days to get for forecasts (and estimated if enabled)
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
-        global debug_setting, solcast_url, solcast_api_key, solcast_rids, solcast_save, solcast_cal
-        data_sets = ['forecasts', 'estimated_actuals']
+        global debug_setting, solcast_url, solcast_api_key, solcast_save, solcast_cal
+        data_sets = ['forecasts']
+        if estimated == 1:
+            data_sets += ['estimated_actuals']
         self.data = {}
         self.today =datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
         if reload == 1 and os.path.exists(solcast_save):
             os.remove(solcast_save)
         if solcast_save is not None and os.path.exists(solcast_save):
-            f = open(solcast_save)
-            self.data = json.load(f)
-            f.close()
+            file = open(solcast_save)
+            self.data = json.load(file)
+            file.close()
             if len(self.data) == 0:
                 print(f"No data in {solcast_save}")
             elif reload == 2 and 'date' in self.data and self.data['date'] != self.today:
                 self.data = {}
             elif debug_setting > 0 and not quiet:
-                print(f"Using forecast for {self.data['date']} from {solcast_save}")
+                print(f"Using data for {self.data['date']} from {solcast_save}")
         if len(self.data) == 0 :
             if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
                 print(f"\nSolcast: solcast_api_key not set, exiting")
                 return
-            if solcast_rids is None:
-                print(f"\nSolcast: no solcast_rids, exiting")
+            self.credentials = HTTPBasicAuth(solcast_api_key, '')
+            if debug_setting > 1 and not quiet:
+                print(f"Getting rids from solcast.com")
+            params = {'format' : 'json'}
+            response = requests.get(solcast_url + 'rooftop_sites', auth = self.credentials, params = params)
+            if response.status_code != 200:
+                if response.status_code == 429:
+                    print(f"\nSolcast API call limit reached for today")
+                else:
+                    print(f"Solcast: response code getting resource_id was {response.status_code}")
                 return
-            if type(solcast_rids) is not list:
-                solcast_rids = [solcast_rids]
+            sites = response.json().get('sites')
             if debug_setting > 0 and not quiet:
                 print(f"Getting forecast for {self.today} from solcast.com")
-            self.credentials = HTTPBasicAuth(solcast_api_key, '')
             self.data['date'] = self.today
             params = {'format' : 'json', 'hours' : 168, 'period' : 'PT30M'}     # always get 168 x 30 min values
             for t in data_sets :
                 self.data[t] = {}
-                for rid in solcast_rids :
+                for rid in [s['resource_id'] for s in sites] :
                     response = requests.get(solcast_url + 'rooftop_sites/' + rid + '/' + t, auth = self.credentials, params = params)
                     if response.status_code != 200 :
                         if response.status_code == 429:
-                            print(f"\nSolcast API call limit reached for today")
+                            print(f"\nSolcast: API call limit reached for today")
                         else:
                             print(f"Solcast: response code getting {t} was {response.status_code}")
                         return
                     self.data[t][rid] = response.json().get(t)
             if solcast_save is not None :
-                f = open(solcast_save, 'w')
-                json.dump(self.data, f, sort_keys = True, indent=4, ensure_ascii= False)
-                f.close()
+                file = open(solcast_save, 'w')
+                json.dump(self.data, file, sort_keys = True, indent=4, ensure_ascii= False)
+                file.close()
         self.daily = {}
         self.rids = []
         for t in data_sets :
@@ -1499,7 +1535,7 @@ class Solcast :
                             self.daily[date][rid].append(time)
                         elif debug_setting > 1 :
                                 print(f"Solcast: overlapping data was ignored for {rid} in {t} at {date} {time}")
-        # ignore first and last dates as these forecast and estimate only cover part of the day, so are not accurate
+        # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
         # trim the range if fewer days have been requested
@@ -1516,10 +1552,12 @@ class Solcast :
     def __str__(self) :
         # return printable Solcast info
         global debug_setting
+        if not hasattr(self, 'days'):
+            return 'Solcast: no days in forecast'
         s = f'\nSolcast yield for {self.days} days'
         if self.cal is not None and self.cal != 1.0 :
             s += f", calibration = {self.cal}"
-        s += f" (E = estimated, F = forecasts):\n\n"
+        s += f" (E = estimated, F = forecasts):\n"
         for k in self.keys :
             tag = 'F' if self.daily[k]['forecast'] else 'E'
             y = self.daily[k]['kwh'] * self.cal
@@ -1535,7 +1573,7 @@ class Solcast :
 
     def plot_daily(self) :
         if not hasattr(self, 'daily') :
-            print(f"Solcast: ** no daily data available")
+            print(f"Solcast: no daily data to plot")
             return
         figwidth = 12 * self.days / 7
         self.figsize = (figwidth, figwidth/3)     # size of charts
@@ -1556,10 +1594,141 @@ class Solcast :
         title = f"Solcast yield on {self.today} for {self.days} days"
         if self.cal != 1.0 :
             title += f" (calibration = {self.cal})"
-        title += f". Total yield = {self.total:.0f} kwh"    
-        plt.title(title, fontsize=16)
+        title += f". Total yield = {self.total:.0f} kwh, Average = {self.avg:.0f}"    
+        plt.title(title, fontsize=12)
         plt.grid()
-        plt.legend(fontsize=14)
+#        plt.legend(fontsize=14)
         plt.xticks(rotation=45, ha='right')
         plt.show()
         return
+
+
+
+##################################################################################################
+##################################################################################################
+# Forecast.Solar Section
+##################################################################################################
+##################################################################################################
+
+
+# forecast.solar global settings
+solar_api_key = None
+solar_url = "https://api.forecast.solar/"
+solar_save = "solar.txt"
+solar_arrays = None
+
+# configure a solar_array
+def solar_array(name = None, lat=51.1790, lon=-1.8262, dec = 30, az = 0, kwp = 5.0, dam = None, inv = None, hor = None):
+    global solar_arrays
+    if name is None:
+        return
+    if solar_arrays is None:
+        solar_arrays = {}
+    if name not in solar_arrays.keys():
+        solar_arrays[name] = {}
+    solar_arrays[name]['lat'] = round(lat,4)
+    solar_arrays[name]['lon'] = round(lon,4)
+    solar_arrays[name]['dec'] = 30 if dec < 0 or dec > 90 else dec
+    solar_arrays[name]['az'] = az - 360 if az > 180 else az
+    solar_arrays[name]['kwp'] = kwp
+    solar_arrays[name]['dam'] = dam
+    solar_arrays[name]['inv'] = inv
+    solar_arrays[name]['hor'] = hor
+    return
+
+
+class Solar :
+    """
+    load forecast.solar info using solar_arrays
+    """ 
+
+    # get solar forecast and return total expected yield
+    def __init__(self, reload=0, quiet=False):
+        global solar_arrays, solar_save, solar_total, solar_url, solar_api_key
+        if reload == 1 and os.path.exists(solar_save):
+            os.remove(solar_save)
+        self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
+        self.arrays = None
+        self.results = None
+        if solar_save is not None and os.path.exists(solar_save):
+            file = open(solar_save)
+            data = json.load(file)
+            file.close()
+            if data.get('date') is not None and (data['date'] == self.today and reload != 1):
+                if debug_setting > 0 and not quiet:
+                    print(f"Using data for {data['date']} from {solar_save}")
+                self.results = data['results'] if data.get('results') is not None else None
+                self.arrays = data['arrays'] if data.get('arrays') is not None else None
+        if self.arrays is None or self.results is None:
+            if solar_arrays is None or len(solar_arrays) < 1:
+                print(f"** Solar: you need to add an array using solar_array()")
+                return
+            self.api_key = solar_api_key + '/' if solar_api_key is not None else ''
+            self.arrays = deepcopy(solar_arrays)
+            self.results = {}
+            for name, a in self.arrays.items():
+                path = f"{a['lat']}/{a['lon']}/{a['dec']}/{a['az']}/{a['kwp']}"
+                params = {'start': '00:00', 'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
+                response = requests.get(solar_url + self.api_key + 'estimate/' + path, params = params)
+                if response.status_code != 200:
+                    if response.status_code == 429:
+                        print(f"\nForecast.solar API call limit reached for today")
+                    else:
+                        print(f"** Solar() got response code: {response.status_code}")
+                        return
+                self.results[name] = response.json().get('result')
+            if solar_save is not None :
+                file = open(solar_save, 'w')
+                json.dump({'date': self.today, 'arrays': self.arrays, 'results': self.results}, file, indent=4, ensure_ascii= False)
+                file.close()
+        self.daily = {}
+        for k in self.results.keys():
+            if self.results[k].get('watt_hours_day') is not None:
+                whd = self.results[k]['watt_hours_day']
+                for d in whd.keys():
+                    if self.daily.get(d) is None:
+                        self.daily[d] = 0.0
+                    self.daily[d] = round(self.daily[d] + whd[d] / 1000, 3)
+        self.keys = sorted(self.daily.keys())
+        self.days = len(self.keys)
+        self.total = round(sum([self.daily[k] for k in self.keys]), 3)
+        self.avg = round(self.total / self.days, 3)
+        return
+
+    def __str__(self) :
+        # return printable Solar info
+        global debug_setting
+        if not hasattr(self, 'days'):
+            return 'Solar: no days in forecast'
+        s = f'\nSolar yield for {self.days} days\n'
+        for k in self.keys :
+            y = self.daily[k]
+            d = datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
+            s += "\033[1m--> " if k == self.today else "    "
+            s += f"{k} {d} : {y:5.2f} kwh"
+            s += "\033[0m\n" if k == self.today else "\n"
+        return s
+
+    def plot_daily(self) :
+        if not hasattr(self, 'daily') :
+            print(f"Solcast: no daily data to plot")
+            return
+        figwidth = 12 * self.days / 7
+        self.figsize = (figwidth, figwidth/3)     # size of charts
+        plt.figure(figsize=self.figsize)
+        # plot forecasts
+        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys]
+        y = [self.daily[k] for k in self.keys]
+        if x is not None and len(x) != 0 :
+            plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
+        # annotations
+        if hasattr(self, 'avg') :
+            plt.axhline(self.avg, color='blue', linestyle='solid', label=f'average {self.avg:.1f} kwh / day', linewidth=2)
+        title = f"Solar yield on {self.today} for {self.days} days"
+        title += f". Total yield = {self.total:.0f} kwh, Average = {self.avg:.0f}"    
+        plt.title(title, fontsize=12)
+        plt.grid()
+#        plt.legend(fontsize=14)
+        plt.xticks(rotation=45, ha='right')
+        plt.show()
+        return        
