@@ -392,7 +392,7 @@ This setting can be:
 
 
 ## Version Info
-
+0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
 0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>
        Changed Solcast to load rids instead of manually entering them. Added Solar (forecast.solar)<br>
 0.3.7: Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw()<br>

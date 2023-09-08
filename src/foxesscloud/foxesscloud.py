@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  7 September 2023
+Updated:  8 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.8"
+version = "0.3.9"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1078,7 +1078,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         print(f"Parameters: {s}")
     start_at = time_hours(start_at, tou_periods['charge']['start'] if tou_periods is not None else 2.0)
     end_by = time_hours(end_by, tou_periods['charge']['end'] if tou_periods is not None else 5.0)
-    run_after = time_hours(run_after, 21)
+    run_after = time_hours(run_after, 22)
     if force_charge is None:
         force_charge = 0
     # convert any boolean flag values
@@ -1119,29 +1119,27 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     print(f"   Available = {available}kWh")
     # get forecast
     expected = None
-    fsolcast_values = None
-    fsolar_values = None
+    solcast_value = None
+    solar_value = None
     # manual forecast value
     if forecast is not None:
         expected = round(forecast,1)
     # get data from Solcast
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
-        if hour_now >= tou_periods['solcast']['start']:
+        if hour_now >= tou_periods['solcast']['start'] or hour_now >= run_after:
             fsolcast = Solcast(quiet=True, estimated=0)
             if hasattr(fsolcast, 'daily'):
-                solcast_values = [round(fsolcast.daily[k]['kwh'],1) for k in fsolcast.keys if fsolcast.daily[k]['forecast'] == True][1:6]
-                print(f"\nSolcast forecast for next 5 days:")
-                print(f"   Forecast: {solcast_values} kWh")
-                print(f"   Average forecast: {round(sum(solcast_values)/5, 1)} kWh")
+                solcast_value = round(fsolcast.daily[tomorrow],1)
+                print(f"\nSolcast forecast: {solcast_value}kWh")
         else:
             print(f"\nSolcast forecast will run after {hours_time(tou_periods['solcast']['start'])}")
     # get data from forecast.solar
     if solar_arrays is not None:
-        if hour_now >= tou_periods['solar']['start']:
+        if hour_now >= tou_periods['solar']['start'] or hour_now >= run_after:
             fsolar = Solar(quiet=True)
             if hasattr(fsolar, 'daily'):
-                solar_values = [round(fsolar.daily[k],1) for k in fsolar.daily.keys()]
-                print(f"\nSolar forecast: {solar_values[1]} kWh")
+                solar_value = round(fsolar.daily[tomorrow],1)
+                print(f"\nSolar forecast: {solar_value}kWh")
         else:
             print(f"\nSolar forecast will run after {hours_time(tou_periods['solar']['start'])}")
     # get PV generation history
@@ -1159,12 +1157,12 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     # choose expected value
     if expected is not None:
         print(f"\nUsing manual forecast = {expected}kWh for tomorrow")
-    elif fsolcast_values is not None:
-        expected = fsolcast_values[0]
+    elif solcast_value is not None:
+        expected = solcast_value
         print(f"\nUsing Solcast forecast = {expected}kWh for tomorrow")
-    elif fsolar_values is not None:
-        expected = fsolar_values[0]
-        print(f"\nUsing forecast.solar = {expected}kWh for tomorrow")
+    elif solar_value is not None:
+        expected = solar_value
+        print(f"\nUsing Solar forecast = {expected}kWh for tomorrow")
     else:
         expected = generation
         print(f"\nUsing average generation = {expected}kWh for tomorrow")
@@ -1449,7 +1447,6 @@ solcast_url = 'https://api.solcast.com.au/'
 solcast_api_key = None
 solcast_rids = []       # no longer used, rids loaded from solcast.com
 solcast_save = 'solcast.txt'
-solcast_cal = 1.0
 page_width = 100        # maximum text string for display
 figure_width = 24       # width of plots
 
@@ -1463,7 +1460,7 @@ class Solcast :
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
-        global debug_setting, solcast_url, solcast_api_key, solcast_save, solcast_cal
+        global debug_setting, solcast_url, solcast_api_key, solcast_save
         data_sets = ['forecasts']
         if estimated == 1:
             data_sets += ['estimated_actuals']
@@ -1517,24 +1514,16 @@ class Solcast :
                 json.dump(self.data, file, sort_keys = True, indent=4, ensure_ascii= False)
                 file.close()
         self.daily = {}
-        self.rids = []
         for t in data_sets :
             for rid in self.data[t].keys() :            # aggregate sites
                 if self.data[t][rid] is not None :
-                    self.rids.append(rid)
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
                         time = period_end[11:16]
                         if date not in self.daily.keys() :
-                            self.daily[date] = {'forecast' : t == 'forecasts', 'kwh' : 0.0}
-                        if rid not in self.daily[date].keys() :
-                            self.daily[date][rid] = []
-                        if time not in self.daily[date][rid] :
-                            self.daily[date]['kwh'] += c_float(f.get('pv_estimate')) / 2      # 30 minute kw yield / 2 = kwh
-                            self.daily[date][rid].append(time)
-                        elif debug_setting > 1 :
-                                print(f"Solcast: overlapping data was ignored for {rid} in {t} at {date} {time}")
+                            self.daily[date] = 0.0
+                        self.daily[date] = round(self.daily[date] + c_float(f.get('pv_estimate')) / 2, 3)      # 30 minute kw yield / 2 = kwh
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -1542,11 +1531,10 @@ class Solcast :
         while self.days > 2 * days :
             self.keys = self.keys[1:-1]
             self.days = len(self.keys)
-        self.values = [self.daily[k]['kwh'] for k in self.keys]
-        self.total = sum(self.values)
+        self.values = [self.daily[d] for d in self.keys]
+        self.total = round(sum(self.values),3)
         if self.days > 0 :
-            self.avg = self.total / self.days
-        self.cal = solcast_cal
+            self.avg = round(self.total / self.days, 3)
         return
 
     def __str__(self) :
@@ -1554,21 +1542,11 @@ class Solcast :
         global debug_setting
         if not hasattr(self, 'days'):
             return 'Solcast: no days in forecast'
-        s = f'\nSolcast yield for {self.days} days'
-        if self.cal is not None and self.cal != 1.0 :
-            s += f", calibration = {self.cal}"
-        s += f" (E = estimated, F = forecasts):\n"
-        for k in self.keys :
-            tag = 'F' if self.daily[k]['forecast'] else 'E'
-            y = self.daily[k]['kwh'] * self.cal
-            d = datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
-            s += "\033[1m--> " if k == self.today else "    "
-            s += f"{k} {d} {tag}: {y:5.2f} kwh"
-            s += "\033[0m\n" if k == self.today else "\n"
-            for r in self.rids :
-                n = len(self.daily[k][r])
-                if n != 48 and debug_setting > 0:
-                    print(f"Solcast: {k} rid {r} should have 48 x 30 min values. {n} values found")
+        s = f'\nSolcast forecast for {self.days} days'
+        for d in self.keys :
+            y = self.daily[d]
+            day = datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]
+            s += f"\n   {d} {day}: {y:5.2f} kwh"
         return s
 
     def plot_daily(self) :
@@ -1579,21 +1557,19 @@ class Solcast :
         self.figsize = (figwidth, figwidth/3)     # size of charts
         plt.figure(figsize=self.figsize)
         # plot estimated
-        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if not self.daily[k]['forecast']]
-        y = [self.daily[k]['kwh'] * self.cal for k in self.keys if not self.daily[k]['forecast']]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) < int(self.today.replace('-',''))]
+        y = [self.daily[d] for d in self.keys if int(d.replace('-','')) < int(self.today.replace('-',''))]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='orange', linestyle='solid', label='estimated', linewidth=2)
         # plot forecasts
-        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys if self.daily[k]['forecast']]
-        y = [self.daily[k]['kwh'] * self.cal for k in self.keys if self.daily[k]['forecast']]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) >= int(self.today.replace('-',''))]
+        y = [self.daily[d] for d in self.keys if int(d.replace('-','')) >= int(self.today.replace('-',''))]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
         # annotations
         if hasattr(self, 'avg') :
             plt.axhline(self.avg, color='blue', linestyle='solid', label=f'average {self.avg:.1f} kwh / day', linewidth=2)
         title = f"Solcast yield on {self.today} for {self.days} days"
-        if self.cal != 1.0 :
-            title += f" (calibration = {self.cal})"
         title += f". Total yield = {self.total:.0f} kwh, Average = {self.avg:.0f}"    
         plt.title(title, fontsize=12)
         plt.grid()
@@ -1689,10 +1665,13 @@ class Solar :
                     if self.daily.get(d) is None:
                         self.daily[d] = 0.0
                     self.daily[d] = round(self.daily[d] + whd[d] / 1000, 3)
-        self.keys = sorted(self.daily.keys())
+        # drop forecast for today as it already happened
+        self.keys = sorted(self.daily.keys())[1:]
         self.days = len(self.keys)
-        self.total = round(sum([self.daily[k] for k in self.keys]), 3)
-        self.avg = round(self.total / self.days, 3)
+        self.values = [self.daily[d] for d in self.keys]
+        self.total = round(sum(self.values), 3)
+        if self.days > 0:
+            self.avg = round(self.total / self.days, 3)
         return
 
     def __str__(self) :
@@ -1700,13 +1679,11 @@ class Solar :
         global debug_setting
         if not hasattr(self, 'days'):
             return 'Solar: no days in forecast'
-        s = f'\nSolar yield for {self.days} days\n'
-        for k in self.keys :
-            y = self.daily[k]
-            d = datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]
-            s += "\033[1m--> " if k == self.today else "    "
-            s += f"{k} {d} : {y:5.2f} kwh"
-            s += "\033[0m\n" if k == self.today else "\n"
+        s = f'\nSolar yield for {self.days} days'
+        for d in self.keys :
+            y = self.daily[d]
+            day = datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]
+            s += f"\n   {d} {day} : {y:5.2f} kwh"
         return s
 
     def plot_daily(self) :
@@ -1717,8 +1694,8 @@ class Solar :
         self.figsize = (figwidth, figwidth/3)     # size of charts
         plt.figure(figsize=self.figsize)
         # plot forecasts
-        x = [f"{k} {datetime.strptime(k, '%Y-%m-%d').strftime('%A')[:3]} " for k in self.keys]
-        y = [self.daily[k] for k in self.keys]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys]
+        y = [self.daily[d] for d in self.keys]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
         # annotations
