@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.3.9"
+version = "0.4.0"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -630,9 +630,6 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
-# option to flip CT2 - correct polarity is +ve for generation and -ve for load
-flip_ct2 = 0
-
 def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
     if get_device() is None:
@@ -642,7 +639,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
         d = datetime.strftime(datetime.now() - timedelta(minutes=5), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
     if time_span == 'week':
         result_list = []
-        for d in date_list(e=d, span='week'):
+        for d in date_list(e=d, span='week',today=True):
             result = get_raw('day', d=d, v=v, summary=summary, save=save)
             if result is None:
                 return None
@@ -695,10 +692,6 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
         for y in input_result['data']:
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
         result.append(input_result)
-    # check if we need to flip CT2
-    if flip_ct2 == 1 and 'meterPower2' in v:
-        for x in result[v.index('meterPower2')]['data']:
-            x['value'] = -x['value']
     for var in result:
         energy = var['unit'] == 'kW'
         hour = 0
@@ -788,7 +781,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         report_type = 'day'
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     if d is None:
-        d = datetime.strftime(datetime.now() - timedelta(days=1), "%Y-%m-%d")
+        d = datetime.strftime(datetime.now(), "%Y-%m-%d")
     if v is None:
         v = report_vars
     elif type(v) is not list:
@@ -1086,22 +1079,24 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     update_settings = 1 if update_settings == True else 0 if update_settings == False else update_settings
     # check time and set mode
     now = datetime.now()
+    today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     hour_now = time_hours(f"{now.hour:02}:{now.minute:02}")
+    history_dates = date_list(span='week', today=True)
     # get consumption info
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
         if debug_setting > 0:
             print(f"\nEstimate of consumption = {consumption}kWh")
     else:
-        history = get_report('week', v='loads')[0]['data']
-        history_load = [round(h['value'], 1) for h in history]
-        history_sum = sum(history_load)
-        consumption = round(sum(history_load) / 7, 1)
+        history = get_report('week', d=today, v='loads',summary=2)[0]
+        load_history = {}
+        for i, date in enumerate(history_dates):
+            load_history[date] = round(history['data'][i]['value'],3)
+        consumption = round(sum([load_history[d] for d in load_history.keys()]) / 7, 1)
         if debug_setting > 0:
-            print(f"\nConsumption over last 7 days:")
-            print(f"   Load: {history_load} kWh")
-            print(f"   Average consumption = {consumption}kWh)")
+            print(f"\nConsumption: {load_history}")
+            print(f"   Average = {consumption}kWh)")
     # get battery info
     get_settings()
     get_battery()
@@ -1143,17 +1138,17 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         else:
             print(f"\nSolar forecast will run after {hours_time(tou_periods['solar']['start'])}")
     # get PV generation history
-    history = get_raw('week', v=['pvPower','meterPower2'], summary=2)
-    history_pv = [round(h['kwh'], 1) for h in history if h['variable'] == 'pvPower']
-    sum_pv = sum(history_pv)
-    history_ct2 = [round(h['kwh']/efficiency, 1) for h in history if h['variable'] == 'meterPower2']
-    sum_ct2 = sum(history_ct2)
-    print(f"\nGeneration over last 7 days:")
-    print(f"   PV energy: {history_pv} kWh")
-    if sum_ct2 > 0.0:
-        print(f"  CT2 energy: {history_ct2} kWh")
-    generation = round(sum_pv / 7 + sum_ct2 / 7, 1)
-    print(f"   Average generation = {generation}kWh")
+    history = get_raw('week', d=today, v=['pvPower','meterPower2'], summary=2)
+    pv_history = {}
+    for h in history:
+        date = h['date']
+        if pv_history.get(date) is None:
+            pv_history[date] = 0.0
+        pv_history[date] += round(h['kwh_neg'] if h['variable'] == 'meterPower2' else h['kwh'], 1)
+    pv_sum = sum([pv_history[d] for d in pv_history.keys()])
+    print(f"\nGeneration: {pv_history}")
+    generation = round(pv_sum / 7, 1)
+    print(f"   Average = {generation}kWh")
     # choose expected value
     if expected is not None:
         print(f"\nUsing manual forecast = {expected}kWh for tomorrow")
@@ -1327,7 +1322,9 @@ def get_pvoutput(d = None, tou = 0):
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
     for i, data in enumerate(raw_data[ct2_index]['data']):
-        raw_data[pv_index]['data'][i]['value'] += data['value'] / 0.92 if data['value'] > 0.0 else 0
+        # meterPower2 is -ve when generating
+        raw_data[pv_index]['data'][i]['value'] -= data['value'] / 0.92 if data['value'] <= 0.0 else 0
+    # kwh is positive for generation
     raw_data[pv_index]['kwh'] += raw_data[ct2_index]['kwh']
     pv_max = max(data['value'] for data in raw_data[pv_index]['data'])
     max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
