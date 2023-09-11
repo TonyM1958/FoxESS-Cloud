@@ -221,19 +221,31 @@ All the parameters are optional:
 + end_by: time when charging must stop. The default is set by the tariff
 + force_charge: if set to 1, any remaining time between start_at and end_by has force charge set to preserve the battery. If 0, force charge is not set
 + charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
-+ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.95 (95%)
-+ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). If run before this time, no action will be taken
++ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.92 (92%)
++ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 
-If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the manual forecast, solcast forecast or average of the last 7 days, in that order, depending on what is available.
+If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the lowest value from the manual forecast, solcast or forecast.solar or average of the last 7 days, depending on what is available.
 
-If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption. Daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality can be adjusted by setting a list of weightings for the months Jan, Feb, Mar etc. The sum of the weightings should be 12.0 so that the overall annual consumption is accurate. The seasonality settings can be viewed and updated:
+Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
-```
-f.seasonality = [1.1, 1.1, 1.0, 1.0, 0.9, 0.9, 0.9, 0.9, 1.0, 1.0, 1.1, 1.1]
-```
+If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption
 
-Note: if using Solcast, calls to the API for hobby accounts are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+### Modelling
+
+charge_needed() uses a number of models to better estimate the state of the battery.
+
+**f.seasonality**: where an annual consumption figure isprovided, daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality is a list of weightings by month for Jan, Feb, Mar, Apr etc. Preset lists are 'f.high_seasonality' (recommend where electric heating is ued), 'f.medium_seasonality' (default) amd 'f.no_seasonality' (all months the same).
+
+**f.daily_consumption**: maps the consumption for a day to the hours when more or less energy is consumed. It is a list of 24 values for the times 00, 01, 02, 03 .. 23. Preset lists are 'f.high_profile' (larger peaks at 8am and 6pm), 'f.medium_profile' (default, more balanced) and 'f.no_profile' (flat).
+
+**f.seasonal_sun**: maps solar generation against the time of day. This is broken down into 4 seasons: winter, spring, summer and autumn with 3 months each. Winter is Dec, Jan, Feb, Spring is Mar, Apr, May etc. Underlying this structure, there are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summar_sun' and 'f.autumn_sun'
+
+The modelling works as follows:
++ estimates your consumption (including contigency) and forecast generation for the day
++ uses the charge available now and the expect charging or discharging of the battery over the coming 24 hours to work out the battery state
++ works out if there is any deficit (i.e. a time when discharge exceeds available)
++ reports the charge needed (deficit) or the minimum expected battery level
 
 ## Date Ranges
 
@@ -392,6 +404,8 @@ This setting can be:
 
 
 ## Version Info
+
+0.4.1: Updated charge_needed to model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
 0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
 0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>
