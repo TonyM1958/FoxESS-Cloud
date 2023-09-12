@@ -217,13 +217,12 @@ All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 + contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
-+ start_at: time when charging will start in HH:MM or decimal hours e.g. '23:30' or 23.5 hours. The default is set by the tariff
-+ end_by: time when charging must stop. The default is set by the tariff
 + force_charge: if set to 1, any remaining time between start_at and end_by has force charge set to preserve the battery. If 0, force charge is not set
 + charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
 + efficiency: conversion factor from PV power or AC power to charge power. The default is 0.92 (92%)
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
++ show_residual: 1 shows residual battery energy instead of SoC. The default is 0.
 
 If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the lowest value from the manual forecast, solcast or forecast.solar or average of the last 7 days, depending on what is available.
 
@@ -243,8 +242,8 @@ charge_needed() uses a number of models to better estimate the state of the batt
 
 The modelling works as follows:
 + estimates your consumption (including contigency) and forecast generation for the day
-+ uses the charge available now and the expect charging or discharging of the battery over the coming 24 hours to work out the battery state
-+ works out if there is any deficit (i.e. a time when discharge exceeds available)
++ uses the charge available now and the expect charging or discharging of the battery to forecast the battery state
++ works out if there is any deficit (i.e. when discharge exceeds available)
 + reports the charge needed (deficit) or the minimum expected battery level
 
 ## Date Ranges
@@ -405,7 +404,7 @@ This setting can be:
 
 ## Version Info
 
-0.4.1: Updated charge_needed to model battery charge state<br>
+0.4.1: Updated charge_needed to better model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
 0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
 0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>

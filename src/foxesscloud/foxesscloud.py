@@ -1083,21 +1083,22 @@ seasonal_sun =   [winter_sun, spring_sun, summer_sun, autumn_sun]
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
-        force_charge = None, timed_mode = None, charge_power = None, efficiency = 95, run_after = None, update_settings = 0):
+def charge_needed(forecast = None, annual_consumption = None, contingency = 25, show_residual = None,
+        force_charge = None, timed_mode = None, charge_power = None, efficiency = 92, run_after = None, update_settings = 0):
     global device, seasonality, solcast_api_key, debug_setting, tou_periods, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
     s = ""
     for k in [k for k in args.keys() if args[k] is not None]:
-        s += f"\n   {k} = {args[k]}"
+        s += f"\n  {k} = {args[k]}"
     if len(s) > 0:
         print(f"Parameters: {s}")
     # convert any boolean flag values
     force_charge = 1 if force_charge is not None and (force_charge == 1 or force_charge == True) else 0
     update_settings = 1 if update_settings is not None and (update_settings == 1 or update_settings == True) else 0
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
+    show_residual = 1 if show_residual is not None and (show_residual == 1 or show_residual == True) else 0
     run_after = time_hours(run_after, 22)
     # get dates and times
     now = datetime.now()
@@ -1135,11 +1136,11 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     reserve = round(capacity * min_soc / 100, 1)
     available = round(residual - reserve, 1)
     print(f"\nBattery:")
-    print(f"   Capacity = {capacity}kWh")
-    print(f"   Min SoC on Grid = {min_soc}%")
-    print(f"   Current SoC = {soc}%")
-    print(f"   Residual = {residual}kWh")
-    print(f"   Available = {available}kWh")
+    print(f"  Capacity = {capacity}kWh")
+    print(f"  Min SoC on Grid = {min_soc}%")
+    print(f"  Current SoC = {soc}%")
+    print(f"  Residual = {residual}kWh")
+    print(f"  Available = {available}kWh")
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
@@ -1153,11 +1154,12 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         print(f"\nConsumption (kWh):")
         s = ""
         for d in sorted(load_history.keys()):
-            s += f"   {d} = {load_history[d]:4.1f}"
-        print(s)
-        print(f"   Average of last 7 days = {consumption}kWh")
+            s += f"  {d} = {load_history[d]:4.1f},"
+        print(s[:-1])
+        print(f"  Average of last 7 days = {consumption}kWh")
+    # add contingency to consumption
     consumption = round(consumption * (1 + contingency / 100),1)
-    print(f"   With {contingency}% contingency = {consumption}kWh")
+    print(f"  With {contingency}% contingency = {consumption}kWh")
     # get Solcast data
     solcast_value = None
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
@@ -1190,10 +1192,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     print(f"\nGeneration (kWh):")
     s = ""
     for d in sorted(pv_history.keys()):
-        s += f"   {d} = {pv_history[d]:4.1f}"
-    print(s)
+        s += f"  {d} = {pv_history[d]:4.1f},"
+    print(s[:-1])
     generation = round(pv_sum / 3, 1)
-    print(f"   Average of last 3 days = {generation}kWh")
+    print(f"  Average of last 3 days = {generation}kWh")
     # choose expected value
     if forecast is not None:
         expected = forecast
@@ -1207,7 +1209,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     else:
         expected = generation
         print(f"\nUsing generation history: {expected}kWh")
-    # get 24 hour profile for battery charge and discharge
+    # get 24 hour profile for battery charge and discharge with losses for DC-DC and DC-AC conversion
     sun_profile = seasonal_sun[now.month // 3 % 4]
     charge_by_hour = [round(expected * efficiency / 100 * h / sum(sun_profile), 3) for h in sun_profile]
     discharge_by_hour = [round(consumption / efficiency * 100 * h / sum(daily_consumption),3) for h in daily_consumption]
@@ -1236,7 +1238,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         print(f"Net by Hour: {net_by_hour}")
         print(f"Net timed: {net_timed}")
     # track the battery energy over next 24 hours (if we don't add any charge)
-    current_state = available - net_timed[0] * (hour_now - int(hour_now))
+    current_state = residual - net_timed[0] * (hour_now - int(hour_now))
     bat_timed = {}
     h = int(hour_now)
     for net in net_timed:
@@ -1244,36 +1246,39 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         bat_timed[h] = current_state
         current_state += net
         h += 1
-    print(f"\nBattery Energy Available (kWh):")
-    s = ""
+    s = f"\nBattery Energy (kWh):\n" if show_residual == 1 else f"\nBattery SoC\n"
+    s += "               " * (int(hour_now) % 6)
     for h in sorted(bat_timed.keys()):
         s += "\n" if h > 0 and h % 6 == 0 else ""
-        s += f"   {hours_time(h)} = {bat_timed[h]:4.1f}"
-    print(s)
+        if show_residual == 1:
+            s += f"  {hours_time(h)} = {bat_timed[h]:4.1f},"
+        else:
+            s += f"  {hours_time(h)} = {int(bat_timed[h] / capacity * 100):3}%,"
+    print(s[:-1])
     # work out if charge is needed
-    charge = round(0.0 - min([bat_timed[h] for h in bat_timed.keys()]), 1)
+    charge = round(reserve - min([bat_timed[h] for h in bat_timed.keys()]), 1)
     if charge < 0.0:
         min_residual = round(reserve - charge, 1)
-        print(f"   Lowest estimated SoC = {round(min_residual / capacity * 100, 0)}% (Residual = {min_residual} kWh)")
+        print(f"  Lowest forecast SoC = {int(min_residual / capacity * 100)}% (Residual = {min_residual}kWh)")
         charge = 0.0
     else:
-        print(f"   Charge needed = {charge}kWh:")
+        print(f"  Charge needed = {charge}kWh:")
         if (reserve + charge) > capacity:
             bigger_battery = round(charge * 100 / (100 - min_soc), 1)
             print(f"  ** requires battery capacity of {bigger_battery}kWh")
-    # calculate charge time
+    # calculate charge time after loss for AC-DC conversion and battery thermal loss
     if charge_power is None or charge_power <= 0:
         charge_power = device.get('power')
         if charge_power is None:
             charge_power = 3.7
-    hours = round_time(charge / charge_power * 100 / efficiency)
+    hours = round_time(charge / charge_power * 100 / efficiency * 100 / efficiency)
     # don't charge for less than minimum time period
     if hours > 0.0 and tou_periods is not None and hours < tou_periods['charge']['min_h']:
         hours = tou_periods['charge']['min_h']
     if hours > 0:
-        print(f"   Charge time is {hours_time(hours)} with {charge_power}kW charge power")
+        print(f"  Charge time is {hours_time(hours)} with {charge_power}kW charge power")
     else:
-        print(f"   No charging needed")
+        print(f"  No charging needed")
     # work out charge periods settings
     start1 = start_at
     end1 = round_time(start1 + hours)
