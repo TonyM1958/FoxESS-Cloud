@@ -404,7 +404,7 @@ This setting can be:
 
 ## Version Info
 
-0.4.2: Updated charge_needed to better model battery charge state<br>
+0.4.3: Updated charge_needed to better model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
 0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
 0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>

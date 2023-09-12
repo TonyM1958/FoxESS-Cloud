@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.2"
+version = "0.4.3"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1100,11 +1100,6 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_residual = 1 if show_residual is not None and (show_residual == 1 or show_residual == True) else 0
     run_after = time_hours(run_after, 22)
-    # get charge power
-    if charge_power is None or charge_power <= 0:
-        charge_power = device.get('power')
-        if charge_power is None:
-            charge_power = 3.7
     # get dates and times
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
@@ -1146,6 +1141,11 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     print(f"  Current SoC = {soc}%")
     print(f"  Residual = {residual}kWh")
     print(f"  Available = {available}kWh")
+    # get charge power
+    if charge_power is None or charge_power <= 0:
+        charge_power = device.get('power')
+        if charge_power is None:
+            charge_power = 3.7
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
