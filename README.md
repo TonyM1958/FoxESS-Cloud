@@ -216,9 +216,10 @@ f.charge_needed(forecast, annual_consumption, contingency, start_at, end_by, for
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
-+ contingency: adds charge to allow for variations in consumption and reduction in battery residual prior to charging. 1.0 is no variation. Default is 1.25 (+25%)
-+ force_charge: if set to 1, any remaining time between start_at and end_by has force charge set to preserve the battery. If 0, force charge is not set
-+ charge_power: the kW of charge that will be applied. By default, the power rating is derrived from the inverter model. Set this figure if you have reduced your max charge current
++ contingency: adds charge to allow for variations in consumption. 0% is no variation. Default is 25%
++ force_charge: if set to 1, any remaining time in the charge time period has force charge set to preserve the battery. If 0, force charge is not set
++ charge_power: kW charge that will be applied. By default, this is derrived from the inverter model. Set this figure to Battery Voltage x Max Charge Current if required
++ export_limit: set this is the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + efficiency: conversion factor from PV power or AC power to charge power. The default is 0.92 (92%)
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
@@ -238,10 +239,11 @@ charge_needed() uses a number of models to better estimate the state of the batt
 
 **f.daily_consumption**: maps the consumption for a day to the hours when more or less energy is consumed. It is a list of 24 values for the times 00, 01, 02, 03 .. 23. Preset lists are 'f.high_profile' (larger peaks at 8am and 6pm), 'f.medium_profile' (default, more balanced) and 'f.no_profile' (flat).
 
-**f.seasonal_sun**: maps solar generation against the time of day. This is broken down into 4 seasons: winter, spring, summer and autumn with 3 months each. Winter is Dec, Jan, Feb, Spring is Mar, Apr, May etc. Underlying this structure, there are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summar_sun' and 'f.autumn_sun'
+**f.seasonal_sun**: maps solar generation against the time of day. This is broken down into 4 seasons: winter, spring, summer and autumn with 3 months each. Winter is Dec, Jan, Feb, Spring is Mar, Apr, May etc. Underlying this structure, there are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summar_sun' and 'f.autumn_sun'. Seasonal_sun is used for manual and historic forecasts. When Solcast or Solar forcasts are used, the sun profile is taken from the forecast.
 
 The modelling works as follows:
 + estimates your consumption (including contigency) and forecast generation for the day
++ gets PV forecast data from Solcast or forecast.solar (if configured)
 + uses the charge available now and the expect charging or discharging of the battery to forecast the battery state
 + works out if there is any deficit (i.e. when discharge exceeds available)
 + reports the charge needed (deficit) or the minimum expected battery level
@@ -404,7 +406,8 @@ This setting can be:
 
 ## Version Info
 
-0.4.4: update forecasts to provide hourly profile and to use this in charge_needed()<br>
+0.4.5: Added more info around charge time, charge added and target SoC<br>
+0.4.4: Updated forecasts to provide hourly profile and to use this in charge_needed()<br>
 0.4.3: Updated charge_needed to better model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
 0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>

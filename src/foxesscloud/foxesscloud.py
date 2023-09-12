@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.4"
+version = "0.4.5"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1078,15 +1078,15 @@ seasonal_sun =   [winter_sun, spring_sun, summer_sun, autumn_sun]
 #  annual_consumption: the kWh consumed each year via the inverter
 #  contingency: a factor to add to allow for variations. Default is 25%
 #  force_charge: if True, force charge is set. If false, force charge is not set
-#  charge_power: the kW of charge that will be applied
+#  charge_power: the kW of charge that will be applied (battery voltage * max current)
 #  efficiency: inverter conversion factor from PV power to Battery and Battery to AC. The default is 95%
-#  charge_efficiency: efficiency of conversion from grid AC to battery energy. The default is 75%
+#  charge_efficiency: efficiency of conversion from grid AC to battery charge. The default is 88%
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 25, show_residual = None,
-        force_charge = None, timed_mode = None, charge_power = None, efficiency = None,
-        charge_efficiency = None, run_after = None, update_settings = 0):
+        force_charge = None, timed_mode = None, charge_power = None, export_limit = None,
+        efficiency = None, charge_efficiency = None, run_after = None, update_settings = 0):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -1099,7 +1099,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     # convert any boolean flag values and set default parameters
     force_charge = 1 if force_charge is not None and (force_charge == 1 or force_charge == True) else 0
     efficiency = 95 if efficiency is None else efficiency
-    charge_efficiency = 75 if charge_efficiency is None else charge_efficiency
+    charge_efficiency = 88 if charge_efficiency is None else charge_efficiency
     update_settings = 1 if update_settings is not None and (update_settings == 1 or update_settings == True) else 0
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_residual = 1 if show_residual is not None and (show_residual == 1 or show_residual == True) else 0
@@ -1153,14 +1153,15 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     print(f"  Current SoC = {soc}%")
     print(f"  Residual = {residual}kWh")
     print(f"  Available = {available}kWh")
-    # get charge power
-    if charge_power is None or charge_power <= 0:
-        charge_power = device.get('power')
-        if charge_power is None:
-            if device is not None:
-                model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
-                print(f"** could not get charge power for {model}, using 3.68kW")
-            charge_power = 3.68
+    # get charge power / export limit
+    device_power = device.get('power')
+    if device_power is None:
+        model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
+        print(f"** could not get power for {model}, using 3.68kW")
+        device_power = 3.68
+    charge_limit = round(device_power * charge_efficiency / 100, 1)
+    charge_limit = charge_power if charge_power is not None and charge_power < charge_limit else charge_limit
+    export_limit = device_power if export_limit is None else export_limit
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
@@ -1252,10 +1253,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
         elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['backup']):
             discharge_by_hour[i] = 0.12
         elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['feedin']):
-            discharge_by_hour[i] = 0.12 if charge_by_hour[i] > discharge_by_hour[i] else discharge_by_hour[i] - charge_by_hour[i]
-            charge_by_hour[i] = 0.0 if charge_by_hour[i] < charge_power else charge_by_hour[i] - charge_power
+            (discharge_by_hour[i], charge_by_hour[i]) = (0.12 if charge_by_hour[i] >= discharge_by_hour[i] else discharge_by_hour[i] - charge_by_hour[i],
+            0.0 if charge_by_hour[i] <= export_limit + discharge_by_hour[i] else charge_by_hour[i] - export_limit - discharge_by_hour[i])
         # cap charge power
-        charge_by_hour[i] = charge_power if charge_by_hour[i] > charge_power else charge_by_hour[i]
+        charge_by_hour[i] = charge_limit if charge_by_hour[i] > charge_limit else charge_by_hour[i]
     net_by_hour = []
     for chg, dis in zip(charge_by_hour, discharge_by_hour):
         net_by_hour.append(round(chg - dis, 3))
@@ -1276,7 +1277,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
         bat_timed[h] = current_state
         current_state += net
         h += 1
-    s = f"\nBattery Energy (kWh):\n" if show_residual == 1 else f"\nBattery SoC\n"
+    s = f"\nBattery Energy (kWh):\n" if show_residual == 1 else f"\nBattery SoC:\n"
     s += "               " * (int(hour_now) % 6)
     for h in sorted(bat_timed.keys()):
         s += "\n" if h > 0 and h % 6 == 0 else ""
@@ -1289,29 +1290,38 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     charge = round(reserve - min([bat_timed[h] for h in bat_timed.keys()]), 1)
     if charge < 0.0:
         min_residual = round(reserve - charge, 1)
-        print(f"  Lowest forecast SoC = {int(min_residual / capacity * 100)}% (Residual = {min_residual}kWh)")
-        charge = 0.0
-    else:
-        print(f"  Charge needed = {charge}kWh")
-        if (reserve + charge) > capacity:
-            bigger_battery = round(charge * 100 / (100 - min_soc), 1)
-            print(f"  ** requires battery capacity of {bigger_battery}kWh")
-    # calculate charge time after loss for AC-DC conversion and battery thermal loss
-    hours = round_time(charge / charge_power * 100 / charge_efficiency)
-    # don't charge for less than minimum time period
-    if hours > 0.0 and tariff is not None and hours < tariff['charge']['min_h']:
-        hours = tariff['charge']['min_h']
-    if hours > 0:
-        print(f"  Charge duration = {hours_time(hours)} with charge_power = {charge_power}kW")
-        print(f"  Charge time period = {hours_time(start_at)} - {hours_time(end_by)}{' (force charge)' if force_charge == 1 else ''}")
-    else:
+        print(f"\nLowest forecast SoC = {int(min_residual / capacity * 100)}% (Residual = {min_residual}kWh)")
         print(f"  No charging needed")
-    # work out charge periods settings
-    start1 = start_at
-    end1 = round_time(start1 + hours)
-    if end1 > end_by:
-        print(f"** charge end time {hours_time(end1)} exceeds end by {hours_time(end_by)}")
-        end1 = end_by
+        charge = 0.0
+        hours = 0.0
+        start1 = start_at
+        end1 = start1
+    else:
+        print(f"\nCharge needed = {charge}kWh")
+        start_residual = bat_timed[int(int(hour_now) + time_to_next)]
+        if (start_residual + charge) > capacity:
+            bigger_battery = round(start_residual + charge - reserve * 100 / (100 - min_soc), 1)
+            print(f"  ** charge requires a capacity of {bigger_battery}kWh")
+            charge = capacity - start_residual
+        # calculate charge time after losses from AC-DC conversion and battery loading
+        hours = round_time(charge / charge_limit * 100 / charge_efficiency)
+        # don't charge for less than minimum time period
+        if hours > 0.0 and tariff is not None and hours < tariff['charge']['min_h']:
+            hours = tariff['charge']['min_h']
+        start1 = start_at
+        end1 = round_time(start1 + hours)
+        if end1 > end_by:
+            print(f"** unable to add enough charge as end time {hours_time(end1)} is later than {hours_time(end_by)}")
+            end1 = end_by
+            hours = round_time(end1 - start1)
+        charge_added = round(charge_limit * hours * charge_efficiency / 100,1)
+        target_residual = round(start_residual + charge_added, 1)
+        target_residual = capacity if target_residual > capacity else target_residual
+        target_soc = int(target_residual / capacity * 100)
+        print(f"  Charge time period = {hours_time(start_at)} - {hours_time(end_by)}{' (force charge)' if force_charge == 1 else ''}")
+        print(f"  Charge time of {int(hours * 60)} minutes with charge limit of {charge_limit}kW adds {charge_added}kWh")
+        print(f"  Target SoC = {target_soc}% at {hours_time(end1)} (Residual = {target_residual}kWh)")
+        # work out charge periods settings
     if force_charge == 1:
         start2 = round_time(start1 if hours == 0 else end1 + 1 / 60)       # add 1 minute to end time
         start2 = end_by if start2 > end_by else start2

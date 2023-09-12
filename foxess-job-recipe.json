@@ -8,7 +8,7 @@
   "description": "Fox ESS management job - works out battery charge and uploads data to PV Output",
   "environment_variables": {
     "TARIFF": "octopus_flux",
-    "CHARGE_PARAMS": "force_charge=0,update_settings=1"
+    "CHARGE_PARAMS": "force_charge=0,update_settings=1,charge_power=4.2"
   },
   "working_directory": "/home/jovyan/workspace",
   "extra_packages": {
@@ -16,7 +16,7 @@
       "install": "random-user-agent foxesscloud"
     }
   },
-  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\nimport foxesscloud.foxesscloud as f\n\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = ${FOX_DEVICE_SN:-None}\nf.pv_api_key = ${PV_API_KEY:-None}\nf.pv_system_id = ${PV_SYSTEM_ID:-None}\nf.solcast_api_key = ${SOLCAST_API_KEY:-None}\nf.tou_periods = f.${TARIFF:-octopus_flux}\nf.solar_array($ARRAY1)\nf.solar_array($ARRAY2)\n\nf.charge_needed($CHARGE_PARAMS)\nf.set_pvoutput()\n\nEOF\n",
+  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\nimport foxesscloud.foxesscloud as f\n\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = ${FOX_DEVICE_SN:-None}\nf.pv_api_key = ${PV_API_KEY:-None}\nf.pv_system_id = ${PV_SYSTEM_ID:-None}\nf.solcast_api_key = ${SOLCAST_API_KEY:-None}\nf.tariff = f.${TARIFF:-octopus_flux}\nf.solar_array($ARRAY1)\nf.solar_array($ARRAY2)\n\nf.charge_needed($CHARGE_PARAMS)\nf.set_pvoutput()\n\nEOF\n",
   "git_repositories": [],
   "shared_folders": [],
   "secrets": [
