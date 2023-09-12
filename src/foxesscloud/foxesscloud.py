@@ -1100,6 +1100,11 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_residual = 1 if show_residual is not None and (show_residual == 1 or show_residual == True) else 0
     run_after = time_hours(run_after, 22)
+    # get charge power
+    if charge_power is None or charge_power <= 0:
+        charge_power = device.get('power')
+        if charge_power is None:
+            charge_power = 3.7
     # get dates and times
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
@@ -1267,10 +1272,6 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
             bigger_battery = round(charge * 100 / (100 - min_soc), 1)
             print(f"  ** requires battery capacity of {bigger_battery}kWh")
     # calculate charge time after loss for AC-DC conversion and battery thermal loss
-    if charge_power is None or charge_power <= 0:
-        charge_power = device.get('power')
-        if charge_power is None:
-            charge_power = 3.7
     hours = round_time(charge / charge_power * 100 / efficiency * 100 / efficiency)
     # don't charge for less than minimum time period
     if hours > 0.0 and tou_periods is not None and hours < tou_periods['charge']['min_h']:
