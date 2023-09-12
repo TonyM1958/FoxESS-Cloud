@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.1"
+version = "0.4.2"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
