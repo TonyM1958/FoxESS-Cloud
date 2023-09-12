@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  10 September 2023
+Updated:  12 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.3"
+version = "0.4.4"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -631,7 +631,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tou_periods, max_power_kw
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -719,14 +719,14 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
                 e = value / 12        # convert 5 minute sample kW to kWh energy
                 if e > 0.0:
                     kwh += e
-                    if tou_periods is not None:
-                        if hour_in (h, tou_periods['off_peak1']):
+                    if tariff is not None:
+                        if hour_in (h, tariff['off_peak1']):
                             kwh_off += e
-                        elif hour_in(h, tou_periods['off_peak2']):
+                        elif hour_in(h, tariff['off_peak2']):
                             kwh_off += e
-                        elif hour_in(h, tou_periods['peak']):
+                        elif hour_in(h, tariff['peak']):
                             kwh_peak += e
-                        elif hour_in(h, tou_periods['peak2']):
+                        elif hour_in(h, tariff['peak2']):
                             kwh_peak += e
                 else:
                     kwh_neg -= e
@@ -1044,7 +1044,7 @@ custom_periods = {'name': 'Custom',
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
-tou_periods = octopus_flux
+tariff = octopus_flux
 
 # how consumption varies by month across a year. 12 values.
 # month                J   F   M   A   M   J   J   A   S   O   N   D
@@ -1079,13 +1079,15 @@ seasonal_sun =   [winter_sun, spring_sun, summer_sun, autumn_sun]
 #  contingency: a factor to add to allow for variations. Default is 25%
 #  force_charge: if True, force charge is set. If false, force charge is not set
 #  charge_power: the kW of charge that will be applied
-#  efficiency: inverter conversion factor from PV power or AC power to charge power. The default is 92%
+#  efficiency: inverter conversion factor from PV power to Battery and Battery to AC. The default is 95%
+#  charge_efficiency: efficiency of conversion from grid AC to battery energy. The default is 75%
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 25, show_residual = None,
-        force_charge = None, timed_mode = None, charge_power = None, efficiency = 92, run_after = None, update_settings = 0):
-    global device, seasonality, solcast_api_key, debug_setting, tou_periods, solar_arrays
+        force_charge = None, timed_mode = None, charge_power = None, efficiency = None,
+        charge_efficiency = None, run_after = None, update_settings = 0):
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -1094,8 +1096,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
         s += f"\n  {k} = {args[k]}"
     if len(s) > 0:
         print(f"Parameters: {s}")
-    # convert any boolean flag values
+    # convert any boolean flag values and set default parameters
     force_charge = 1 if force_charge is not None and (force_charge == 1 or force_charge == True) else 0
+    efficiency = 95 if efficiency is None else efficiency
+    charge_efficiency = 75 if charge_efficiency is None else charge_efficiency
     update_settings = 1 if update_settings is not None and (update_settings == 1 or update_settings == True) else 0
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_residual = 1 if show_residual is not None and (show_residual == 1 or show_residual == True) else 0
@@ -1105,27 +1109,35 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     hour_now = time_hours(f"{now.hour:02}:{now.minute:02}")
+    print(f"  datetime = {today} {hours_time(hour_now)}")
+    if tariff is not None:
+        print(f"  tariff = {tariff['name']}")
     # get next charge times from am/pm charge times
-    start_am = time_hours(tou_periods['off_peak1']['start'] if tou_periods is not None else 2.0)
-    end_am = time_hours(tou_periods['off_peak1']['end'] if tou_periods is not None else 5.0)
-    force_charge_am = 1 if tou_periods is not None and tou_periods['off_peak1']['force'] == 1 and force_charge == 1 else 0
-    time_to_am = int(round_time(start_am - hour_now + 1)) if start_am > 0 else 24
-    start_pm = time_hours(tou_periods['off_peak2']['start'] if tou_periods is not None else 0.0)
-    end_pm = time_hours(tou_periods['off_peak2']['end'] if tou_periods is not None else 0.0)
-    force_charge_pm = 1 if tou_periods is not None and tou_periods['off_peak2']['force'] == 1 and force_charge == 1 else 0
-    time_to_pm = int(round_time(start_pm - hour_now + 1)) if start_pm > 0 else 24
+    start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
+    end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
+    force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else 1
+    time_to_am = int(round_time(start_am - hour_now + 1))
+    start_pm = time_hours(tariff['off_peak2']['start'] if tariff is not None else 0.0)
+    end_pm = time_hours(tariff['off_peak2']['end'] if tariff is not None else 0.0)
+    force_charge_pm = 0 if tariff is not None and tariff['off_peak2']['force'] == 0 or force_charge == 0 else 1
+    time_to_pm = int(round_time(start_pm - hour_now + 1)) if start_pm > 0 else None
     # choose next charge time period
-    time_to_next = min(time_to_am, time_to_pm)      # 
-    run_time = time_to_next + max(time_to_am, time_to_pm) + 1
-    charge_am = time_to_next == time_to_am
-    start_at = start_am if charge_am else start_pm
-    end_by = end_am if charge_am else end_pm
-    force_charge = force_charge_am if charge_am else force_charge_pm
+    if time_to_pm is not None and time_to_pm < time_to_am:
+        time_to_next = time_to_pm
+        run_time = time_to_am + 1
+        charge_pm = True
+    else:
+        time_to_next = time_to_am
+        run_time = time_to_am + 25 if time_to_pm is None else time_to_pm + 1
+        charge_pm = False
+    start_at = start_pm if charge_pm else start_am
+    end_by = end_pm if charge_pm else end_am
+    force_charge = force_charge_pm if charge_pm else force_charge_am
     if debug_setting > 1:
-        print(f"\nstart_am = {start_am}, end_am = {end_am}, force_am = {force_am}, time_to_am = {time_to_am}")
-        print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_pm}, time_to_pm = {time_to_pm}")
+        print(f"\nstart_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
+        print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
-        print(f"time_to_next = {time_to_next}, run_time = {run_time}")
+        print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
     # get battery info
     get_settings()
     get_battery()
@@ -1145,7 +1157,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     if charge_power is None or charge_power <= 0:
         charge_power = device.get('power')
         if charge_power is None:
-            charge_power = 3.7
+            if device is not None:
+                model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
+                print(f"** could not get charge power for {model}, using 3.68kW")
+            charge_power = 3.68
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
@@ -1167,24 +1182,32 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     print(f"  With {contingency}% contingency = {consumption}kWh")
     # get Solcast data
     solcast_value = None
+    solcast_profile = None
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
-        if hour_now >= run_after or (tou_periods is not None and hour_now >= tou_periods['solcast']['start']):
+        if hour_now >= run_after or (tariff is not None and hour_now >= tariff['solcast']['start']):
             fsolcast = Solcast(quiet=True, estimated=0)
             if hasattr(fsolcast, 'daily'):
-                solcast_value = round(fsolcast.daily[tomorrow],1)
+                solcast_value = round(fsolcast.daily[tomorrow]['kwh'], 1)
                 print(f"\nSolcast forecast: {solcast_value}kWh")
+                solcast_profile = []
+                for h in range(0, 24):
+                    solcast_profile.append(c_float(fsolcast.daily[tomorrow]['hourly'].get(h)))
         else:
-            print(f"\nSolcast forecast will run after {hours_time(tou_periods['solcast']['start'])}")
+            print(f"\nSolcast forecast will run after {hours_time(tariff['solcast']['start'])}")
     # get forecast.solar data
     solar_value = None
+    solar_profile = None
     if solar_arrays is not None:
-        if hour_now >= run_after or (tou_periods is not None and hour_now >= tou_periods['solar']['start']):
+        if hour_now >= run_after or (tariff is not None and hour_now >= tariff['solar']['start']):
             fsolar = Solar(quiet=True)
             if hasattr(fsolar, 'daily'):
-                solar_value = round(fsolar.daily[tomorrow],1)
+                solar_value = round(fsolar.daily[tomorrow]['kwh'], 1)
                 print(f"\nSolar forecast: {solar_value}kWh")
+                solar_profile = []
+                for h in range(0, 24):
+                    solar_profile.append(c_float(fsolar.daily[tomorrow]['hourly'].get(h)))
         else:
-            print(f"\nSolar forecast will run after {hours_time(tou_periods['solar']['start'])}")
+            print(f"\nSolar forecast will run after {hours_time(tariff['solar']['start'])}")
     # get generation data
     history = get_raw('week', d=today, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
@@ -1202,20 +1225,22 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
     generation = round(pv_sum / 3, 1)
     print(f"  Average of last 3 days = {generation}kWh")
     # choose expected value
+    sun_profile = seasonal_sun[now.month // 3 % 4]
     if forecast is not None:
         expected = forecast
-        print(f"\nUsing manual forecast: {expected}kWh")
+        print(f"\nUsing manual forecast with seasonal_sun profile: {expected}kWh")
     elif solcast_value is not None:
         expected = solcast_value
-        print(f"\nUsing Solcast forecast: {expected}kWh")
+        sun_profile = solcast_profile
+        print(f"\nUsing Solcast forecast and profile: {expected}kWh")
     elif solar_value is not None:
         expected = solar_value
-        print(f"\nUsing Solar forecast: {expected}kWh")
+        sun_profile = solar_profile
+        print(f"\nUsing Solar forecast and profile: {expected}kWh")
     else:
         expected = generation
-        print(f"\nUsing generation history: {expected}kWh")
+        print(f"\nUsing generation with seasonal_sun profile: {expected}kWh")
     # get 24 hour profile for battery charge and discharge with losses for DC-DC and DC-AC conversion
-    sun_profile = seasonal_sun[now.month // 3 % 4]
     charge_by_hour = [round(expected * efficiency / 100 * h / sum(sun_profile), 3) for h in sun_profile]
     discharge_by_hour = [round(consumption / efficiency * 100 * h / sum(daily_consumption),3) for h in daily_consumption]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
@@ -1224,9 +1249,9 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
             discharge_by_hour[i] = 0.12
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
             discharge_by_hour[i] = 0.12
-        elif timed_mode == 1 and tou_periods is not None and hour_in(h, tou_periods['backup']):
+        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['backup']):
             discharge_by_hour[i] = 0.12
-        elif timed_mode == 1 and tou_periods is not None and hour_in(h, tou_periods['feedin']):
+        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['feedin']):
             discharge_by_hour[i] = 0.12 if charge_by_hour[i] > discharge_by_hour[i] else discharge_by_hour[i] - charge_by_hour[i]
             charge_by_hour[i] = 0.0 if charge_by_hour[i] < charge_power else charge_by_hour[i] - charge_power
         # cap charge power
@@ -1267,17 +1292,18 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25, 
         print(f"  Lowest forecast SoC = {int(min_residual / capacity * 100)}% (Residual = {min_residual}kWh)")
         charge = 0.0
     else:
-        print(f"  Charge needed = {charge}kWh:")
+        print(f"  Charge needed = {charge}kWh")
         if (reserve + charge) > capacity:
             bigger_battery = round(charge * 100 / (100 - min_soc), 1)
             print(f"  ** requires battery capacity of {bigger_battery}kWh")
     # calculate charge time after loss for AC-DC conversion and battery thermal loss
-    hours = round_time(charge / charge_power * 100 / efficiency * 100 / efficiency)
+    hours = round_time(charge / charge_power * 100 / charge_efficiency)
     # don't charge for less than minimum time period
-    if hours > 0.0 and tou_periods is not None and hours < tou_periods['charge']['min_h']:
-        hours = tou_periods['charge']['min_h']
+    if hours > 0.0 and tariff is not None and hours < tariff['charge']['min_h']:
+        hours = tariff['charge']['min_h']
     if hours > 0:
-        print(f"  Charge time is {hours_time(hours)} with {charge_power}kW charge power")
+        print(f"  Charge duration = {hours_time(hours)} with charge_power = {charge_power}kW")
+        print(f"  Charge time period = {hours_time(start_at)} - {hours_time(end_by)}{' (force charge)' if force_charge == 1 else ''}")
     else:
         print(f"  No charging needed")
     # work out charge periods settings
@@ -1388,13 +1414,13 @@ max_pv_power = 100
 def get_pvoutput(d = None, tou = 0):
     if d is None:
         d = date_list()[0]
-    tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
+    tou = 0 if (tou == 1 or tou == True) and tariff is None else tou
     tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1:
-            print(f" Time of use: {tou_periods['name']}")
+            print(f" Time of use: {tariff['name']}")
         print(f"------------------------------------------------")
         for x in d:
             csv = get_pvoutput(x)
@@ -1482,13 +1508,13 @@ def set_pvoutput(d = None, tou = 0):
         return None
     if d is None:
         d = date_list(span='2days', today = 1)
-    tou = 0 if (tou == 1 or tou == True) and tou_periods is None else tou
+    tou = 0 if (tou == 1 or tou == True) and tariff is None else tou
     tou = 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"\n--------------- set_pvoutput -----------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1 :
-            print(f"Time of use: {tou_periods['name']}\n")
+            print(f"Time of use: {tariff['name']}\n")
         print(f"------------------------------------------------")
         for x in d[:10]:
             csv = set_pvoutput(x)
@@ -1613,10 +1639,14 @@ class Solcast :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
-                        time = period_end[11:16]
+                        hour = int(period_end[11:13])
                         if date not in self.daily.keys() :
-                            self.daily[date] = 0.0
-                        self.daily[date] = round(self.daily[date] + c_float(f.get('pv_estimate')) / 2, 3)      # 30 minute kw yield / 2 = kwh
+                            self.daily[date] = {'hourly': {}, 'kwh': 0.0}
+                        if hour not in self.daily[date]['hourly'].keys():
+                            self.daily[date]['hourly'][hour] = 0.0
+                        value = c_float(f.get('pv_estimate')) / 2                   # 30 minute power kw, yield / 2 = kwh
+                        self.daily[date]['kwh'] = round(self.daily[date]['kwh'] + value, 3)
+                        self.daily[date]['hourly'][hour] = round(self.daily[date]['hourly'][hour] + value, 3)
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -1624,7 +1654,7 @@ class Solcast :
         while self.days > 2 * days :
             self.keys = self.keys[1:-1]
             self.days = len(self.keys)
-        self.values = [self.daily[d] for d in self.keys]
+        self.values = [self.daily[d]['kwh'] for d in self.keys]
         self.total = round(sum(self.values),3)
         if self.days > 0 :
             self.avg = round(self.total / self.days, 3)
@@ -1637,7 +1667,7 @@ class Solcast :
             return 'Solcast: no days in forecast'
         s = f'\nSolcast forecast for {self.days} days'
         for d in self.keys :
-            y = self.daily[d]
+            y = self.daily[d]['kwh']
             day = datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]
             s += f"\n   {d} {day}: {y:5.2f} kwh"
         return s
@@ -1651,12 +1681,12 @@ class Solcast :
         plt.figure(figsize=self.figsize)
         # plot estimated
         x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) < int(self.today.replace('-',''))]
-        y = [self.daily[d] for d in self.keys if int(d.replace('-','')) < int(self.today.replace('-',''))]
+        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) < int(self.today.replace('-',''))]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='orange', linestyle='solid', label='estimated', linewidth=2)
         # plot forecasts
         x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) >= int(self.today.replace('-',''))]
-        y = [self.daily[d] for d in self.keys if int(d.replace('-','')) >= int(self.today.replace('-',''))]
+        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) >= int(self.today.replace('-',''))]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
         # annotations
@@ -1736,6 +1766,8 @@ class Solar :
             self.arrays = deepcopy(solar_arrays)
             self.results = {}
             for name, a in self.arrays.items():
+                if debug_setting > 0 and not quiet:
+                    print(f"Getting data for {name} array")
                 path = f"{a['lat']}/{a['lon']}/{a['dec']}/{a['az']}/{a['kwp']}"
                 params = {'start': '00:00', 'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
                 response = requests.get(solar_url + self.api_key + 'estimate/' + path, params = params)
@@ -1747,6 +1779,8 @@ class Solar :
                         return
                 self.results[name] = response.json().get('result')
             if solar_save is not None :
+                if debug_setting > 0 and not quiet:
+                    print(f"Saving data to {solar_save}")
                 file = open(solar_save, 'w')
                 json.dump({'date': self.today, 'arrays': self.arrays, 'results': self.results}, file, indent=4, ensure_ascii= False)
                 file.close()
@@ -1755,13 +1789,21 @@ class Solar :
             if self.results[k].get('watt_hours_day') is not None:
                 whd = self.results[k]['watt_hours_day']
                 for d in whd.keys():
-                    if self.daily.get(d) is None:
-                        self.daily[d] = 0.0
-                    self.daily[d] = round(self.daily[d] + whd[d] / 1000, 3)
+                    if d not in self.daily.keys():
+                        self.daily[d] = {'hourly': {}, 'kwh': 0.0}
+                    self.daily[d]['kwh'] = round(self.daily[d]['kwh'] + whd[d] / 1000, 3)
+            if self.results[k].get('watt_hours_period') is not None:
+                whp = self.results[k]['watt_hours_period']
+                for dt in whp.keys():
+                    date = dt[:10]
+                    hour = int(dt[11:13])
+                    if hour not in self.daily[date]['hourly'].keys():
+                        self.daily[date]['hourly'][hour] = 0.0
+                    self.daily[date]['hourly'][hour] = round((self.daily[date]['hourly'][hour] + whp[dt]) / 1000, 3)
         # drop forecast for today as it already happened
         self.keys = sorted(self.daily.keys())[1:]
         self.days = len(self.keys)
-        self.values = [self.daily[d] for d in self.keys]
+        self.values = [self.daily[d]['kwh'] for d in self.keys]
         self.total = round(sum(self.values), 3)
         if self.days > 0:
             self.avg = round(self.total / self.days, 3)
@@ -1774,7 +1816,7 @@ class Solar :
             return 'Solar: no days in forecast'
         s = f'\nSolar yield for {self.days} days'
         for d in self.keys :
-            y = self.daily[d]
+            y = self.daily[d]['kwh']
             day = datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]
             s += f"\n   {d} {day} : {y:5.2f} kwh"
         return s
@@ -1788,7 +1830,7 @@ class Solar :
         plt.figure(figsize=self.figsize)
         # plot forecasts
         x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys]
-        y = [self.daily[d] for d in self.keys]
+        y = [self.daily[d]['kwh'] for d in self.keys]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='forecast', linewidth=2)
         # annotations

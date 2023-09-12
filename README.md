@@ -276,10 +276,10 @@ Custom periods can be configured for specific times if required:
 
 A list of the tariffs is held in f.tariff_list
 
-The active tariff in configured in 'f.tou_periods'. The default setting is:
+The active tariff in configured in 'f.tariff'. The default setting is:
 
 ```
-f.tou_periods = f.octopus_flux
+f.tariff = f.octopus_flux
 ```
 
 Note: when TOU is applied, energy values are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
@@ -404,6 +404,7 @@ This setting can be:
 
 ## Version Info
 
+0.4.4: update forecasts to provide hourly profile and to use this in charge_needed()<br>
 0.4.3: Updated charge_needed to better model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
 0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
@@ -412,7 +413,7 @@ This setting can be:
 0.3.7: Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw()<br>
 0.3.6: Added max_power_kw check in get_raw() and check exported > generation in get_pvoutput(). Some updates to charge_needed()<br>
 0.3.4: updated report_data for quick totals. Boolean parameters accept 0/1 or True/False<br>
-0.3.3: Updated Jupyter notebooks and default parameter values. Added tariffs and tou_periods with settings for Octopus Flux, Intelligent, Cosy and Go<br>
+0.3.3: Updated Jupyter notebooks and default parameter values. Added preset tariffs and tariff settings for Octopus Flux, Intelligent, Cosy and Go<br>
 0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>
 0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
 0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data. Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>
