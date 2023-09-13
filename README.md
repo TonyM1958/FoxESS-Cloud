@@ -261,7 +261,7 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + e: end date
 + limit: maximum number of days. The default is 200
 + span: the range of dates. One of 'day', 'week', 'month' or 'year'
-+ today: if set to 1 allows today to be included, otherwise, date list will stop at yesterday
++ today: 1 allows today to be included, 2 allows future dates to be included. Default is 0, date list will stop at yesterday
 
 
 ## Time of Use
@@ -348,7 +348,9 @@ Get and display solar data from your solcast.com account using your API key:
 ```
 f.solcast_api_key = "my.solcast_api_key"
 fcast = f.Solcast()
+print(fcast)
 fcast.plot_daily()
+fcast.plot_hourly()
 ```
 
 Returns a 7 day forecast. Optional parameters are:
@@ -364,9 +366,11 @@ Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
 Get and display solar data from forecast.solar:
 
 ```
-f.solar_array('South', lat=51.1789, lon=-1.8262, kwp=3.2)
+f.solar_array('South', lat=51.1789, lon=-1.8262, kwp=6.4)
 fcast = f.Solar()
+print(fcast)
 fcast.plot_daily()
+fcast.plot_hourly()
 ```
 
 Returns a forecast for today and tomorrow. Optional parameters are:
@@ -407,6 +411,7 @@ This setting can be:
 
 ## Version Info
 
+0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list()
 0.4.5: Added more info around charge time, charge added and target SoC. Added min_charge to tariff.<br>
        Added plot_hourly() to forecasts. Added plot for battery SoC and energy<br>
 0.4.4: Updated forecasts to provide hourly profile and to use this in charge_needed()<br>
