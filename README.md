@@ -219,8 +219,7 @@ All the parameters are optional:
 + contingency: adds charge to allow for variations in consumption. 0% is no variation. Default is 25%
 + force_charge: if set to 1, any remaining time in the charge time period has force charge set to preserve the battery. If 0, force charge is not set
 + charge_power: kW charge that will be applied. By default, this is derrived from the inverter model. Set this figure to Battery Voltage x Max Charge Current if required
-+ export_limit: set this is the inverter has an export limit. By default, this is set to the power rating of the inverter model
-+ efficiency: conversion factor from PV power or AC power to charge power. The default is 0.92 (92%)
++ export_power: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 0.
@@ -411,7 +410,7 @@ This setting can be:
 
 ## Version Info
 
-0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list()
+0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list(). Moved charge_needed configuration to charge_config[]<br>
 0.4.5: Added more info around charge time, charge added and target SoC. Added min_charge to tariff.<br>
        Added plot_hourly() to forecasts. Added plot for battery SoC and energy<br>
 0.4.4: Updated forecasts to provide hourly profile and to use this in charge_needed()<br>
