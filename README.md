@@ -222,7 +222,8 @@ All the parameters are optional:
 + efficiency: conversion factor from PV power or AC power to charge power. The default is 0.92 (92%)
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
-+ show_residual: 1 shows residual battery energy instead of SoC. The default is 0.
++ show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 0.
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 1.
 
 If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the lowest value from the manual forecast, solcast or forecast.solar or average of the last 7 days, depending on what is available.
 
@@ -404,6 +405,7 @@ This setting can be:
 
 ## Version Info
 
+0.4.5: Added min_charge to tariff. Added plot_hourly() to forecasts. Added plot battery SoC<br>
 0.4.4: update forecasts to provide hourly profile and to use this in charge_needed()<br>
 0.4.3: Updated charge_needed to better model battery charge state<br>
 0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
