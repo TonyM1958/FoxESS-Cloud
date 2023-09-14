@@ -410,6 +410,7 @@ This setting can be:
 
 ## Version Info
 
+0.4.8: Fix coding error getting Solcast forecast in charge_needed()
 0.4.7: Updated to use forecast data from today / tomorrow and to provide charge_current instead of charge_power<br>
        Charge power is now calculated from the batery voltage.<br>
 0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list(). Moved charge_needed configuration to charge_config[]<br>

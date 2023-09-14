@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.7"
+version = "0.4.8"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1121,7 +1121,7 @@ def timed_list(data, hour_now, run_time=None):
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
+def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         force_charge = None, timed_mode = None, charge_current = None, export_power = None,
         update_settings = 0, show_data = None, show_plot = None, run_after = None):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
@@ -1245,8 +1245,8 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
                     solcast_profile.append(c_float(fsolcast.daily[tomorrow]['hourly'].get(h)))
                 solcast_timed = []
                 for h in range(int(hour_now), 24):
-                    solcast_timed.append(c_float(fsolar.daily[today]['hourly'].get(h)))
-                solcast_timed = (solar_timed + solar_profile + solar_profile)[:run_time]
+                    solcast_timed.append(c_float(fsolcast.daily[today]['hourly'].get(h)))
+                solcast_timed = (solcast_timed + solcast_profile + solcast_profile)[:run_time]
         else:
             print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast']['start'])}")
     # get forecast.solar data
