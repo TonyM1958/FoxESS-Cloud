@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  13 September 2023
+Updated:  14 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.6"
+version = "0.4.7"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -281,7 +281,7 @@ def get_device(sn=None):
     device['eps'] = 'E' in model_code
     parts = model_code.split('-')
     model = parts[0]
-    if model not in ['H1', 'H3', 'KH', 'AC1', 'AC3', 'AIOH1', 'AIOH3']:
+    if model not in ['KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
         print(f"** device model not recognised for deviceType: {device['deviceType']}")
         return device
     device['model'] = model
@@ -294,6 +294,15 @@ def get_device(sn=None):
             break
     if device.get('power') is None:
         print(f"** device power not found for deviceType: {device['deviceType']}")
+    # set max charge current
+    if model in ['KH']:
+        device['max_charge_current'] = 50
+    elif model in ['H1', 'AC1']:
+        device['max_charge_current'] = 35
+    elif model in ['H3', 'AC3', 'AIOH3']:
+        device['max_charge_current'] = 26
+    else:
+        device['max_charge_current'] = 40
     return device
 
 ##################################################################################################
@@ -1054,6 +1063,7 @@ charge_config = {
     'conversion_loss': 0.95,          # conversion factor for inverter power handling
     'battery_loss': 0.93,             # conversion factor from battery charge to to residual
     'operation_loss': 0.1,            # inverter operating power kW
+    'volt_swing': 4,                  # bat volt % swing from min_soc to full
     'solcast': {'start' : 21.0},
     'solar':   {'start': 21.0}
 }
@@ -1104,7 +1114,7 @@ def timed_list(data, hour_now, run_time=None):
 #  annual_consumption: the kWh consumed each year via the inverter
 #  contingency: a factor to add to allow for variations. Default is 25%
 #  force_charge: if True, force charge is set. If false, force charge is not set
-#  charge_power: the kW of charge that will be applied (battery voltage * max current)
+#  charge_current: the maximum charge current that will be applied. Default is 35A
 #  export_limit: the kW of charge that will be applied (battery voltage * max current)
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
@@ -1112,7 +1122,7 @@ def timed_list(data, hour_now, run_time=None):
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
-        force_charge = None, timed_mode = None, charge_power = None, export_power = None,
+        force_charge = None, timed_mode = None, charge_current = None, export_power = None,
         update_settings = 0, show_data = None, show_plot = None, run_after = None):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
@@ -1169,25 +1179,38 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     get_battery()
     min_soc = battery_settings['minGridSoc']
     soc = battery['soc']
+    bat_volt = battery['volt']
     residual = round(battery['residual']/1000, 1)
     capacity = round(residual * 100 / soc if soc > 0 else residual, 1)
     reserve = round(capacity * min_soc / 100, 1)
     available = round(residual - reserve, 1)
     print(f"\nBattery:")
     print(f"  Capacity = {capacity}kWh")
+    print(f"  Voltage = {bat_volt}v")
     print(f"  Min SoC on Grid = {min_soc}%")
     print(f"  Current SoC = {soc}%")
     print(f"  Residual = {residual}kWh")
     print(f"  Available = {available}kWh")
     # get charge power / export limit
     device_power = device.get('power')
-    if device_power is None:
+    device_current = device.get('max_charge_current')
+    if device_power is None or device_current is None:
         model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
-        print(f"** could not get power for {model}, using 3.68kW")
+        print(f"** could not get parameters for {model}")
         device_power = 3.68
+        device_current = 35
+    # compensate for bat_volt change with SoC
+    mid_volt = bat_volt * (1 - charge_config['volt_swing'] / 100 * (soc - 50) / 100)
     charge_limit = round(device_power * charge_config['conversion_loss'], 1)
-    charge_limit = charge_power if charge_power is not None and charge_power < charge_limit else charge_limit
+    # over-ride inverter power limit if we are limited on charge current
+    charge_power = round(mid_volt * (charge_current if charge_current is not None else device_current) / 1000, 1)
+    charge_limit = charge_power if charge_power < charge_limit else charge_limit
+    # configure export limit
     export_limit = (device_power if export_power is None else export_power) / charge_config['conversion_loss']
+    if debug_setting > 1:
+        print(f"device_power = {device_power}, device_current = {device_current}")
+        print(f"bat_volt = {bat_volt}, soc = {soc}, mid_volt = {mid_volt}, charge_current = {charge_current}, charge_power = {charge_power}")
+        print(f"charge_limit = {charge_limit}, export_limit = {export_limit}")
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
@@ -1220,6 +1243,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
                 solcast_profile = []
                 for h in range(0, 24):
                     solcast_profile.append(c_float(fsolcast.daily[tomorrow]['hourly'].get(h)))
+                solcast_timed = []
+                for h in range(int(hour_now), 24):
+                    solcast_timed.append(c_float(fsolar.daily[today]['hourly'].get(h)))
+                solcast_timed = (solar_timed + solar_profile + solar_profile)[:run_time]
         else:
             print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast']['start'])}")
     # get forecast.solar data
@@ -1234,6 +1261,10 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
                 solar_profile = []
                 for h in range(0, 24):
                     solar_profile.append(c_float(fsolar.daily[tomorrow]['hourly'].get(h)))
+                solar_timed = []
+                for h in range(int(hour_now), 24):
+                    solar_timed.append(c_float(fsolar.daily[today]['hourly'].get(h)))
+                solar_timed = (solar_timed + solar_profile + solar_profile)[:run_time]
         else:
             print(f"\nSolar forecast will run after {hours_time(charge_config['solar']['start'])}")
     # get generation data
@@ -1254,52 +1285,56 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     generation = round(pv_sum / gen_days, 1)
     print(f"  Average of last {gen_days} days = {generation}kWh")
     # choose expected value
-    sun_profile = seasonal_sun[now.month // 3 % 4]['sun']
-    sun_name = seasonal_sun[now.month // 3 % 4]['name']
+    quarter = now.month // 3 % 4
+    sun_name = seasonal_sun[quarter]['name']
+    sun_profile = seasonal_sun[quarter]['sun']
+    sun_sum = sum(sun_profile)
+    sun_timed = timed_list(sun_profile, hour_now, run_time)
     if forecast is not None:
         expected = forecast
+        generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing manual forecast of {expected}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
-        sun_profile = solcast_profile
+        generation_timed = solcast_timed
         print(f"\nUsing Solcast forecast of {expected}kWh")
     elif solar_value is not None:
         expected = solar_value
-        sun_profile = solar_profile
+        generation_timed = solar_timed
         print(f"\nUsing Solar forecast of {expected}kWh")
     else:
         expected = generation
+        generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing forecast generation of {expected}kWh with {sun_name} sun profile")
-    # build 24 hour profiles for generation, consumption, charge and discharge (after losses)
-    generation_by_hour = [round(expected * x / sum(sun_profile), 3) for x in sun_profile]
-    charge_by_hour = [round(x * charge_config['conversion_loss'], 3) for x in generation_by_hour]
-    consumption_by_hour = [round(consumption * x / sum(daily_consumption),3) for x in daily_consumption]
-    discharge_by_hour = [round(x / charge_config['conversion_loss'], 3) for x in consumption_by_hour]
+    # build profiles for consumption, charge and discharge (after losses)
+    daily_timed = timed_list(daily_consumption, hour_now, run_time)
+    daily_sum = sum(daily_consumption)
+    consumption_timed = [round(consumption * x / daily_sum, 3) for x in daily_timed]
+    charge_timed = [round(x * charge_config['conversion_loss'], 3) for x in generation_timed]
+    discharge_timed = [round(x / charge_config['conversion_loss'], 3) for x in consumption_timed]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
-    for i in range(0, 24):
-        if force_charge_am == 1 and hour_in(i, {'start': start_am, 'end': end_am}):
-            discharge_by_hour[i] = 0.0
-        elif force_charge_pm == 1 and hour_in(i, {'start': start_pm, 'end': end_pm}):
-            discharge_by_hour[i] = 0.0
-        elif timed_mode == 1 and tariff is not None and hour_in(i, tariff['backup']):
-            discharge_by_hour[i] = 0.0
-        elif timed_mode == 1 and tariff is not None and hour_in(i, tariff['feedin']):
-            (discharge_by_hour[i], charge_by_hour[i]) = (0.0 if charge_by_hour[i] >= discharge_by_hour[i] else discharge_by_hour[i] - charge_by_hour[i],
-            0.0 if charge_by_hour[i] <= export_limit + discharge_by_hour[i] else charge_by_hour[i] - export_limit - discharge_by_hour[i])
+    for i in range(0, run_time):
+        h = int(hour_now) + i
+        if force_charge_am == 1 and hour_in(h, {'start': start_am, 'end': end_am}):
+            discharge_timed[i] = 0.0
+        elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
+            discharge_timed[i] = 0.0
+        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['backup']):
+            discharge_timed[i] = 0.0
+        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['feedin']):
+            (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
+            0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
         # cap charge power
-        charge_by_hour[i] = charge_limit if charge_by_hour[i] > charge_limit else charge_by_hour[i]
+        charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
     # work out change in battery residual from charge / discharge
-    kwh_by_hour = []
-    for charge, discharge in zip(charge_by_hour, discharge_by_hour):
-        kwh_by_hour.append(round(charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'], 3))
-    # align net charge / discharge to hour_now and extend to cover required run_time:
-    kwh_timed = timed_list(kwh_by_hour, hour_now, run_time)
+    kwh_timed = []
+    for charge, discharge in zip(charge_timed, discharge_timed):
+        kwh_timed.append(round(charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'], 3))
     if debug_setting > 1:
-        print(f"\nGeneration by Hour: {generation_by_hour}")
-        print(f"Charge by Hour: {charge_by_hour}")
-        print(f"Consumption by Hour: {consumption_by_hour}")
-        print(f"Discharge by Hour: {discharge_by_hour}")
-        print(f"kWh by Hour: {kwh_by_hour}")
+        print(f"\nGeneration timed: {generation_timed}")
+        print(f"Charge timed: {charge_timed}")
+        print(f"Consumption timed: {consumption_timed}")
+        print(f"Discharge timed: {discharge_timed}")
         print(f"kWh timed: {kwh_timed}")
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now what it was at the start of current hour
@@ -1338,11 +1373,11 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
         else:
             title = f"Energy Flow kWh"
             plt.plot(x, bat_timed, label='Battery', color='blue')
-            plt.plot(x, timed_list(generation_by_hour, hour_now, run_time), label='Generation', color='orange')
-            plt.plot(x, timed_list(consumption_by_hour, hour_now, run_time), label='Consumption', color='red')
+            plt.plot(x, generation_timed, label='Generation', color='orange')
+            plt.plot(x, consumption_timed, label='Consumption', color='red')
             if show_plot == 3:
-                plt.plot(x, timed_list(charge_by_hour, hour_now, run_time), label='Charge', color='green')
-                plt.plot(x, timed_list(discharge_by_hour, hour_now, run_time), label='Discharge', color='brown')
+                plt.plot(x, charge_timed, label='Charge', color='green')
+                plt.plot(x, discharge_timed, label='Discharge', color='brown')
         plt.title(title, fontsize=12)
         plt.grid()
         if show_plot > 1:
@@ -1394,7 +1429,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 25,
     if update_settings == 1:
         set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
     else:
-        print(f"\n** no changes have been made - use update_settings=1 to set your battery charge times")
+        print(f"\n** no changes have been made, update_settings=1 will set your battery charge times")
     return None
 
 ##################################################################################################
@@ -1752,13 +1787,13 @@ class Solcast :
         plt.figure(figsize=(figure_width, figure_width/3))
         print()
         # plot estimated
-        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) <= int(self.today.replace('-',''))]
-        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) <= int(self.today.replace('-',''))]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if d <= self.today]
+        y = [self.daily[d]['kwh'] for d in self.keys if d <= self.today]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='estimated', linewidth=2)
         # plot forecasts
-        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) > int(self.today.replace('-',''))]
-        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) > int(self.today.replace('-',''))]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if d > self.today]
+        y = [self.daily[d]['kwh'] for d in self.keys if d > self.today]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='orange', linestyle='solid', label='forecast', linewidth=2)
         # annotations
@@ -1795,7 +1830,7 @@ class Solcast :
         hours = sorted([h for h in self.daily[day]['hourly'].keys()])
         x = [hours_time(h) for h in hours]
         y = [self.daily[day]['hourly'][h] for h in hours]
-        color = 'orange' if int(day.replace('-','')) > int(self.today.replace('-','')) else 'green'
+        color = 'orange' if day > self.today else 'green'
         if x is not None and len(x) != 0 :
             plt.plot(x, y, color=color, linestyle='solid', linewidth=2)
         title = f"Solcast hourly yield on {day}"
@@ -1940,13 +1975,13 @@ class Solar :
         plt.figure(figsize=(figure_width, figure_width/3))
         print()
         # plot estimated
-        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) <= int(self.today.replace('-',''))]
-        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) <= int(self.today.replace('-',''))]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if d <= self.today]
+        y = [self.daily[d]['kwh'] for d in self.keys if d <= self.today]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='green', linestyle='solid', label='estimated', linewidth=2)
         # plot forecasts
-        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if int(d.replace('-','')) > int(self.today.replace('-',''))]
-        y = [self.daily[d]['kwh'] for d in self.keys if int(d.replace('-','')) > int(self.today.replace('-',''))]
+        x = [f"{d} {datetime.strptime(d, '%Y-%m-%d').strftime('%A')[:3]} " for d in self.keys if d > self.today]
+        y = [self.daily[d]['kwh'] for d in self.keys if d > self.today]
         if x is not None and len(x) != 0 :
             plt.bar(x, y, color='orange', linestyle='solid', label='forecast', linewidth=2)
         # annotations
@@ -1987,7 +2022,7 @@ class Solar :
         hours = sorted([h for h in self.daily[day]['hourly'].keys()])
         x = [hours_time(h) for h in hours]
         y = [self.daily[day]['hourly'][h] for h in hours]
-        color = 'orange' if int(day.replace('-','')) > int(self.today.replace('-','')) else 'green'
+        color = 'orange' if day > self.today else 'green'
         if x is not None and len(x) != 0 :
             plt.plot(x, y, color=color, linestyle='solid', linewidth=2)
         title = f"Solar hourly yield on {day}"

@@ -210,7 +210,7 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, annual_consumption, contingency, start_at, end_by, force_charge, charge_power, efficiency, run_after, update_setings)
+f.charge_needed(forecast, annual_consumption, contingency, force_charge, charge_current, run_after, update_setings)
 ```
 
 All the parameters are optional:
@@ -218,7 +218,7 @@ All the parameters are optional:
 + annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
 + contingency: adds charge to allow for variations in consumption. 0% is no variation. Default is 25%
 + force_charge: if set to 1, any remaining time in the charge time period has force charge set to preserve the battery. If 0, force charge is not set
-+ charge_power: kW charge that will be applied. By default, this is derrived from the inverter model. Set this figure to Battery Voltage x Max Charge Current if required
++ charge_current: the maximum charge current that will be applied. By default, this is 35A. Set this figure if have a different maximum charge current
 + export_power: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
@@ -410,6 +410,8 @@ This setting can be:
 
 ## Version Info
 
+0.4.7: Updated to use forecast data from today / tomorrow and to provide charge_current instead of charge_power<br>
+       Charge power is now calculated from the batery voltage.<br>
 0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list(). Moved charge_needed configuration to charge_config[]<br>
 0.4.5: Added more info around charge time, charge added and target SoC. Added min_charge to tariff.<br>
        Added plot_hourly() to forecasts. Added plot for battery SoC and energy<br>

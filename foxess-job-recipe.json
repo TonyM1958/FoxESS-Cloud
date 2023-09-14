@@ -8,7 +8,7 @@
   "description": "Fox ESS management job - works out battery charge and uploads data to PV Output",
   "environment_variables": {
     "TARIFF": "octopus_flux",
-    "CHARGE_PARAMS": "update_settings=0,force_charge=0,charge_power=4.1"
+    "CHARGE_PARAMS": "update_settings=0,force_charge=0,charge_current=13"
   },
   "working_directory": "/home/jovyan/workspace",
   "extra_packages": {
