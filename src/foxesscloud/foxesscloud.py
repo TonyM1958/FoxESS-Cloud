@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  14 September 2023
+Updated:  15 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.8"
+version = "0.4.9"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -36,8 +36,6 @@ user_agent_rotator = UserAgent(software_names=software_names, operating_systems=
 ##################################################################################################
 ##################################################################################################
 
-token = {'value': None, 'valid_from': None, 'valid_for': timedelta(hours=1).seconds, 'user_agent': None, 'lang': 'en'}
-
 def query_date(d, offset = None):
     if d is not None and len(d) < 18:
         d += ' 00:00:00'
@@ -50,12 +48,22 @@ def query_date(d, offset = None):
 username = None
 password = None
 
+token = None
+token_save = "token.txt"
+token_renewal = timedelta(hours=2).seconds       # interval before token needs to be renewed
+
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
-    global username, password, token, device_list, device, device_id, debug_setting
+    global username, password, token, device_list, device, device_id, debug_setting, token_save, token_renewal
+    if token is None:
+        token = {'value': None, 'valid_from': None, 'valid_for': token_renewal, 'user_agent': None, 'lang': 'en'}
+    if token['value'] is None and os.path.exists(token_save):
+        file = open(token_save)
+        token = json.load(file)
+        file.close()
     time_now = datetime.now()
-    if token['valid_from'] is not None:
-        if (time_now - token['valid_from']).seconds <= token['valid_for']:
+    if token['value'] is not None and token['valid_from'] is not None:
+        if (time_now - datetime.fromisoformat(token['valid_from'])).seconds <= token['valid_for']:
             if debug_setting > 1:
                 print(f"token is still valid")
             return token['value']
@@ -75,12 +83,17 @@ def get_token():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no login result data")
+        errno = response.json().get('errno')
+        print(f"** no login result data, errno = {errno}")
         return None
     token['value'] = result.get('token')
     if token['value'] is None:
         print(f"** no token  in result data")
-    token['valid_from'] = time_now
+    token['valid_from'] = time_now.isoformat()
+    if token_save is not None :
+        file = open(token_save, 'w')
+        json.dump(token, file, indent=4, ensure_ascii= False)
+        file.close()
     return token['value']
 
 ##################################################################################################
@@ -102,7 +115,8 @@ def get_info():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no info result")
+        errno = response.json().get('errno')
+        print(f"** no info result, errno = {errno}")
         return None
     info = result
     response = requests.get(url="https://www.foxesscloud.com/c/v0/user/access", headers=headers)
@@ -140,7 +154,8 @@ def get_site(name=None):
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no site list result data")
+        errno = response.json().get('errno')
+        print(f"** no site list result data, errno = {errno}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -187,7 +202,8 @@ def get_logger(sn=None):
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no logger list result data")
+        errno = response.json().get('errno')
+        print(f"** no logger list result data, errno = {errno}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -242,7 +258,8 @@ def get_device(sn=None):
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no device list result data")
+        errno = response.json().get('errno')
+        print(f"** no device list result data, errno = {errno}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -324,7 +341,8 @@ def get_vars():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no variables result")
+        errno = response.json().get('errno')
+        print(f"** no variables result, errno = {errno}")
         return None
     vars = result.get('variables')
     if vars is None:
@@ -352,7 +370,8 @@ def get_firmware():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no firmware result data")
+        errno = response.json().get('errno')
+        print(f"** no firmware result data, errno = {errno}")
         return None
     firmware = result.get('softVersion')
     if firmware is None:
@@ -381,7 +400,8 @@ def get_battery():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no battery info")
+        errno = response.json().get('errno')
+        print(f"** no battery info, errno = {errno}")
         return None
     battery = result
     return battery
@@ -408,7 +428,8 @@ def get_charge():
         return None
     times = result.get('times')
     if times is None:
-        print(f"** no times data")
+        errno = response.json().get('errno')
+        print(f"** no times data, errno = {errno}")
         return None
     if battery_settings is None:
         battery_settings = {}
@@ -502,7 +523,8 @@ def get_min():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no min soc result data")
+        errno = response.json().get('errno')
+        print(f"** no min soc result data, errno = {errno}")
         return None
     if battery_settings is None:
         battery_settings = {}
@@ -576,7 +598,8 @@ def get_work_mode():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no work mode result data")
+        errno = response.json().get('errno')
+        print(f"** no work mode result data, errno = {errno}")
         return None
     values = result.get('values')
     if values is None:
@@ -639,20 +662,23 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
-def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
+def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None, plot=0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(minutes=5), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
-    if time_span == 'week':
+    if time_span == 'week' or type(d) is list:
+        days = d if type(d) is list else date_list(e=d, span='week',today=True)
         result_list = []
-        for d in date_list(e=d, span='week',today=True):
-            result = get_raw('day', d=d, v=v, summary=summary, save=save)
+        for day in days:
+            result = get_raw('day', d=day, v=v, summary=summary, save=save, plot=0)
             if result is None:
                 return None
             result_list += result
+        if plot > 0:
+            plot_raw(result_list, plot)
         return result_list
     if v is None:
         if raw_vars is None:
@@ -676,7 +702,8 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
             return None
         result = response.json().get('result')
         if result is None:
-            print(f"** no raw data")
+            errno = response.json().get('errno')
+            print(f"** no raw data, errno = {errno}")
             return None
     else:
         file = open(load)
@@ -688,6 +715,8 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
     if summary == 0 or time_span == 'hour':
+        if plot > 0:
+            plot_raw(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
     if debug_setting > 1:
@@ -725,7 +754,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
             if energy:
-                e = value / 12        # convert 5 minute sample kW to kWh energy
+                e = value / 12      # convert kW samples to kWh energy
                 if e > 0.0:
                     kwh += e
                     if tariff is not None:
@@ -762,7 +791,55 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
             if energy:
                 var['unit'] = 'kWh'
             del var['data']
+    if plot > 0 and summary < 2:
+        plot_raw(result)
     return result
+
+# plot raw results data
+def plot_raw(result, plot=1):
+    if result is None:
+        return
+    # work out what we have
+    units = []
+    vars = []
+    dates = []
+    for v in result:
+        if v.get('data') is not None:
+            if v['unit'] not in units:
+                units.append(v['unit'])
+            if v['variable'] not in vars:
+                vars.append(v['variable'])
+            if v['date'] not in dates:
+                dates.append(v['date'])
+    dates = sorted(dates)
+    if len(vars) == 0 or len(dates) == 0:
+        return
+    # plot variables by date with the same units on the same charts
+    for unit in units:
+        lines = 0
+        for d in dates:
+            if lines == 0:
+                plt.figure(figsize=(figure_width, figure_width/3))
+                plt.xticks(ticks=range(0,24), labels=[hours_time(h) for h in range(0,24)], rotation=90, fontsize=8)
+            for v in [v for v in result if v['unit'] == unit and v['date'] == d]:
+                n = len(v['data'])
+                x = [time_hours(v['data'][i]['time'][11:16]) for i in range(0, n)]
+                y = [v['data'][i]['value'] for i in range(0, n)]
+                name = v['name']
+                label = f"{name} {d}" if plot == 2 and len(dates) > 1 else name
+                plt.plot(x, y ,label=label)
+                lines += 1
+            if lines >= 1 and (plot == 1 or d == dates[-1]) :
+                if lines > 1:
+                    plt.legend(fontsize=6)
+                title = f"{unit}"
+                title = f" {d}, {title}" if plot == 1 or len(dates) == 1 or lines == 1 else title
+                title = f"{name}, {title}" if len(vars) == 1 or lines == 1 else title
+                plt.title(title, fontsize=12)
+                plt.grid()
+                plt.show()
+                lines = 0
+    return
 
 ##################################################################################################
 # get energy report data in kWh
@@ -777,10 +854,21 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None):
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
-def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None):
+def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
         return None
+    # process list of days
+    if d is not None and type(d) is list:
+        result_list = []
+        for day in d:
+            result = get_report(report_type, d=day, v=v, summary=summary, save=save, load=load, plot=0)
+            if result is None:
+                return None
+            result_list += result
+        if plot > 0:
+            plot_report(result_list, plot)
+        return result_list
     # validate parameters
     report_type = report_type.lower()
     summary = 1 if summary == True else 0 if summary == False else summary
@@ -816,7 +904,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                 return None
             side_result = response.json().get('result')
             if side_result is None:
-                print(f"** no side report data")
+                errno = response.json().get('errno')
+                print(f"** no side report data, errno = {errno}")
                 return None
     if summary < 2:
         query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
@@ -826,7 +915,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             return None
         result = response.json().get('result')
         if result is None:
-            print(f"** no main report data")
+            errno = response.json().get('errno')
+            print(f"** no main report data, errno = {errno}")
             return None
         # prune results back to only valid, complete data for day, week, month or year
         if report_type == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
@@ -854,7 +944,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         # fake result for summary only report
         result = []
         for x in v:
-            result.append({'variable': x, 'data': []})
+            result.append({'variable': x, 'data': [], 'date': d})
     if load is not None:
         file = open(load)
         result = json.load(file)
@@ -880,6 +970,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             min = value if min is None or value < min else min
         # correct day total from side report
         var['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
+        var['type'] = report_type
         if summary < 2:
             var['sum'] = round(sum,3)
             var['average'] = round(var['total'] / count, 3) if count > 0 else None
@@ -889,8 +980,61 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             var['max_index'] = [y['value'] for y in var['data']].index(max) if max is not None else None
             var['min'] = round(min,3) if min is not None else None
             var['min_index'] = [y['value'] for y in var['data']].index(min) if min is not None else None
+    if plot > 0 and summary < 2:
+        plot_report(result, plot)
     return result
 
+# plot get_report result
+def plot_report(result, plot=1):
+    if result is None:
+        return
+    # work out what we have
+    vars = []
+    types = []
+    index = []
+    dates = []
+    for v in result:
+        if v.get('data') is not None:
+            if v['variable'] not in vars:
+                vars.append(v['variable'])
+            if v['type'] not in types:
+                types.append(v['type'])
+            if v['date'] not in dates:
+                dates.append(v['date'])
+            for i in [x['index'] for x in v['data']]:
+                if i not in index:
+                    index.append(i)
+    print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+    if len(vars) == 0:
+        return
+    # plot variables by date with the same units on the same charts
+    lines = 0
+    width = 1 / (len(vars) if plot == 2 else len(dates))
+    align = 0.0
+    for var in vars:
+        if lines == 0:
+            plt.figure(figsize=(figure_width, figure_width/3))
+            if types[0] == 'day':
+                plt.xticks(ticks=index, labels=[hours_time(h) for h in range(0,24)],rotation=90, fontsize=8)
+        for v in [v for v in result if v['variable'] == var]:
+            d = v['date']
+            n = len(v['data'])
+            x = [i + align  for i in range(1, n+1)]
+            y = [v['data'][i]['value'] for i in range(0, n)]
+            label = f"{var} {d}"
+            plt.bar(x, y ,label=label, width=width)
+            align += width
+            lines += 1
+        if lines >= 1 and (plot == 1 or d == dates[-1]) :
+            if lines > 1:
+                plt.legend(fontsize=6)
+            title = var
+            plt.title(title, fontsize=12)
+            plt.grid()
+            plt.show()
+            lines = 0
+            align = 0.0
+    return
 
 ##################################################################################################
 # get earnings data
@@ -910,7 +1054,8 @@ def get_earnings():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no earnings data")
+        errno = response.json().get('errno')
+        print(f"** no earnings data, errno = {errno}")
         return None
     return result
 
