@@ -224,8 +224,8 @@ All the parameters are optional:
 + export_power: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
-+ show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 0.
-+ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 1.
++ show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 0.
 
 If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the lowest value from the manual forecast, solcast or forecast.solar or average of the last 7 days, depending on what is available.
 
