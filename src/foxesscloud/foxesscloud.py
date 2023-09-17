@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.4.9"
+version = "0.5.0"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -249,6 +249,8 @@ def get_device(sn=None):
             return device
     if debug_setting > 1:
         print(f"getting device")
+    if sn is None and device_sn is not None and len(device_sn) == 15:
+        sn = device_sn
     # get device list
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
@@ -662,7 +664,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
-def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None, plot=0):
+def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
@@ -714,6 +716,8 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None, p
         file = open(file_name, 'w')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
+    for var in result:
+        var['date'] = d[0:10]
     if summary == 0 or time_span == 'hour':
         if plot > 0:
             plot_raw(result, plot)
@@ -778,7 +782,6 @@ def get_raw(time_span='hour', d=None, v=None, summary=0, save=None, load=None, p
                 var['kwh_off'] = round(kwh_off,3)
                 var['kwh_peak'] = round(kwh_peak,3)
                 var['kwh_neg'] = round(kwh_neg,3)
-        var['date'] = d[0:10]
         var['count'] = count
         var['average'] = round(sum / count, 3) if count > 0 else None
         var['max'] = round(max, 3) if max is not None else None
@@ -832,7 +835,7 @@ def plot_raw(result, plot=1):
             if lines >= 1 and (plot == 1 or d == dates[-1]) :
                 if lines > 1:
                     plt.legend(fontsize=6)
-                title = f"{unit}"
+                title = f"Units = {unit}"
                 title = f" {d}, {title}" if plot == 1 or len(dates) == 1 or lines == 1 else title
                 title = f"{name}, {title}" if len(vars) == 1 or lines == 1 else title
                 plt.title(title, fontsize=12)
@@ -1004,12 +1007,12 @@ def plot_report(result, plot=1):
             for i in [x['index'] for x in v['data']]:
                 if i not in index:
                     index.append(i)
-    print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+#    print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
     if len(vars) == 0:
         return
     # plot variables by date with the same units on the same charts
     lines = 0
-    width = 1 / (len(vars) if plot == 2 else len(dates))
+    width = 0.8 / (len(vars) if plot == 2 else len(dates))
     align = 0.0
     for var in vars:
         if lines == 0:
@@ -1033,7 +1036,7 @@ def plot_report(result, plot=1):
             plt.grid()
             plt.show()
             lines = 0
-            align = 0.0
+            align = -0.4
     return
 
 ##################################################################################################
@@ -1139,7 +1142,7 @@ def format_period(period):
 
 
 ##################################################################################################
-# time of user (TOU)
+# Tariffs / time of user (TOU)
 # time values are decimal hours
 ##################################################################################################
 
@@ -1205,10 +1208,12 @@ charge_config = {
     'min_kwh': 1.0,                   # minimum to add in kwh
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
-    'conversion_loss': 0.95,          # conversion factor for inverter power handling
-    'battery_loss': 0.93,             # conversion factor from battery charge to to residual
+    'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
+    'conversion_loss': 0.94,          # conversion loss from inverter power conversion
+    'battery_loss': 0.95,             # conversion loss from battery charge to residual
     'operation_loss': 0.1,            # inverter operating power kW
-    'volt_swing': 4,                  # bat volt % swing from min_soc to full
+    'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
+    'volt_overdrive': 1.007,          # increase in bat volt when charging
     'solcast': {'start' : 21.0},
     'solar':   {'start': 21.0}
 }
@@ -1241,14 +1246,58 @@ seasonal_sun =   [
     {'name': 'Summer', 'sun': summer_sun},
     {'name': 'Autumn', 'sun': autumn_sun},
 ]
+# --------- helper functions for charge_needed() ---------
 
-# helper function: rotate 24 hour list so it aligns with hour_now and cover run_time:
+# rotate 24 hour list so it aligns with hour_now and cover run_time:
 def timed_list(data, hour_now, run_time=None):
     h = int(hour_now)
     data1 = data[h:] + data[:h]
     if run_time is not None:
         data1 = (data1 + data1)[:run_time]
     return data1
+
+# take a report and return (average value and 24 hour profile)
+def report_value_profile(result):
+    if type(result) is not list or result[0]['type'] != 'day':
+        print(f"** can only create 24 hour profile from report_type 'day' or 'week'")
+        return None
+    data = []
+    for h in range(0,24):
+        data.append((0.0, 0)) # value sum, count of values
+    totals = 0
+    n = 0
+    for day in result:
+        hours = 0
+        # sum and count available values by hour
+        for i in range(0, len(day['data'])):
+            data[i] = (data[i][0] + day['data'][i]['value'], data[i][1]+1)
+            hours += 1
+        totals += day['total'] * (24 / hours if hours >= 4 else 1)
+        n += 1
+    daily_average = round(totals / n, 3) if n !=0 else None
+    # average for each hour
+    by_hour = []
+    for h in data:
+        by_hour.append(h[0] / h[1] if h[1] != 0 else 0.0)   # sum / count
+    if daily_average is None:
+        print(f"** cannot create profile where daily average is None")
+        return None
+    # rescale to match daily_average
+    current_total = sum(by_hour)
+    return (daily_average, [round(h * daily_average / current_total, 3) for h in by_hour])
+
+# take forecast and return (value and timed profile)
+def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
+    if not hasattr(forecast, 'daily'):
+        return None
+    value = round(forecast.daily[tomorrow]['kwh'], 1)
+    profile = []
+    for h in range(0, 24):
+        profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(h)))
+    timed = []
+    for h in range(int(hour_now), 24):
+        timed.append(c_float(forecast.daily[today]['hourly'].get(h)))
+    return (value, (timed + profile + profile)[:run_time])
 
 ##################################################################################################
 # calculate charge needed from current battery charge, forecast yield and expected load
@@ -1257,7 +1306,7 @@ def timed_list(data, hour_now, run_time=None):
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
 #  annual_consumption: the kWh consumed each year via the inverter
-#  contingency: a factor to add to allow for variations. Default is 25%
+#  contingency: a factor to add to allow for variations. Default is 20%
 #  force_charge: if True, force charge is set. If false, force charge is not set
 #  charge_current: the maximum charge current that will be applied. Default is 35A
 #  export_limit: the kW of charge that will be applied (battery voltage * max current)
@@ -1343,12 +1392,14 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
         print(f"** could not get parameters for {model}")
         device_power = 3.68
-        device_current = 35
-    # compensate for bat_volt change with SoC
-    mid_volt = bat_volt * (1 - charge_config['volt_swing'] / 100 * (soc - 50) / 100)
+        device_current = 26
+    # battery voltage when charging
+    charge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100) * charge_config['volt_overdrive']
+    # charge power limit for inverter, after conversion losses
     charge_limit = round(device_power * charge_config['conversion_loss'], 1)
-    # over-ride inverter power limit if we are limited on charge current
-    charge_power = round(mid_volt * (charge_current if charge_current is not None else device_current) / 1000, 1)
+    # charge power if we are limited by charge current
+    charge_power = round(charge_volt * (charge_current if charge_current is not None else device_current) / 1000, 1)
+    # effective limit for charge power (InvBatVolt x InvBatCurrent)
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
     # configure export limit
     export_limit = (device_power if export_power is None else export_power) / charge_config['conversion_loss']
@@ -1359,39 +1410,39 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
-        print(f"\nEstimate of consumption = {consumption}kWh")
+        consumption_by_hour = daily_consumption
+        print(f"\nEstimated consumption = {consumption}kWh")
+        consumption = round(consumption * (1 + contingency / 100),1)
     else:
-        history = get_report('week', d=today, v='loads',summary=2)[0]
-        load_history = {}
-        for i, date in enumerate(date_list(span='week', today=True)):
-            load_history[date] = round(history['data'][i]['value'],3)
-        con_days = charge_config['consumption_days']
-        consumption = round(sum([load_history[d] for d in sorted(load_history.keys())[-con_days:]]) / con_days, 1)
+        consumption_days = charge_config['consumption_days']
+        consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
+        consumption_span = charge_config['consumption_span']
+        consumption_span = 'week' if consumption_span not in ['week', 'weekday'] else consumption_span
+        history = get_report('day', d = date_list(span=consumption_span, today=1)[-consumption_days:], v='loads')
+        (consumption, consumption_by_hour) = report_value_profile(history)
         print(f"\nConsumption (kWh):")
         s = ""
-        for d in sorted(load_history.keys()):
-            s += f"  {d} = {load_history[d]:4.1f},"
+        for h in history:
+            s += f"  {h['date']} = {h['total']:4.1f},"
         print(s[:-1])
-        print(f"  Average of last {con_days} days = {consumption}kWh")
-    # add contingency to consumption
+        s = ""
+        print(f"  Average of last {consumption_days} {consumption_span}s = {consumption}kWh")
+    # factor in contingency on consumption
     consumption = round(consumption * (1 + contingency / 100),1)
     print(f"  With {contingency}% contingency = {consumption}kWh")
+    # create time line for consumption
+    daily_sum = sum(consumption_by_hour)
+    consumption_timed = timed_list([round(consumption * x / daily_sum, 3) for x in consumption_by_hour], hour_now, run_time)
+    # add contingency to consumption
     # get Solcast data
     solcast_value = None
     solcast_profile = None
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
         if hour_now >= run_after or hour_now >= charge_config['solcast']['start']:
             fsolcast = Solcast(quiet=True, estimated=0)
-            if hasattr(fsolcast, 'daily'):
-                solcast_value = round(fsolcast.daily[tomorrow]['kwh'], 1)
+            if fsolcast is not None:
+                (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
                 print(f"\nSolcast forecast: {solcast_value}kWh")
-                solcast_profile = []
-                for h in range(0, 24):
-                    solcast_profile.append(c_float(fsolcast.daily[tomorrow]['hourly'].get(h)))
-                solcast_timed = []
-                for h in range(int(hour_now), 24):
-                    solcast_timed.append(c_float(fsolcast.daily[today]['hourly'].get(h)))
-                solcast_timed = (solcast_timed + solcast_profile + solcast_profile)[:run_time]
         else:
             print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast']['start'])}")
     # get forecast.solar data
@@ -1400,16 +1451,9 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
     if solar_arrays is not None:
         if hour_now >= run_after or hour_now >= charge_config['solar']['start']:
             fsolar = Solar(quiet=True)
-            if hasattr(fsolar, 'daily'):
-                solar_value = round(fsolar.daily[tomorrow]['kwh'], 1)
+            if fsolar is not None:
+                (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
                 print(f"\nSolar forecast: {solar_value}kWh")
-                solar_profile = []
-                for h in range(0, 24):
-                    solar_profile.append(c_float(fsolar.daily[tomorrow]['hourly'].get(h)))
-                solar_timed = []
-                for h in range(int(hour_now), 24):
-                    solar_timed.append(c_float(fsolar.daily[today]['hourly'].get(h)))
-                solar_timed = (solar_timed + solar_profile + solar_profile)[:run_time]
         else:
             print(f"\nSolar forecast will run after {hours_time(charge_config['solar']['start'])}")
     # get generation data
@@ -1451,10 +1495,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         expected = generation
         generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing forecast generation of {expected}kWh with {sun_name} sun profile")
-    # build profiles for consumption, charge and discharge (after losses)
-    daily_timed = timed_list(daily_consumption, hour_now, run_time)
-    daily_sum = sum(daily_consumption)
-    consumption_timed = [round(consumption * x / daily_sum, 3) for x in daily_timed]
+    # build profiles for charge and discharge (after losses)
     charge_timed = [round(x * charge_config['conversion_loss'], 3) for x in generation_timed]
     discharge_timed = [round(x / charge_config['conversion_loss'], 3) for x in consumption_timed]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
@@ -1596,6 +1637,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
         latest_date -= timedelta(days=1)
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else None
+    step = 1
     if first is None and last is None:
         last = latest_date
     if span is not None:
@@ -1607,6 +1649,11 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
             # e.g. yesterday and today
             last = first + timedelta(days=1) if first is not None else last
             first = last - timedelta(days=1) if first is None else first
+        elif span == 'weekday':
+            # e.g. last 7 days with same day of the week
+            last = first + timedelta(days=42) if first is not None else last
+            first = last - timedelta(days=42) if first is None else first
+            step = 7
         elif span == 'week':
             # number of days in a week less 1 day
             last = first + timedelta(days=6) if first is not None else last
@@ -1640,7 +1687,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
         d, last = last, d
     l = [datetime.strftime(d, '%Y-%m-%d')]
     while d < last  and len(l) < limit:
-        d += timedelta(days=1)
+        d += timedelta(days=step)
         l.append(datetime.strftime(d, '%Y-%m-%d'))
     return l
 
@@ -1863,7 +1910,7 @@ class Solcast :
                 if response.status_code == 429:
                     print(f"\nSolcast API call limit reached for today")
                 else:
-                    print(f"Solcast: response code getting resource_id was {response.status_code}")
+                    print(f"Solcast: response code getting rooftop_sites was {response.status_code}")
                 return
             sites = response.json().get('sites')
             if debug_setting > 0 and not quiet:

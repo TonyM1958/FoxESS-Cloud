@@ -24,7 +24,6 @@ f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
 
 f.solcast_api_key = "my.solcast_api_key"
-f.solcast_rids = ["my.solcast_rid1","my.solcast_rid2"]
 ```
 
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
@@ -217,38 +216,44 @@ f.charge_needed(forecast, annual_consumption, contingency, force_charge, charge_
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
-+ annual_consumption: the kWh consumption each year, delivered via the inverter. Default is your average consumption of the last 7 days
-+ contingency: adds charge to allow for variations in consumption. 0% is no variation. Default is 25%
-+ force_charge: if set to 1, any remaining time in the charge time period has force charge set to preserve the battery. If 0, force charge is not set
-+ charge_current: the maximum charge current that will be applied. By default, this is 35A. Set this figure if have a different maximum charge current
++ annual_consumption: your kWh consumption each year (optional, see below)
++ contingency: allows for variations in your consumption. 0% is no variation. Default is 20%
++ force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
++ charge_current: the maximum charge current that will be applied. By default, this is worked out from your inverter model. Set this if have changed your maximum charge current
 + export_power: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 0.
 
-If a manual forecast is not provided but Solcast credentials have been set, your solcast forecast will be loaded and displayed. The average of the last 7 days generation will also be shown based on the power reported for PV and CT2 inputs. The figure used for tomorrow's generation will be the lowest value from the manual forecast, solcast or forecast.solar or average of the last 7 days, depending on what is available.
-
-Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
-
-If an annual_consumption is not provided, the average of the last 7 days consumption based on the load power reported by the inverter will be used. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption
-
 ### Modelling
 
 charge_needed() uses a number of models to better estimate the state of the battery.
 
-**f.seasonality**: where an annual consumption figure isprovided, daily consumption is calculated by dividing annual_consumption by 365 and applying seasonality that decreases consumption in the summer and increases it in winter. The seasonality is a list of weightings by month for Jan, Feb, Mar, Apr etc. Preset lists are 'f.high_seasonality' (recommend where electric heating is ued), 'f.medium_seasonality' (default) amd 'f.no_seasonality' (all months the same).
+**Manual Consumption:** You can provide your 'annual_consumption' in kWh e.g. 5500. This figure is factored down to a daily consumption by dividing by 365 and applying **f.seasonality**. This normally decreases consumption in the summer and increases it in winter. Seasonality is a list of weightings by month for Jan, Feb, Mar, Apr etc. Preset lists are 'f.high_seasonality' (recommend where electric heating is ued), 'f.medium_seasonality' (default) amd 'f.no_seasonality' (all months the same). The daily consumption is profiled by hour using **f.daily_consumption**. This maps your consumption for a day to the hours when more or less energy is consumed. It is a list of 24 values for the times 00, 01, 02, 03 .. 23. Preset lists are 'f.high_profile' (larger peaks at 8am and 6pm), 'f.medium_profile' (default, more balanced) and 'f.no_profile' (flat).
 
-**f.daily_consumption**: maps the consumption for a day to the hours when more or less energy is consumed. It is a list of 24 values for the times 00, 01, 02, 03 .. 23. Preset lists are 'f.high_profile' (larger peaks at 8am and 6pm), 'f.medium_profile' (default, more balanced) and 'f.no_profile' (flat).
+**Historic Consumption:** If annual_consumption is not provided, your consumption history is used. By default, this looks at your average consumption for the last 3 days using the load power reported by your inverter. For systems with multiple inverters where CT2 is not connected, the load power may not be correct. For this and other cases where you want to set your consumption, provide your annual_consumption.
 
-**f.seasonal_sun**: maps solar generation against the time of day. This is broken down into 4 seasons: winter, spring, summer and autumn with 3 months each. Winter is Dec, Jan, Feb, Spring is Mar, Apr, May etc. Underlying this structure, there are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summar_sun' and 'f.autumn_sun'. Seasonal_sun is used for manual and historic forecasts. When Solcast or Solar forcasts are used, the sun profile is taken from the forecast.
+**Manual Forecast:** You can provide a specific 'forecast' in kWh e.g. 20. This is profiled using **f.seasonal_sun** to map solar generation to the time of day. The mapping is broken down into 4 seasons: winter, spring, summer and autumn (winter is Dec, Jan, Feb, spring is Mar, Apr, May etc). There are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summer_sun' and 'f.autumn_sun'. Seasonal_sun is used for manual and historic forecasts
 
-The modelling works as follows:
-+ estimates your consumption (including contigency) and forecast generation for the day
-+ gets PV forecast data from Solcast or forecast.solar (if configured)
-+ uses the charge available now and the expect charging or discharging of the battery to forecast the battery state
-+ works out if there is any deficit (i.e. when discharge exceeds available)
+**Solcast:** If you provide an API key for Solcast, your forecast will be downloaded after 9pm each day and used as the basis for your next days generation.
+
+**Solar:** if you configure one or more **f.solar_array**, forecast.solar will be called to provide a forrecast for your next days generation.
+
+**Historic Generation:** If 'forecast' is not provided and Solcast and Solar forecasts are not available, your generation history is used. By default, this looks at your average solar generation for the last 3 days and applies the **f.seasonal_sun** profile.
+
+Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+
+
+Given the data available, the modelling works as follows:
++ gets current information on your battery
++ estimates your consumption (including contigency)
++ gets forecast data from Solcast or forecast.solar (if configured)
++ gets your generation history
++ uses the charge available now and the expected charging or discharging of the battery to forecast the battery state
++ works out if there is a deficit (i.e. when the battery would be discharged below your min_soc)
 + reports the charge needed (deficit) or the minimum expected battery level
++ updates your battery charge settings (if update_settings=1)
 
 ## Date Ranges
 
@@ -261,19 +266,25 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + s: start date
 + e: end date
 + limit: maximum number of days. The default is 200
-+ span: the range of dates. One of 'day', 'week', 'month' or 'year'
++ span: the range of dates. One of 'day', 'week', 'month' or 'year', '2days' or 'weekday'
 + today: 1 allows today to be included, 2 allows future dates to be included. Default is 0, date list will stop at yesterday
 
+You can use 'span' as follows:
++ 'day' provides a single day
++ 'week' will provide the dates of 7 consequetive days
++ 'month' will provide the dates of the days up to the same date in the preceeding (or follwing) month
++ '2days' will provide the dates of yesterday and today
++ 'weekday' will provide the dates of the same day of the week, going backwards (or forwards) up to 7 weeks
 
-## Time of Use
+## Tariffs
 
-Time Of Use (TOU) periods configure when your battery can be charged and can be use to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
+Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
 + f.octous_flux: charging from 02:00 to 05:00, off-peak from 02:00 to 05:00, peak from 16:00 to 19:00
 + f.intelligent_octopus: charging from 23:30 to 05:00. off-peak from 23:30 to 05:30
 + f.octopus_cosy: charging from 04:00 to 07:00, off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00
-+ f.octopus_go: charging rofm 00:30 to 04:30, off peak from 00:30 to 04:30
++ f.octopus_go: charging from 00:30 to 04:30, off peak from 00:30 to 04:30
 
 Custom periods can be configured for specific times if required:
 + f.custom_periods: charging from 02:00 to 05:00, no off-peak or peak times
@@ -286,13 +297,14 @@ The active tariff in configured in 'f.tariff'. The default setting is:
 f.tariff = f.octopus_flux
 ```
 
-Note: when TOU is applied, energy values are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
+Note: when TOU is applied, energy values uploaded to PV Output are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
 
 Time period settings are held as decimal hours. Functions are available to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
 
 ```
-f.time_hours(s, d)
-f.hours_time(h, ss)
+f.time_hours(s, d)                          # convert time to decimal hours. d is the default value if s is None
+f.hours_time(h, ss)                         # convert decimal hours to time
+f.hours_in(h, {'start': a, 'end': b})       # True if decimal hour h is in the time period a -> b
 ```
 
 Where:
