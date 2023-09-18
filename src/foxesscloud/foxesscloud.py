@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  15 September 2023
+Updated:  18 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.0"
+version = "0.5.1"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -910,6 +910,10 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                 errno = response.json().get('errno')
                 print(f"** no side report data, errno = {errno}")
                 return None
+            for var in side_result:
+                for data in var['data']:
+                    if data['value'] >= 201536307.2:
+                        data['value'] -= 201536307.2 
     if summary < 2:
         query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
@@ -921,6 +925,11 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             errno = response.json().get('errno')
             print(f"** no main report data, errno = {errno}")
             return None
+        # correct errors in report values:
+        for var in result:
+            for data in var['data']:
+                if data['value'] >= 201536307.2:
+                    data['value'] -= 201536307.2 
         # prune results back to only valid, complete data for day, week, month or year
         if report_type == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
             for var in result:
@@ -1272,7 +1281,7 @@ def report_value_profile(result):
         for i in range(0, len(day['data'])):
             data[i] = (data[i][0] + day['data'][i]['value'], data[i][1]+1)
             hours += 1
-        totals += day['total'] * (24 / hours if hours >= 4 else 1)
+        totals += day['total'] # * (24 / hours if hours >= 4 else 1)
         n += 1
     daily_average = round(totals / n, 3) if n !=0 else None
     # average for each hour
@@ -1309,6 +1318,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 #  contingency: a factor to add to allow for variations. Default is 20%
 #  force_charge: if True, force charge is set. If false, force charge is not set
 #  charge_current: the maximum charge current that will be applied. Default is 35A
+#  discharge_power: the maximum discharge power. Default is the inverter power limit
 #  export_limit: the kW of charge that will be applied (battery voltage * max current)
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
@@ -1316,7 +1326,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 
 def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
-        force_charge = None, timed_mode = None, charge_current = None, export_power = None,
+        force_charge = None, timed_mode = None, charge_current = None, discharge_power = None, export_power = None,
         update_settings = 0, show_data = None, show_plot = None, run_after = None):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
@@ -1395,12 +1405,15 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         device_current = 26
     # battery voltage when charging
     charge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100) * charge_config['volt_overdrive']
-    # charge power limit for inverter, after conversion losses
+    # charge / discharge power limit for inverter, after conversion losses
     charge_limit = round(device_power * charge_config['conversion_loss'], 1)
     # charge power if we are limited by charge current
     charge_power = round(charge_volt * (charge_current if charge_current is not None else device_current) / 1000, 1)
     # effective limit for charge power (InvBatVolt x InvBatCurrent)
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
+    # configure discharge limit
+    discharge_limit = round(device_power * charge_config['conversion_loss'], 1)
+    discharge_limit = discharge_power if discharge_power is not None and discharge_power < discharge_limit else discharge_limit
     # configure export limit
     export_limit = (device_power if export_power is None else export_power) / charge_config['conversion_loss']
     if debug_setting > 1:
@@ -1501,6 +1514,9 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
     for i in range(0, run_time):
         h = int(hour_now) + i
+        # cap charge / discharge power
+        charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
+        discharge_timed[i] = discharge_limit if discharge_timed[i] > discharge_limit else discharge_timed[i]
         if force_charge_am == 1 and hour_in(h, {'start': start_am, 'end': end_am}):
             discharge_timed[i] = 0.0
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
@@ -1510,8 +1526,6 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['feedin']):
             (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
             0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
-        # cap charge power
-        charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
     # work out change in battery residual from charge / discharge
     kwh_timed = []
     for charge, discharge in zip(charge_timed, discharge_timed):
@@ -1897,6 +1911,9 @@ class Solcast :
                 self.data = {}
             elif debug_setting > 0 and not quiet:
                 print(f"Using data for {self.data['date']} from {self.save}")
+                if self.data.get('estimated_actuals') is None:
+                    data_sets = ['forecasts']
+                    estimated = 0
         if len(self.data) == 0 :
             if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
                 print(f"\nSolcast: solcast_api_key not set, exiting")

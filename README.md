@@ -211,7 +211,7 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, annual_consumption, contingency, force_charge, charge_current, run_after, update_setings)
+f.charge_needed(forecast, annual_consumption, contingency, force_charge, charge_current, discharge_power, export_limit, run_after, update_setings)
 ```
 
 All the parameters are optional:
@@ -220,7 +220,8 @@ All the parameters are optional:
 + contingency: allows for variations in your consumption. 0% is no variation. Default is 20%
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
 + charge_current: the maximum charge current that will be applied. By default, this is worked out from your inverter model. Set this if have changed your maximum charge current
-+ export_power: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
++ discharge_power: the maximum battery discharge power. By default, this is worked out from your inverter model
++ export_limit: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
@@ -236,9 +237,9 @@ charge_needed() uses a number of models to better estimate the state of the batt
 
 **Manual Forecast:** You can provide a specific 'forecast' in kWh e.g. 20. This is profiled using **f.seasonal_sun** to map solar generation to the time of day. The mapping is broken down into 4 seasons: winter, spring, summer and autumn (winter is Dec, Jan, Feb, spring is Mar, Apr, May etc). There are 4 preset lists: 'f.winter_sun', 'f.spring_sun', 'f.summer_sun' and 'f.autumn_sun'. Seasonal_sun is used for manual and historic forecasts
 
-**Solcast:** If you provide an API key for Solcast, your forecast will be downloaded after 9pm each day and used as the basis for your next days generation.
+**Solcast:** If you provide an API key for Solcast, your forecast will be downloaded after 9pm each day and used as the basis for your next days generation (see below).
 
-**Solar:** if you configure one or more **f.solar_array**, forecast.solar will be called to provide a forrecast for your next days generation.
+**Solar:** if you configure one or more **f.solar_array**, forecast.solar will be called to provide a forrecast for your next days generation (see below).
 
 **Historic Generation:** If 'forecast' is not provided and Solcast and Solar forecasts are not available, your generation history is used. By default, this looks at your average solar generation for the last 3 days and applies the **f.seasonal_sun** profile.
 
@@ -424,6 +425,8 @@ This setting can be:
 
 ## Version Info
 
+0.5.1: Added discharge limit. Correction of load values from Fox after data errors<br>
+0.5.0: update charge_needed to profile consumption based on weekly or week-day history<br>
 0.4.9: Update get_raw() and get_report() to accept date list and to plot results data via plot_raw() and plot_report().<br>
        Modify get_token() to save and reload token to avoid being rate limited on logins<br>
 0.4.8: Fix coding error getting Solcast forecast in charge_needed()
