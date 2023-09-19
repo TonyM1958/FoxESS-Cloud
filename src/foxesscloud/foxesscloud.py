@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 September 2023
+Updated:  19 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.1"
+version = "0.5.2"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -502,7 +502,10 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         return None
     result = response.json().get('errno')
     if result != 0:
-        print(f"** return code = {result}")
+        if result == 44096:
+            print(f"** cannot update settings when strategy period is active")
+        else:
+            print(f"** return code = {result}")
     elif debug_setting > 1:
         print(f"success") 
     return result
@@ -563,7 +566,10 @@ def set_min(minGridSoc = None, minSoc = None):
         return None
     result = response.json().get('errno')
     if result != 0:
-        print(f"** return code = {result}")
+        if result == 44096:
+            print(f"** cannot update settings when strategy period is active")
+        else:
+            print(f"** return code = {result}")
     elif debug_setting > 1:
         print(f"success") 
     return result
@@ -639,7 +645,10 @@ def set_work_mode(mode):
         return None
     result = response.json().get('errno')
     if result != 0:
-        print(f"** return code = {result}")
+        if result == 44096:
+            print(f"** cannot update settings when strategy period is active")
+        else:
+            print(f"** return code = {result}")
         return None
     elif debug_setting > 1:
         print(f"success")
@@ -857,6 +866,9 @@ def plot_raw(result, plot=1):
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 
+# option to fix vary large power values after fox mess up
+fix_values = 1
+
 def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_id, var_list, debug_setting, report_vars
     if get_device() is None:
@@ -910,10 +922,11 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                 errno = response.json().get('errno')
                 print(f"** no side report data, errno = {errno}")
                 return None
-            for var in side_result:
-                for data in var['data']:
-                    if data['value'] >= 201536307.2:
-                        data['value'] -= 201536307.2 
+            if fix_values == 1:
+                for var in side_result:
+                    for data in var['data']:
+                        if data['value'] >= 201536307.2:
+                            data['value'] -= 201536307.2 
     if summary < 2:
         query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
@@ -926,10 +939,11 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             print(f"** no main report data, errno = {errno}")
             return None
         # correct errors in report values:
-        for var in result:
-            for data in var['data']:
-                if data['value'] >= 201536307.2:
-                    data['value'] -= 201536307.2 
+        if fix_values == 1:
+            for var in result:
+                for data in var['data']:
+                    if data['value'] >= 201536307.2:
+                        data['value'] -= 201536307.2 
         # prune results back to only valid, complete data for day, week, month or year
         if report_type == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
             for var in result:
@@ -1439,8 +1453,8 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
             s += f"  {h['date']} = {h['total']:4.1f},"
         print(s[:-1])
         s = ""
-        print(f"  Average of last {consumption_days} {consumption_span}s = {consumption}kWh")
-    # factor in contingency on consumption
+        print(f"  Average of last {consumption_days} days = {consumption}kWh")
+    # add contingency to consumption
     consumption = round(consumption * (1 + contingency / 100),1)
     print(f"  With {contingency}% contingency = {consumption}kWh")
     # create time line for consumption
@@ -1724,29 +1738,29 @@ max_pv_power = 100
 # tou: 0 = no time of use, 1 = use time of use periods if available
 
 def get_pvoutput(d = None, tou = 0):
+    global tariff
     if d is None:
         d = date_list()[0]
-    tou = 0 if (tou == 1 or tou == True) and tariff is None else tou
-    tou = 1 if tou == 1 or tou == True else 0
+    tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1:
-            print(f" Time of use: {tariff['name']}")
+            print(f"Time of use: {tariff['name']}")
         print(f"------------------------------------------------")
         for x in d:
-            csv = get_pvoutput(x)
+            csv = get_pvoutput(x, tou)
             if csv is None:
                 return None
             print(csv)
         return
     # get quick report of totals for the day
-    v = ['loads'] if tou else ['loads', 'feedin', 'gridConsumption']
-    report_data = [] if tou else get_report('day', d=d, v=v, summary=2)
+    v = ['loads'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
+    report_data = get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
     # get raw power data for the day
-    v = ['pvPower', 'meterPower2'] + (['feedinPower', 'gridConsumptionPower'] if tou else [])
+    v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
     raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None:
         return None
@@ -1814,14 +1828,13 @@ pv_system_id = None
 
 # upload data for a day using pvoutput api
 def set_pvoutput(d = None, tou = 0):
-    global pv_url, pv_api_key, pv_system_id
+    global pv_url, pv_api_key, pv_system_id, tariff
     if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
         print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
     if d is None:
         d = date_list(span='2days', today = 1)
-    tou = 0 if (tou == 1 or tou == True) and tariff is None else tou
-    tou = 1 if tou == 1 or tou == True else 0
+    tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"\n--------------- set_pvoutput -----------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
@@ -1829,7 +1842,7 @@ def set_pvoutput(d = None, tou = 0):
             print(f"Time of use: {tariff['name']}\n")
         print(f"------------------------------------------------")
         for x in d[:10]:
-            csv = set_pvoutput(x)
+            csv = set_pvoutput(x, tou)
             if csv is None:
                 return None
             print(f"{csv}  # uploaded OK")

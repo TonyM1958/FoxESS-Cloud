@@ -425,6 +425,7 @@ This setting can be:
 
 ## Version Info
 
+0.5.2: Handle error when strategy period is active. Fix tou=1 for PV Output<br>
 0.5.1: Added discharge limit. Correction of load values from Fox after data errors<br>
 0.5.0: update charge_needed to profile consumption based on weekly or week-day history<br>
 0.4.9: Update get_raw() and get_report() to accept date list and to plot results data via plot_raw() and plot_report().<br>
