@@ -432,31 +432,37 @@ This setting can be:
 
 ## Version Info
 
-0.5.3: Updated handling of settings / contingency for charge_needed(). Added get_schedule / set_schedule<br>
-0.5.2: Handle error when strategy period is active. Fix tou=1 for PV Output<br>
-0.5.1: Added discharge limit. Correction of load values from Fox after data errors<br>
-0.5.0: update charge_needed to profile consumption based on weekly or week-day history<br>
-0.4.9: Update get_raw() and get_report() to accept date list and to plot results data via plot_raw() and plot_report().<br>
-       Modify get_token() to save and reload token to avoid being rate limited on logins<br>
-0.4.8: Fix coding error getting Solcast forecast in charge_needed()
-0.4.7: Updated to use forecast data from today / tomorrow and to provide charge_current instead of charge_power<br>
-       Charge power is now calculated from the batery voltage.<br>
-0.4.6: Updated plot_hourly() to plot all days. Add today=2 to date_list(). Moved charge_needed configuration to charge_config[]<br>
-0.4.5: Added more info around charge time, charge added and target SoC. Added min_charge to tariff.<br>
-       Added plot_hourly() to forecasts. Added plot for battery SoC and energy<br>
-0.4.4: Updated forecasts to provide hourly profile and to use this in charge_needed()<br>
-0.4.3: Updated charge_needed to better model battery charge state<br>
-0.4.0: Tidy up code around use of CT2 for solar generation with -ve = generation<br>
-0.3.9: Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed<br>
-0.3.8: Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().<br>
-       Changed Solcast to load rids instead of manually entering them. Added Solar (forecast.solar)<br>
-0.3.7: Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw()<br>
-0.3.6: Added max_power_kw check in get_raw() and check exported > generation in get_pvoutput(). Some updates to charge_needed()<br>
-0.3.4: updated report_data for quick totals. Boolean parameters accept 0/1 or True/False<br>
-0.3.3: Updated Jupyter notebooks and default parameter values. Added preset tariffs and tariff settings for Octopus Flux, Intelligent, Cosy and Go<br>
-0.3.2: Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput<br>
-0.3.1: Added ability to flip polarity of CT2. Improved data reporting for charge_needed<br>
-0.3.0: Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data.<br>
-       Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting<br>
-0.2.8: Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot<br>
-0.2.3: Added charge_needed() and solcast forcast<br>
+0.5.4:<br>
+Updated handling of settings / contingency for charge_needed(). Added get_schedule / set_schedule.
+Handle error when strategy period is active. Fix tou=1 for PV Output.
+Added discharge limit. Correction of load values from Fox after data errors.
+update charge_needed to profile consumption based on weekly or week-day history.
+
+0.4.9:<br>
+Update get_raw() and get_report() to accept date list and to plot results data via plot_raw() and plot_report().
+Modify get_token() to save and reload token to avoid being rate limited on logins.
+Updated to use forecast data from today / tomorrow and to provide charge_current instead of charge_power.
+Charge power is now calculated from the batery voltage.
+Updated plot_hourly() to plot all days.
+Add today=2 to date_list().
+Moved charge_needed configuration to charge_config[].
+Added more info around charge time, charge added and target SoC.
+Added min_charge to tariff. Added plot_hourly() to forecasts.
+Added plot for battery SoC and energy. Updated forecasts to provide hourly profile and to use this in charge_needed().
+Updated charge_needed to better model battery charge state. Tidy up code around use of CT2 for solar generation with -ve = generation
+
+0.3.9:<br>
+Updated forecast 'daily' to date/value format. Fixed errors when called from charge_needed.
+Added max_pv_power check in get_pvoutput of 100kW. Removed checks in get_raw().
+Changed Solcast to load rids instead of manually entering them. Added Solar (forecast.solar).
+Updated get_raw() and get_report() to allow save and load of result for diagnostics. Fix max power check in get_raw().
+Added max_power_kw check in get_raw() and check exported > generation in get_pvoutput(). Some updates to charge_needed().
+Updated report_data for quick totals. Boolean parameters accept 0/1 or True/False.
+Updated Jupyter notebooks and default parameter values. Added preset tariffs and tariff settings for Octopus Flux, Intelligent, Cosy and Go.
+Added time input in 'HH:MM'. Added get_access(). More information output when running charge_needed and set_pvoutput.
+Added time_span 'week' to raw_data. Added max and max_time to energy reporting. Added max, max_index, min, min_index to report_data.
+Added 7 days average generation and consumption to charge_needed, printing of parameters and general update of progress reporting.
+
+0.2.8:<br>
+Added max and min to get_report(). Adjusted parsing for inverter charge power. Changed run_after to 10pm. Fixed solcast print/ plot.
+Added charge_needed() and solcast forcast.

@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.3"
+version = "0.5.4"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1535,7 +1535,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
                 (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
                 print(f"\nSolcast forecast: {solcast_value}kWh")
         else:
-            print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast']['start'])}")
+            print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast_start'])}")
     # get forecast.solar data
     solar_value = None
     solar_profile = None
@@ -1546,7 +1546,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
                 (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
                 print(f"\nSolar forecast: {solar_value}kWh")
         else:
-            print(f"\nSolar forecast will run after {hours_time(charge_config['solar']['start'])}")
+            print(f"\nSolar forecast will run after {hours_time(charge_config['solar_start'])}")
     # get generation data
     history = get_raw('week', d=today, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
