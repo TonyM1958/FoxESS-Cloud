@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  19 September 2023
+Updated:  20 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.2"
+version = "0.5.3"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -503,7 +503,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     result = response.json().get('errno')
     if result != 0:
         if result == 44096:
-            print(f"** cannot update settings when strategy period is active")
+            print(f"** cannot update settings when schedule is active")
         else:
             print(f"** return code = {result}")
     elif debug_setting > 1:
@@ -567,7 +567,7 @@ def set_min(minGridSoc = None, minSoc = None):
     result = response.json().get('errno')
     if result != 0:
         if result == 44096:
-            print(f"** cannot update settings when strategy period is active")
+            print(f"** cannot update settings when schedule is active")
         else:
             print(f"** return code = {result}")
     elif debug_setting > 1:
@@ -623,7 +623,7 @@ def get_work_mode():
 # set work mode
 ##################################################################################################
 
-work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving']
+work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving', 'ForceCharge']
 
 def set_work_mode(mode):
     global token, device_id, work_modes, work_mode, debug_setting
@@ -646,7 +646,7 @@ def set_work_mode(mode):
     result = response.json().get('errno')
     if result != 0:
         if result == 44096:
-            print(f"** cannot update settings when strategy period is active")
+            print(f"** cannot update settings when schedule is active")
         else:
             print(f"** return code = {result}")
         return None
@@ -654,6 +654,70 @@ def set_work_mode(mode):
         print(f"success")
     work_mode = mode
     return work_mode
+
+
+##################################################################################################
+# get schedule
+##################################################################################################
+
+schedule = None
+
+def get_schedule():
+    global token, device_id, schedule, debug_setting
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting schedule")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    params = {'deviceSN': device_sn}
+    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/list", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_schedule() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        print(f"** get_schedule() no result data, errno = {errno}")
+        return None
+    schedule = result
+    return schedule
+
+##################################################################################################
+# set schedule
+##################################################################################################
+
+pollcy_item = {'startH': 7, 'startM': 0, 'endH': 12, 'endM': 0, 'workMode': 'SelfUse', 'soc': 15}
+
+def set_schedule(enable=1, pollcy = None):
+    global token, device_sn, debug_setting
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"setting schedule")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive', 'Content-Type': 'application/json;charset=UTF-8'}
+    params = {'deviceSN': device_sn}
+    if enable == 0:
+        response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
+    else:
+        if pollcy is None:
+            print(f"** set_schedule() requires pollcy data")
+            return None
+        if type(pollcy) is not list:
+            pollcy = [pollcy]
+        for p in pollcy:
+            p['soc'] = f"{p['soc']}"
+        data = {'pollcy': pollcy, 'deviceSN': device_sn}
+        response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
+    if response.status_code != 200:
+        print(f"** set_schedule() got response code: {response.status_code}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        print(f"** set_schedule() errno = {errno}, msg = {response.json().get('msg')}")
+        return None
+    elif debug_setting > 0:
+        print(f"success")
+    return None
 
 
 ##################################################################################################
@@ -1226,21 +1290,6 @@ custom_periods = {'name': 'Custom',
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
 tariff = octopus_flux
 
-charge_config = {
-    'min_hours': 0.25,                # minimum charge time in decimal hours
-    'min_kwh': 1.0,                   # minimum to add in kwh
-    'generation_days': 3,             # number of days to use for average generation (1-7)
-    'consumption_days': 3,            # number of days to use for average consumption (1-7)
-    'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
-    'conversion_loss': 0.94,          # conversion loss from inverter power conversion
-    'battery_loss': 0.95,             # conversion loss from battery charge to residual
-    'operation_loss': 0.1,            # inverter operating power kW
-    'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.007,          # increase in bat volt when charging
-    'solcast': {'start' : 21.0},
-    'solar':   {'start': 21.0}
-}
-
 # how consumption varies by month across a year. 12 values.
 # month                J   F   M   A   M   J   J   A   S   O   N   D
 high_seasonality =   [13, 12, 11, 10,  9,  8,  9,  9, 10, 11, 12, 13]
@@ -1295,9 +1344,9 @@ def report_value_profile(result):
         for i in range(0, len(day['data'])):
             data[i] = (data[i][0] + day['data'][i]['value'], data[i][1]+1)
             hours += 1
-        totals += day['total'] # * (24 / hours if hours >= 4 else 1)
+        totals += day['total'] * (24 / hours if hours >= 1 else 1)
         n += 1
-    daily_average = round(totals / n, 3) if n !=0 else None
+    daily_average = round(totals / n, 1) if n !=0 else None
     # average for each hour
     by_hour = []
     for h in data:
@@ -1322,6 +1371,27 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
         timed.append(c_float(forecast.daily[today]['hourly'].get(h)))
     return (value, (timed + profile + profile)[:run_time])
 
+# charge_needed settings
+charge_config = {
+    'contingency': 15,                # % of consumption to allow as contingency
+    'charge_current': 16,             # max battery charge current setting in A
+    'discharge_current': None,        # max battery discharge current setting in A
+    'export_limit': None,             # maximum export power
+    'ac_conversion_loss': 0.96,       # loss from inverter AC - DC conversion (e.g. AC => charge)
+    'dc_conversion_loss': 0.95,       # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
+    'battery_loss': 0.98,             # loss from battery charge to residual
+    'operation_loss': 0.1,            # inverter operating power kW
+    'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
+    'volt_overdrive': 1.007,          # increase in bat volt when charging (compared discharging)
+    'generation_days': 3,             # number of days to use for average generation (1-7)
+    'consumption_days': 3,            # number of days to use for average consumption (1-7)
+    'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
+    'min_hours': 0.25,                # minimum charge time in decimal hours
+    'min_kwh': 1.0,                   # minimum to add in kwh
+    'solcast_start': 21.0,            # earliest time to get Solcast forecast
+    'solar_start':  21.0              # earliest time to get Solar forecast
+}
+
 ##################################################################################################
 # calculate charge needed from current battery charge, forecast yield and expected load
 ##################################################################################################
@@ -1329,26 +1399,25 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
 #  annual_consumption: the kWh consumed each year via the inverter
-#  contingency: a factor to add to allow for variations. Default is 20%
 #  force_charge: if True, force charge is set. If false, force charge is not set
-#  charge_current: the maximum charge current that will be applied. Default is 35A
-#  discharge_power: the maximum discharge power. Default is the inverter power limit
-#  export_limit: the kW of charge that will be applied (battery voltage * max current)
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 
-def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
-        force_charge = None, timed_mode = None, charge_current = None, discharge_power = None, export_power = None,
-        update_settings = 0, show_data = None, show_plot = None, run_after = None):
+def charge_needed(forecast = None, annual_consumption = None, force_charge = None, timed_mode = None,
+        update_settings = 0, show_data = None, show_plot = None, run_after = None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
     s = ""
-    for k in [k for k in args.keys() if args[k] is not None]:
+    for k in [k for k in args.keys() if args[k] is not None and k != 'settings']:
         s += f"\n  {k} = {args[k]}"
+    # store settings:
+    for key, value in settings.items():
+        charge_config[key] = value
+        s += f"\n  {key} = {value}"
     if len(s) > 0:
         print(f"Parameters: {s}")
     # convert any boolean flag values and set default parameters
@@ -1417,23 +1486,22 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         print(f"** could not get parameters for {model}")
         device_power = 3.68
         device_current = 26
-    # battery voltage when charging
-    charge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100) * charge_config['volt_overdrive']
-    # charge / discharge power limit for inverter, after conversion losses
-    charge_limit = round(device_power * charge_config['conversion_loss'], 1)
-    # charge power if we are limited by charge current
-    charge_power = round(charge_volt * (charge_current if charge_current is not None else device_current) / 1000, 1)
-    # effective limit for charge power (InvBatVolt x InvBatCurrent)
+    # discharge limit
+    discharge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100)
+    discharge_limit = round(device_power / charge_config['dc_conversion_loss'], 1)
+    discharge_power = round(discharge_volt * (charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current) / 1000, 1)
+    discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
+    # charge limit...
+    charge_volt = discharge_volt * charge_config['volt_overdrive']
+    charge_limit = round(device_power * charge_config['ac_conversion_loss'], 1)
+    charge_power = round(charge_volt * (charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current) / 1000, 1)
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
-    # configure discharge limit
-    discharge_limit = round(device_power * charge_config['conversion_loss'], 1)
-    discharge_limit = discharge_power if discharge_power is not None and discharge_power < discharge_limit else discharge_limit
     # configure export limit
-    export_limit = (device_power if export_power is None else export_power) / charge_config['conversion_loss']
+    export_limit = round((device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['dc_conversion_loss'], 1)
     if debug_setting > 1:
-        print(f"device_power = {device_power}, device_current = {device_current}")
-        print(f"bat_volt = {bat_volt}, soc = {soc}, mid_volt = {mid_volt}, charge_current = {charge_current}, charge_power = {charge_power}")
-        print(f"charge_limit = {charge_limit}, export_limit = {export_limit}")
+        print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
+        print(f"\ndevice_power = {device_power}, device_current = {device_current}")
+        print(f"discharge_limit = {discharge_limit}, charge_limit = {charge_limit}, export_limit = {export_limit}")
     # get consumption data
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
@@ -1454,18 +1522,14 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         print(s[:-1])
         s = ""
         print(f"  Average of last {consumption_days} days = {consumption}kWh")
-    # add contingency to consumption
-    consumption = round(consumption * (1 + contingency / 100),1)
-    print(f"  With {contingency}% contingency = {consumption}kWh")
     # create time line for consumption
     daily_sum = sum(consumption_by_hour)
     consumption_timed = timed_list([round(consumption * x / daily_sum, 3) for x in consumption_by_hour], hour_now, run_time)
-    # add contingency to consumption
     # get Solcast data
     solcast_value = None
     solcast_profile = None
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
-        if hour_now >= run_after or hour_now >= charge_config['solcast']['start']:
+        if hour_now >= run_after or hour_now >= charge_config['solcast_start']:
             fsolcast = Solcast(quiet=True, estimated=0)
             if fsolcast is not None:
                 (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
@@ -1476,7 +1540,7 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
     solar_value = None
     solar_profile = None
     if solar_arrays is not None:
-        if hour_now >= run_after or hour_now >= charge_config['solar']['start']:
+        if hour_now >= run_after or hour_now >= charge_config['solar_start']:
             fsolar = Solar(quiet=True)
             if fsolar is not None:
                 (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
@@ -1523,8 +1587,8 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing forecast generation of {expected}kWh with {sun_name} sun profile")
     # build profiles for charge and discharge (after losses)
-    charge_timed = [round(x * charge_config['conversion_loss'], 3) for x in generation_timed]
-    discharge_timed = [round(x / charge_config['conversion_loss'], 3) for x in consumption_timed]
+    charge_timed = [round(x * charge_config['dc_conversion_loss'], 3) for x in generation_timed]
+    discharge_timed = [round(x / charge_config['dc_conversion_loss'], 3) for x in consumption_timed]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
     for i in range(0, run_time):
         h = int(hour_now) + i
@@ -1553,17 +1617,17 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now what it was at the start of current hour
     h = int(hour_now)
-    current_kwh = round(residual - kwh_timed[0] * (hour_now - h), 1)
+    kwh_current = round(residual - kwh_timed[0] * (hour_now - h), 1)
     bat_timed = []
-    min_kwh = current_kwh
+    kwh_min = kwh_current
     min_hour = None
     for kwh in kwh_timed:
-        current_kwh = round(current_kwh, 1) if current_kwh <= capacity else capacity
-        bat_timed.append(current_kwh)
-        if current_kwh < min_kwh:       # track minimum and time
-            min_kwh = current_kwh
+        kwh_current = round(kwh_current, 1) if kwh_current <= capacity else capacity
+        bat_timed.append(kwh_current)
+        if kwh_current < kwh_min:       # track minimum and time
+            kwh_min = kwh_current
             min_hour = h
-        current_kwh += kwh
+        kwh_current += kwh
         h += 1
     if show_data > 0:
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC:\n"
@@ -1598,20 +1662,22 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
             plt.legend()
         plt.xticks(rotation=90, ha='center', fontsize=8)
         plt.show()
-    # work out what we need to add to the residual to stay above reserve
-    kwh_needed = round(reserve - min_kwh, 1)
+    # work out what we need to add to stay above reserve and provide contingency
+    kwh_contingency = round(consumption * charge_config['contingency'] / 100,1)
+    kwh_needed = round(reserve - kwh_min + kwh_contingency, 1)
     if kwh_needed < charge_config['min_kwh']:
-        print(f"\nLowest forecast SoC = {int(min_kwh / capacity * 100)}% at {hours_time(min_hour, day=True)} (Residual = {min_kwh}kWh)")
-        print(f"  No charging needed")
+        print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour, day=True)} (Residual = {kwh_min}kWh)")
+        print(f"  Contingency of {kwh_contingency}kWh available, no charging is needed")
         hours = 0.0
         start1 = start_at
         end1 = start1
     else:
-        print(f"\nCharge needed = {kwh_needed}kWh")
+        print(f"\nCharge of {kwh_needed}kWh needed for contingency of {kwh_contingency}kWh")
         start_residual = bat_timed[time_to_next]
+        start_soc = int(start_residual / capacity * 100)
         if (start_residual + kwh_needed) > capacity:
             bigger_battery = round((start_residual + kwh_needed - reserve) / (100 - min_soc) * 100, 1)
-            print(f"** can't add enough charge: you need a capacity of {bigger_battery}kWh")
+            print(f"** battery full, a capacity of {bigger_battery}kWh would be required")
             kwh_needed = capacity - start_residual
         # calculate charging time
         hours = round_time(kwh_needed / charge_limit / charge_config['battery_loss'])
@@ -1621,16 +1687,16 @@ def charge_needed(forecast = None, annual_consumption = None, contingency = 20,
         start1 = start_at
         end1 = round_time(start1 + hours)
         if end1 > end_by:
-            print(f"** can't add enough charge: end time {hours_time(end1)} is later than {hours_time(end_by)}")
+            print(f"** battery will not charge off-peak as end time {hours_time(end1)} would be after {hours_time(end_by)}")
             end1 = end_by
             hours = round_time(end1 - start1)
         kwh_added = round(charge_limit * hours * charge_config['battery_loss'], 1)
         target_residual = round(start_residual + kwh_added, 1)
         target_residual = capacity if target_residual > capacity else target_residual
         target_soc = int(target_residual / capacity * 100)
-        print(f"  Charge time = {hours_time(start_at)} - {hours_time(end_by)}{' (force charge)' if force_charge == 1 else ''}")
+        print(f"  Start SoC = {start_soc}% at {hours_time(start1)}, Residual = {start_residual}kWh")
         print(f"  Charging for {int(hours * 60)} minutes with charge limit of {charge_limit}kW adds {kwh_added}kWh")
-        print(f"  Target SoC = {target_soc}% at {hours_time(end1)} (Residual = {target_residual}kWh)")
+        print(f"  Target SoC = {target_soc}% at {hours_time(end1)}, Residual = {target_residual}kWh")
         # work out charge periods settings
     if force_charge == 1:
         start2 = round_time(start1 if hours == 0 else end1 + 1 / 60)       # add 1 minute to end time
