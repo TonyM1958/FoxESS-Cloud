@@ -432,7 +432,8 @@ This setting can be:
 
 ## Version Info
 
-0.5.4:<br>
+0.5.5:<br>
+Updated error handling. Fix default charge current. Improve charge setting message.
 Updated handling of settings / contingency for charge_needed(). Added get_schedule / set_schedule.
 Handle error when strategy period is active. Fix tou=1 for PV Output.
 Added discharge limit. Correction of load values from Fox after data errors.

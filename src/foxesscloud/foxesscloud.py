@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  20 September 2023
+Updated:  21 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.4"
+version = "0.5.5"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -44,6 +44,44 @@ def query_date(d, offset = None):
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+
+##################################################################################################
+# get error messages
+##################################################################################################
+
+messages = None
+user_agent = None
+
+def get_messages():
+    global debug_setting, messages, user_agent
+    if debug_setting > 1:
+        print(f"getting messages")
+    headers = {'User-Agent': user_agent_rotator.get_random_user_agent() , 'Content-Type': 'application/json', 'Connection': 'keep-alive'}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/errors/message", headers=headers)
+    if response.status_code != 200:
+        print(f"** get_messages() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        print(f"** get_messages(), no result data, {errno}")
+        return None
+    messages = result.get('messages')
+    return messages
+
+def errno_message(errno, lang='en'):
+    global messages
+    errno = f"{errno}"
+    s = f"errno = {errno}"
+    if messages is None or messages.get(lang) is None or messages[lang].get(errno) is None:
+        return s
+    return s + f": {messages[lang][errno]}"
+
+
+##################################################################################################
+# get login token
+##################################################################################################
+
 # global username and password settings
 username = None
 password = None
@@ -54,7 +92,9 @@ token_renewal = timedelta(hours=2).seconds       # interval before token needs t
 
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
-    global username, password, token, device_list, device, device_id, debug_setting, token_save, token_renewal
+    global username, password, token, device_list, device, device_id, debug_setting, token_save, token_renewal, messages
+    if messages is None:
+        get_messages()
     if token is None:
         token = {'value': None, 'valid_from': None, 'valid_for': token_renewal, 'user_agent': None, 'lang': 'en'}
     if token['value'] is None and os.path.exists(token_save):
@@ -84,7 +124,7 @@ def get_token():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no login result data, errno = {errno}")
+        print(f"** get_token(), no result data, {errno_message(errno)}")
         return None
     token['value'] = result.get('token')
     if token['value'] is None:
@@ -103,7 +143,7 @@ def get_token():
 info = None
 
 def get_info():
-    global token, debug_setting, info
+    global token, debug_setting, info, messages
     if get_token() is None:
         return None
     if debug_setting > 1:
@@ -116,7 +156,8 @@ def get_info():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no info result, errno = {errno}")
+        print(type(errno))
+        print(f"** get_info(), no result data, {errno_message(errno)}")
         return None
     info = result
     response = requests.get(url="https://www.foxesscloud.com/c/v0/user/access", headers=headers)
@@ -139,7 +180,7 @@ site_list = None
 site = None
 
 def get_site(name=None):
-    global token, site_list, site, debug_setting
+    global token, site_list, site, debug_setting, messages
     if get_token() is None:
         return None
     if site is not None and name is None:
@@ -155,7 +196,7 @@ def get_site(name=None):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no site list result data, errno = {errno}")
+        print(f"** get_site(), no result data, {errno_message(errno)}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -187,7 +228,7 @@ logger_list = None
 logger = None
 
 def get_logger(sn=None):
-    global token, logger_list, logger, debug_setting
+    global token, logger_list, logger, debug_setting, messages
     if get_token() is None:
         return None
     if logger is not None and sn is None:
@@ -203,7 +244,7 @@ def get_logger(sn=None):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no logger list result data, errno = {errno}")
+        print(f"** get_logger(), no result data, {errno_message(errno)}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -239,7 +280,7 @@ device_sn = None
 raw_vars = None
 
 def get_device(sn=None):
-    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting
+    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting, messages
     if get_token() is None:
         return None
     if device is not None:
@@ -261,7 +302,7 @@ def get_device(sn=None):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no device list result data, errno = {errno}")
+        print(f"** get_device(), no result data, {errno_message(errno)}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
@@ -329,7 +370,7 @@ def get_device(sn=None):
 ##################################################################################################
 
 def get_vars():
-    global token, device_id, debug_setting
+    global token, device_id, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -344,7 +385,7 @@ def get_vars():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no variables result, errno = {errno}")
+        print(f"** get_vars(), no result data, {errno_message(errno)}")
         return None
     vars = result.get('variables')
     if vars is None:
@@ -359,7 +400,7 @@ def get_vars():
 firmware = None
 
 def get_firmware():
-    global token, device_id, firmware, debug_setting
+    global token, device_id, firmware, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -373,7 +414,7 @@ def get_firmware():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no firmware result data, errno = {errno}")
+        print(f"** get_firmware(), no result data, {errno_message(errno)}")
         return None
     firmware = result.get('softVersion')
     if firmware is None:
@@ -389,7 +430,7 @@ battery = None
 battery_settings = None
 
 def get_battery():
-    global token, device_id, battery, debug_setting
+    global token, device_id, battery, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -403,7 +444,7 @@ def get_battery():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no battery info, errno = {errno}")
+        print(f"** get_battery(), no result data, {errno_message(errno)}")
         return None
     battery = result
     return battery
@@ -413,7 +454,7 @@ def get_battery():
 ##################################################################################################
 
 def get_charge():
-    global token, device_sn, battery_settings, debug_setting
+    global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -426,12 +467,13 @@ def get_charge():
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** no charge result data")
+        errno = response.json().get('errno')
+        print(f"** get_charge(), no result data, {errno_message(errno)}")
         return None
     times = result.get('times')
     if times is None:
         errno = response.json().get('errno')
-        print(f"** no times data, errno = {errno}")
+        print(f"** get_charge(), no times data, {errno_message(errno)}")
         return None
     if battery_settings is None:
         battery_settings = {}
@@ -446,12 +488,12 @@ def get_charge():
 # helper to format time period structure
 def time_period(t):
     result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d} - {t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
-    if t['enableGrid']:
-        result += f" Charge from grid"
+    if t['startTime']['hour'] != t['endTime']['hour'] or t['startTime']['minute'] != t['endTime']['minute']:
+        result += f" Charge from grid" if t['enableGrid'] else f" Force Charge"
     return result
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None):
-    global token, device_sn, battery_settings, debug_setting
+    global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if battery_settings.get('times') is None or len(battery_settings['times']) != 2:
@@ -500,22 +542,23 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     if response.status_code != 200:
         print(f"** set_charge() got response code: {response.status_code}")
         return None
-    result = response.json().get('errno')
-    if result != 0:
-        if result == 44096:
-            print(f"** cannot update settings when schedule is active")
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 44096:
+            print(f"** set_charge(), cannot update settings when schedule is active")
         else:
-            print(f"** return code = {result}")
+            print(f"** set_charge(), {errno_message(errno)}")
+        return None
     elif debug_setting > 1:
         print(f"success") 
-    return result
+    return battery_settings
 
 ##################################################################################################
 # get min soc settings and save in battery_settings
 ##################################################################################################
 
 def get_min():
-    global token, device_sn, battery_settings, debug_setting
+    global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -529,7 +572,7 @@ def get_min():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no min soc result data, errno = {errno}")
+        print(f"** get_min(), no result data, {errno_message(errno)}")
         return None
     if battery_settings is None:
         battery_settings = {}
@@ -542,7 +585,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minGridSoc = None, minSoc = None):
-    global token, device_sn, bat_settings, debug_setting
+    global token, device_sn, bat_settings, debug_setting, messages
     if get_device() is None:
         return None
     if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
@@ -564,15 +607,16 @@ def set_min(minGridSoc = None, minSoc = None):
     if response.status_code != 200:
         print(f"** set_min() got response code: {response.status_code}")
         return None
-    result = response.json().get('errno')
-    if result != 0:
-        if result == 44096:
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 44096:
             print(f"** cannot update settings when schedule is active")
         else:
-            print(f"** return code = {result}")
+            print(f"** set_min(), {errno_message(errno)}")
+        return None
     elif debug_setting > 1:
         print(f"success") 
-    return result
+    return battery_settings
 
 ##################################################################################################
 # get times and min soc settings and save in bat_settings
@@ -582,7 +626,7 @@ def get_settings():
     global battery_settings
     if battery_settings is None or battery_settings.get('times') is None:
         get_charge()
-    if battery_settings.get('minGridSoc') is None:
+    if battery_settings is None or battery_settings.get('minGridSoc') is None:
         get_min()
     return battery_settings
 
@@ -593,7 +637,7 @@ def get_settings():
 work_mode = None
 
 def get_work_mode():
-    global token, device_id, work_mode, debug_setting
+    global token, device_id, work_mode, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -607,15 +651,15 @@ def get_work_mode():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no work mode result data, errno = {errno}")
+        print(f"** get_work_mode(), no result data, {errno_message(errno)}")
         return None
     values = result.get('values')
     if values is None:
-        print(f"** no work mode values data")
+        print(f"** get_work_mode(), no work mode values data")
         return None
     work_mode = values.get('operation_mode__work_mode')
     if work_mode is None:
-        print(f"** no work mode data")
+        print(f"** get_work_mode(), no work mode data")
         return None
     return work_mode
 
@@ -626,7 +670,7 @@ def get_work_mode():
 work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving', 'ForceCharge']
 
 def set_work_mode(mode):
-    global token, device_id, work_modes, work_mode, debug_setting
+    global token, device_id, work_modes, work_mode, debug_setting, messages
     if get_device() is None:
         return None
     if mode not in work_modes:
@@ -643,12 +687,12 @@ def set_work_mode(mode):
     if response.status_code != 200:
         print(f"** set_work_mode() got response code: {response.status_code}")
         return None
-    result = response.json().get('errno')
-    if result != 0:
-        if result == 44096:
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 44096:
             print(f"** cannot update settings when schedule is active")
         else:
-            print(f"** return code = {result}")
+            print(f"** set_work_mode(), {errno_message(errno)}")
         return None
     elif debug_setting > 1:
         print(f"success")
@@ -663,7 +707,7 @@ def set_work_mode(mode):
 schedule = None
 
 def get_schedule():
-    global token, device_id, schedule, debug_setting
+    global token, device_id, schedule, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -677,7 +721,10 @@ def get_schedule():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** get_schedule() no result data, errno = {errno}")
+        if errno == 40256:
+            print(f"** get_schedule(), not suported on this device")
+        else:
+            print(f"** get_schedule(), no result data, {errno_message(errno)}")
         return None
     schedule = result
     return schedule
@@ -689,7 +736,7 @@ def get_schedule():
 pollcy_item = {'startH': 7, 'startM': 0, 'endH': 12, 'endM': 0, 'workMode': 'SelfUse', 'soc': 15}
 
 def set_schedule(enable=1, pollcy = None):
-    global token, device_sn, debug_setting
+    global token, device_sn, debug_setting, messages, schedule
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -698,6 +745,15 @@ def set_schedule(enable=1, pollcy = None):
     params = {'deviceSN': device_sn}
     if enable == 0:
         response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
+        if response.status_code != 200:
+            print(f"** set_schedule() got disable response code: {response.status_code}")
+            return None
+        errno = response.json().get('errno')
+        if errno != 0:
+            print(f"** set_schedule(), disable, {errno_message(errno)}")
+            return None
+        schedule['enable'] = False
+        schedule['pollcy'] = []
     else:
         if pollcy is None:
             print(f"** set_schedule() requires pollcy data")
@@ -708,16 +764,18 @@ def set_schedule(enable=1, pollcy = None):
             p['soc'] = f"{p['soc']}"
         data = {'pollcy': pollcy, 'deviceSN': device_sn}
         response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
-    if response.status_code != 200:
-        print(f"** set_schedule() got response code: {response.status_code}")
-        return None
-    errno = response.json().get('errno')
-    if errno != 0:
-        print(f"** set_schedule() errno = {errno}, msg = {response.json().get('msg')}")
-        return None
-    elif debug_setting > 0:
-        print(f"success")
-    return None
+        if response.status_code != 200:
+            print(f"** set_schedule() got enable response code: {response.status_code}")
+            return None
+        errno = response.json().get('errno')
+        if errno != 0:
+            print(f"** set_schedule(), enable, {errno_message(errno)}")
+            return None
+        if debug_setting > 1:
+            print(f"success")
+        schedule['enable'] = True
+        schedule['pollcy'] = pollcy
+    return schedule
 
 
 ##################################################################################################
@@ -738,7 +796,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw, messages
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -778,7 +836,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         result = response.json().get('result')
         if result is None:
             errno = response.json().get('errno')
-            print(f"** no raw data, errno = {errno}")
+            print(f"** no raw data, {errno_message(errno)}")
             return None
     else:
         file = open(load)
@@ -934,7 +992,7 @@ report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergy
 fix_values = 1
 
 def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_id, var_list, debug_setting, report_vars
+    global token, device_id, var_list, debug_setting, report_vars, messages
     if get_device() is None:
         return None
     # process list of days
@@ -984,7 +1042,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             side_result = response.json().get('result')
             if side_result is None:
                 errno = response.json().get('errno')
-                print(f"** no side report data, errno = {errno}")
+                print(f"** get_report(), no side report data, {errno_message(errno)}")
                 return None
             if fix_values == 1:
                 for var in side_result:
@@ -1000,7 +1058,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         result = response.json().get('result')
         if result is None:
             errno = response.json().get('errno')
-            print(f"** no main report data, errno = {errno}")
+            print(f"** get_report(), no main report data, {errno_message(errno)}")
             return None
         # correct errors in report values:
         if fix_values == 1:
@@ -1131,7 +1189,7 @@ def plot_report(result, plot=1):
 ##################################################################################################
 
 def get_earnings():
-    global token, device_id, var_list, debug_setting, report_vars
+    global token, device_id, var_list, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -1145,7 +1203,7 @@ def get_earnings():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** no earnings data, errno = {errno}")
+        print(f"** get_earnings(), no result data, {errno_message(errno)}")
         return None
     return result
 
@@ -1374,7 +1432,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 # charge_needed settings
 charge_config = {
     'contingency': 15,                # % of consumption to allow as contingency
-    'charge_current': 16,             # max battery charge current setting in A
+    'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
     'ac_conversion_loss': 0.96,       # loss from inverter AC - DC conversion (e.g. AC => charge)
@@ -1382,7 +1440,7 @@ charge_config = {
     'battery_loss': 0.98,             # loss from battery charge to residual
     'operation_loss': 0.1,            # inverter operating power kW
     'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.007,          # increase in bat volt when charging (compared discharging)
+    'volt_overdrive': 1.007,          # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
@@ -1620,7 +1678,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     kwh_current = round(residual - kwh_timed[0] * (hour_now - h), 1)
     bat_timed = []
     kwh_min = kwh_current
-    min_hour = None
+    min_hour = h
     for kwh in kwh_timed:
         kwh_current = round(kwh_current, 1) if kwh_current <= capacity else capacity
         bat_timed.append(kwh_current)
