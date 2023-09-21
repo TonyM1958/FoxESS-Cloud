@@ -1437,10 +1437,10 @@ charge_config = {
     'export_limit': None,             # maximum export power
     'ac_conversion_loss': 0.96,       # loss from inverter AC - DC conversion (e.g. AC => charge)
     'dc_conversion_loss': 0.95,       # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
-    'battery_loss': 0.98,             # loss from battery charge to residual
+    'battery_loss': 0.97,             # loss from battery charge to residual
     'operation_loss': 0.1,            # inverter operating power kW
     'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.007,          # increase in bat volt when charging (compared with discharging)
+    'volt_overdrive': 1.01,           # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
@@ -1725,7 +1725,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     kwh_needed = round(reserve - kwh_min + kwh_contingency, 1)
     if kwh_needed < charge_config['min_kwh']:
         print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour, day=True)} (Residual = {kwh_min}kWh)")
-        print(f"  Contingency of {kwh_contingency}kWh available, no charging is needed")
+        print(f"  Contingency of {kwh_contingency}kWh is available, no charging is needed")
         hours = 0.0
         start1 = start_at
         end1 = start1
@@ -1753,7 +1753,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
         target_residual = capacity if target_residual > capacity else target_residual
         target_soc = int(target_residual / capacity * 100)
         print(f"  Start SoC = {start_soc}% at {hours_time(start1)}, Residual = {start_residual}kWh")
-        print(f"  Charging for {int(hours * 60)} minutes with charge limit of {charge_limit}kW adds {kwh_added}kWh")
+        print(f"  Charging for {int(hours * 60)} minutes at a charge rate of {charge_limit}kW adds {kwh_added}kWh")
         print(f"  Target SoC = {target_soc}% at {hours_time(end1)}, Residual = {target_residual}kWh")
         # work out charge periods settings
     if force_charge == 1:
