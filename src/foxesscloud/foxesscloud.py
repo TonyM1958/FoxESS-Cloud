@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  21 September 2023
+Updated:  22 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.5"
+version = "0.5.6"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -56,7 +56,7 @@ def get_messages():
     global debug_setting, messages, user_agent
     if debug_setting > 1:
         print(f"getting messages")
-    headers = {'User-Agent': user_agent_rotator.get_random_user_agent() , 'Content-Type': 'application/json', 'Connection': 'keep-alive'}
+    headers = {'User-Agent': user_agent_rotator.get_random_user_agent(), 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/errors/message", headers=headers)
     if response.status_code != 200:
         print(f"** get_messages() got response code: {response.status_code}")
@@ -112,7 +112,7 @@ def get_token():
     device_list = None
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
-    headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     if username is None or password is None or username == '<my.fox_username>' or password == 'my.fox_password':
         print(f"** please configure your Fox ESS Cloud username and password")
         return None
@@ -148,7 +148,7 @@ def get_info():
         return None
     if debug_setting > 1:
         print(f"getting access")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/user/info", headers=headers)
     if response.status_code != 200:
         print(f"** get_info() got info response code: {response.status_code}")
@@ -187,7 +187,7 @@ def get_site(name=None):
         return site
     if debug_setting > 1:
         print(f"getting sites")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
     response = requests.post(url="https://www.foxesscloud.com/c/v1/plant/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
@@ -235,7 +235,7 @@ def get_logger(sn=None):
         return logger
     if debug_setting > 1:
         print(f"getting loggers")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/module/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
@@ -293,7 +293,7 @@ def get_device(sn=None):
     if sn is None and device_sn is not None and len(device_sn) == 15:
         sn = device_sn
     # get device list
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/list", headers=headers, data=json.dumps(query))
     if response.status_code != 200:
@@ -375,7 +375,7 @@ def get_vars():
         return None
     if debug_setting > 1:
         print(f"getting variables")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
     # v1 api required for full list with {name, variable, unit}
     response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables", params=params, headers=headers)
@@ -405,7 +405,7 @@ def get_firmware():
         return None
     if debug_setting > 1:
         print(f"getting firmware")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/addressbook", params=params, headers=headers)
     if response.status_code != 200:
@@ -435,7 +435,7 @@ def get_battery():
         return None
     if debug_setting > 1:
         print(f"getting battery")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'id': device_id}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info", params=params, headers=headers)
     if response.status_code != 200:
@@ -459,7 +459,7 @@ def get_charge():
         return None
     if debug_setting > 1:
         print(f"getting charge times")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/time/get", params=params, headers=headers)
     if response.status_code != 200:
@@ -536,7 +536,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
         print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
     # set charge times
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/time/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
@@ -563,7 +563,7 @@ def get_min():
         return None
     if debug_setting > 1:
         print(f"getting min soc")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/soc/get", params=params, headers=headers)
     if response.status_code != 200:
@@ -601,7 +601,7 @@ def set_min(minGridSoc = None, minSoc = None):
         return None
     if debug_setting > 0:
         print(f"setting min soc")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/soc/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
@@ -642,7 +642,7 @@ def get_work_mode():
         return None
     if debug_setting > 1:
         print(f"getting work mode")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
     if response.status_code != 200:
@@ -681,7 +681,7 @@ def set_work_mode(mode):
         return None
     if debug_setting > 0:
         print(f"setting work mode")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/setting/set", headers=headers, data=json.dumps(data))
     if response.status_code != 200:
@@ -712,7 +712,7 @@ def get_schedule():
         return None
     if debug_setting > 1:
         print(f"getting schedule")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
     response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/list", params=params, headers=headers)
     if response.status_code != 200:
@@ -741,7 +741,7 @@ def set_schedule(enable=1, pollcy = None):
         return None
     if debug_setting > 1:
         print(f"setting schedule")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive', 'Content-Type': 'application/json;charset=UTF-8'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
     if enable == 0:
         response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
@@ -827,7 +827,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
     if debug_setting > 1:
         print(f"getting raw data")
     if load is None:
-        headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+        headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
         query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
         if response.status_code != 200:
@@ -966,9 +966,13 @@ def plot_raw(result, plot=1):
             if lines >= 1 and (plot == 1 or d == dates[-1]) :
                 if lines > 1:
                     plt.legend(fontsize=6)
-                title = f"Units = {unit}"
-                title = f" {d}, {title}" if plot == 1 or len(dates) == 1 or lines == 1 else title
-                title = f"{name}, {title}" if len(vars) == 1 or lines == 1 else title
+                title = f"({unit})"
+                if plot == 1 or len(dates) == 1 or lines == 1:
+                    title = f"for {d} {title}"
+                if len(vars) == 1 or lines == 1:
+                    title = f"{name} {title}"
+                else:
+                    title = f"Parameters {title}"
                 plt.title(title, fontsize=12)
                 plt.grid()
                 plt.show()
@@ -987,9 +991,12 @@ def plot_raw(result, plot=1):
 ##################################################################################################
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
+report_names = ['Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
 
-# option to fix vary large power values after fox mess up
+# fix power values after fox corrupts high word of 32-bit energy total
 fix_values = 1
+fix_value_threshold = 200000000.0
+fix_value_mask = 0x0000FFFF
 
 def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_id, var_list, debug_setting, report_vars, messages
@@ -1013,7 +1020,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         summary = 1
     if summary == 0 and report_type == 'week':
         report_type = 'day'
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     if d is None:
         d = datetime.strftime(datetime.now(), "%Y-%m-%d")
     if v is None:
@@ -1047,8 +1054,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             if fix_values == 1:
                 for var in side_result:
                     for data in var['data']:
-                        if data['value'] >= 201536307.2:
-                            data['value'] -= 201536307.2 
+                        if data['value'] > fix_value_threshold:
+                            data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
     if summary < 2:
         query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
@@ -1064,8 +1071,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         if fix_values == 1:
             for var in result:
                 for data in var['data']:
-                    if data['value'] >= 201536307.2:
-                        data['value'] -= 201536307.2 
+                    if data['value'] > fix_value_threshold:
+                        data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
         # prune results back to only valid, complete data for day, week, month or year
         if report_type == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
             for var in result:
@@ -1118,6 +1125,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             min = value if min is None or value < min else min
         # correct day total from side report
         var['total'] = round(sum,3) if report_type != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
+        var['name'] = report_names[report_vars.index(var['variable'])]
         var['type'] = report_type
         if summary < 2:
             var['sum'] = round(sum,3)
@@ -1131,6 +1139,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
     if plot > 0 and summary < 2:
         plot_report(result, plot)
     return result
+
+months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 # plot get_report result
 def plot_report(result, plot=1):
@@ -1157,26 +1167,45 @@ def plot_report(result, plot=1):
         return
     # plot variables by date with the same units on the same charts
     lines = 0
-    width = 0.8 / (len(vars) if plot == 2 else len(dates))
+    width = 0.8 / (len(dates) if plot == 1 else len(vars) if len(dates) == 1 else len(dates))
     align = 0.0
     for var in vars:
         if lines == 0:
             plt.figure(figsize=(figure_width, figure_width/3))
             if types[0] == 'day':
-                plt.xticks(ticks=index, labels=[hours_time(h) for h in range(0,24)],rotation=90, fontsize=8)
+                plt.xticks(ticks=index, labels=[hours_time(h) for h in range(0,24)], rotation=90, fontsize=8)
+            if types[0] == 'week':
+                plt.xticks(ticks=range(1,8), labels=date_list(span='week', e=dates[0], today=2), rotation=45, fontsize=8, ha='right', rotation_mode='anchor')
+            elif types[0] == 'month':
+                plt.xticks(ticks=index, labels=date_list(s=dates[0][:-2]+'01', limit=len(index), today=2), rotation=45, fontsize=8, ha='right', rotation_mode='anchor')
+            elif types[0] == 'year':
+                plt.xticks(ticks=index, labels=months[:len(index)], rotation=45, fontsize=10, ha='right', rotation_mode='anchor')
         for v in [v for v in result if v['variable'] == var]:
+            name = v['name']
             d = v['date']
             n = len(v['data'])
             x = [i + align  for i in range(1, n+1)]
             y = [v['data'][i]['value'] for i in range(0, n)]
-            label = f"{var} {d}"
+            label = f"{d}" if len(dates) > 1 else f"{name}"
             plt.bar(x, y ,label=label, width=width)
             align += width
             lines += 1
-        if lines >= 1 and (plot == 1 or d == dates[-1]) :
+        if lines >= 1 and (plot == 1 or len(dates) > 1 or var == vars[-1]):
             if lines > 1:
                 plt.legend(fontsize=6)
-            title = var
+            title = "Report"
+            if types[0] == 'day' and (lines == 1 or len(dates) == 1):
+                title = f"for {d}"
+            elif types[0] == 'week':
+                title = f"for week to {d}"
+            elif types[0] == 'month':
+                title = f"for month of {months[int(d[5:7])]} {d[:4]}"
+            elif types[0] == 'year':
+                title = f"for {d[:4]}"
+            if len(vars) == 1 or plot == 1:
+                title = f"{name} {title} (kWh)"
+            else:
+                title = f"Report {title} (kWh)"
             plt.title(title, fontsize=12)
             plt.grid()
             plt.show()
@@ -1194,7 +1223,7 @@ def get_earnings():
         return None
     if debug_setting > 1:
         print(f"getting earnings")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Connection': 'keep-alive'}
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
     response = requests.get(url="https://www.foxesscloud.com/c/v0/device/earnings", params=params, headers=headers)
     if response.status_code != 200:
@@ -1447,7 +1476,11 @@ charge_config = {
     'min_hours': 0.25,                # minimum charge time in decimal hours
     'min_kwh': 1.0,                   # minimum to add in kwh
     'solcast_start': 21.0,            # earliest time to get Solcast forecast
-    'solar_start':  21.0              # earliest time to get Solar forecast
+    'solcast_adjust': 100,            # % adjustment to make to Solcast forecast
+    'solar_start':  21.0,             # earliest time to get Solar forecast
+    'solar_adjust':  100,             # % adjustment to make to Solar forecast
+    'forecast_selection': 0,          # 1 = use average of available forecast / generation
+    'annual_consumption': None        # optional annual consumption in kWh
 }
 
 ##################################################################################################
@@ -1456,14 +1489,13 @@ charge_config = {
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
-#  annual_consumption: the kWh consumed each year via the inverter
 #  force_charge: if True, force charge is set. If false, force charge is not set
 #  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 
-def charge_needed(forecast = None, annual_consumption = None, force_charge = None, timed_mode = None,
+def charge_needed(forecast = None, force_charge = None, timed_mode = None,
         update_settings = 0, show_data = None, show_plot = None, run_after = None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
@@ -1483,7 +1515,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     update_settings = 1 if update_settings is not None and (update_settings == 1 or update_settings == True) else 0
     timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
-    show_plot = 1 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
+    show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
     run_after = time_hours(run_after, 22)
     # get dates and times
     now = datetime.now()
@@ -1525,6 +1557,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     min_soc = battery_settings['minGridSoc']
     soc = battery['soc']
     bat_volt = battery['volt']
+    temperature = battery['temperature']
     residual = round(battery['residual']/1000, 1)
     capacity = round(residual * 100 / soc if soc > 0 else residual, 1)
     reserve = round(capacity * min_soc / 100, 1)
@@ -1532,10 +1565,13 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     print(f"\nBattery:")
     print(f"  Capacity = {capacity}kWh")
     print(f"  Voltage = {bat_volt}v")
+    print(f"  Temperature = {temperature}°C")
     print(f"  Min SoC on Grid = {min_soc}%")
     print(f"  Current SoC = {soc}%")
     print(f"  Residual = {residual}kWh")
     print(f"  Available = {available}kWh")
+    if temperature < 20 or temperature > 40:
+        print(f"** battery temperature may affect the battery charge rate / time")
     # get charge power / export limit
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
@@ -1561,6 +1597,7 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
         print(f"\ndevice_power = {device_power}, device_current = {device_current}")
         print(f"discharge_limit = {discharge_limit}, charge_limit = {charge_limit}, export_limit = {export_limit}")
     # get consumption data
+    annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
         consumption = round(annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality), 1)
         consumption_by_hour = daily_consumption
@@ -1592,6 +1629,11 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
             if fsolcast is not None:
                 (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
                 print(f"\nSolcast forecast: {solcast_value}kWh")
+                adjust = charge_config['solcast_adjust']
+                if adjust != 100:
+                    solcast_value = round(solcast_value * adjust / 100, 1)
+                    solcast_timed = [round(v * adjust / 100, 3) for v in solcast_timed]
+                    print(f"  Adjusted forecast: {solcast_value}kWh ({adjust}%)")
         else:
             print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast_start'])}")
     # get forecast.solar data
@@ -1603,6 +1645,11 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
             if fsolar is not None:
                 (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
                 print(f"\nSolar forecast: {solar_value}kWh")
+                adjust = charge_config['solar_adjust']
+                if adjust != 100:
+                    solar_value = round(solar_value * adjust / 100, 1)
+                    solar_timed = [round(v * adjust / 100, 3) for v in solar_timed]
+                    print(f"  Adjusted forecast: {solar_value}kWh ({adjust}%)")
         else:
             print(f"\nSolar forecast will run after {hours_time(charge_config['solar_start'])}")
     # get generation data
@@ -1632,6 +1679,12 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
         expected = forecast
         generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing manual forecast of {expected}kWh with {sun_name} sun profile")
+    elif charge_config['forecast_selection'] == 1:
+        values = [generation, solcast_value, solar_value]
+        n = sum([1 for x in values if x is not None])
+        expected = round(sum([x for x in values if x is not None]) / n, 1)
+        generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
+        print(f"\nUsing average forecast/generation of {expected}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
@@ -1724,13 +1777,14 @@ def charge_needed(forecast = None, annual_consumption = None, force_charge = Non
     kwh_contingency = round(consumption * charge_config['contingency'] / 100,1)
     kwh_needed = round(reserve - kwh_min + kwh_contingency, 1)
     if kwh_needed < charge_config['min_kwh']:
-        print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour, day=True)} (Residual = {kwh_min}kWh)")
-        print(f"  Contingency of {kwh_contingency}kWh is available, no charging is needed")
+        day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
+        print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour)} {day_when} (Residual = {kwh_min}kWh)")
+        print(f"  Contingency of {kwh_contingency}kWh ({charge_config['contingency']}%) is available, no charging is needed")
         hours = 0.0
         start1 = start_at
         end1 = start1
     else:
-        print(f"\nCharge of {kwh_needed}kWh needed for contingency of {kwh_contingency}kWh")
+        print(f"\nCharge of {kwh_needed}kWh needed for contingency of {kwh_contingency}kWh ({charge_config['contingency']}%)")
         start_residual = bat_timed[time_to_next]
         start_soc = int(start_residual / capacity * 100)
         if (start_residual + kwh_needed) > capacity:
@@ -1977,7 +2031,11 @@ def set_pvoutput(d = None, tou = 0):
         return None
     if csv[0] == '#':
         return csv
-    response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
+    try:
+        response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
+    except Exception as e:
+        print(f"** unable to upload data to pvoutput.org, {e}. Please try again later")
+        return None
     result = response.status_code
     if result != 200:
         if result == 401:

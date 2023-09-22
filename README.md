@@ -218,21 +218,16 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, annual_consumption, contingency, force_charge, charge_current, discharge_power, export_limit, run_after, update_setings)
+f.charge_needed(forecast, force_charge, run_after, update_setings, show_data, show_plot)
 ```
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
-+ annual_consumption: your kWh consumption each year (optional, see below)
-+ contingency: allows for variations in your consumption. 0% is no variation. Default is 20%
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
-+ charge_current: the maximum charge current that will be applied. By default, this is worked out from your inverter model. Set this if have changed your maximum charge current
-+ discharge_power: the maximum battery discharge power. By default, this is worked out from your inverter model
-+ export_limit: set this if the inverter has an export limit. By default, this is set to the power rating of the inverter model
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
 + update_settings: 1 allows charge_needed to update inverter settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
-+ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 0.
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3.
 
 ### Modelling
 
@@ -252,7 +247,6 @@ charge_needed() uses a number of models to better estimate the state of the batt
 
 Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
 
-
 Given the data available, the modelling works as follows:
 + gets current information on your battery
 + estimates your consumption (including contigency)
@@ -262,6 +256,33 @@ Given the data available, the modelling works as follows:
 + works out if there is a deficit (i.e. when the battery would be discharged below your min_soc)
 + reports the charge needed (deficit) or the minimum expected battery level
 + updates your battery charge settings (if update_settings=1)
+
+### Configuration Parameters
+
+The following parameters / default values are used to configure charge_needed and may be updated if required using name=value:
++ contingency: 15               # % of consumption to allow as contingency
++ charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
++ discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
++ export_limit: None            # maximum export power. None uses the inverter power rating
++ ac_conversion_loss: 0.96      # loss from inverter AC - DC conversion (e.g. AC => charge)
++ dc_conversion_loss: 0.95      # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
++ battery_loss: 0.97            # loss from battery charge to residual
++ operation_loss: 0.1           # inverter operating power drain in kW
++ volt_swing: 4                 # battery voltage % swing from 0% to 100% SoC when discharging
++ volt_overdrive: 1.01          # increase in battery volt when charging (compared with discharging)
++ generation_days: 3            # number of days to use for average generation (1-7)
++ consumption_days: 3           # number of days to use for average consumption (1-7)
++ consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
++ min_hours: 0.25               # minimum charge time to set (in decimal hours)
++ min_kwh: 1.0                  # minimum charge to add in kwh
++ solcast_start: 21.0           # earliest time to get Solcast forecast (decimal hours)
++ solcast_adjust: 100           # % adjustment to make to Solcast forecast
++ solar_start:  21.0            # earliest time to get Solar forecast (decimal hours)
++ solar_adjust:  100            # % adjustment to make to Solar forecast
++ forecast_selection: 0         # 1 = use average of available forecast / generation
++ annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
+
+These values are stored / available in f.charge_config.
 
 ## Date Ranges
 
@@ -432,7 +453,8 @@ This setting can be:
 
 ## Version Info
 
-0.5.5:<br>
+0.5.6:<br>
+Adjustment and average of forecast / generation. Check for battery temperature. Updated plots for get_report(). Update set_pvoutput exception handling. Changed show_plot to 3 by default.
 Updated error handling. Fix default charge current. Improve charge setting message.
 Updated handling of settings / contingency for charge_needed(). Added get_schedule / set_schedule.
 Handle error when strategy period is active. Fix tou=1 for PV Output.
