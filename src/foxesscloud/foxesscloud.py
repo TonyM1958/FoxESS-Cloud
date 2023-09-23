@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  22 September 2023
+Updated:  23 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.6"
+version = "0.5.8"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1179,7 +1179,7 @@ def plot_report(result, plot=1):
             elif types[0] == 'month':
                 plt.xticks(ticks=index, labels=date_list(s=dates[0][:-2]+'01', limit=len(index), today=2), rotation=45, fontsize=8, ha='right', rotation_mode='anchor')
             elif types[0] == 'year':
-                plt.xticks(ticks=index, labels=months[:len(index)], rotation=45, fontsize=10, ha='right', rotation_mode='anchor')
+                plt.xticks(ticks=index, labels=[m[:3] for m in months[:len(index)]], rotation=45, fontsize=10, ha='right', rotation_mode='anchor')
         for v in [v for v in result if v['variable'] == var]:
             name = v['name']
             d = v['date']
@@ -1258,16 +1258,16 @@ def round_time(h):
     return int(h) + int(60 * (h - int(h)) + 0.5) / 60
 
 # convert time string HH:MM:SS to decimal hours
-def time_hours(s, d = None):
-    if s is None:
-        s = d
-    if type(s) is float:
-        return s
-    elif type(s) is int:
-        return float(s)
-    elif type(s) is str and s.replace(':', '').isnumeric() and s.count(':') <= 2:
-        s += ':00' if s.count(':') == 1 else ''
-        return sum(float(t) / x for x, t in zip([1, 60, 3600], s.split(":")))
+def time_hours(t, d = None):
+    if t is None:
+        t = d
+    if type(t) is float:
+        return t
+    elif type(t) is int:
+        return float(t)
+    elif type(t) is str and t.replace(':', '').isnumeric() and t.count(':') <= 2:
+        t += ':00' if t.count(':') == 1 else ''
+        return sum(float(t) / x for x, t in zip([1, 60, 3600], t.split(":")))
     print(f"** invalid time string for time_hours()")
     return None
 
@@ -1314,6 +1314,23 @@ def period_hours(period, check = None, value = 1):
 def format_period(period):
     return f"{hours_time(period['start'])} - {hours_time(period['end'])}"
 
+#work out if a date falls in BST or GMT. Returns 1 for BST, 0 for GMT
+def british_summer_time(d=None):
+    if type(d) is list:
+        l = []
+        for x in d:
+            l.append(british_summer_time(x))
+        return l
+    d = datetime.strptime(d, '%Y-%m-%d') if type(d) is str else d.date() if d is not None else datetime.now().date()
+    start_date = d.replace(month=3, day=31)
+    days = (start_date.weekday() + 1) % 7
+    start_date = start_date - timedelta(days=days)
+    end_date = d.replace(month=10, day=31)
+    days = (end_date.weekday() + 1) % 7
+    end_date = end_date - timedelta(days=days)
+    if d >= start_date and d < end_date:
+        return 1
+    return 0
 
 ##################################################################################################
 # Tariffs / time of user (TOU)
@@ -1473,6 +1490,7 @@ charge_config = {
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
+    'use_today': 21.0,                 # hour when todays consumption and generation can be used
     'min_hours': 0.25,                # minimum charge time in decimal hours
     'min_kwh': 1.0,                   # minimum to add in kwh
     'solcast_start': 21.0,            # earliest time to get Solcast forecast
@@ -1480,7 +1498,10 @@ charge_config = {
     'solar_start':  21.0,             # earliest time to get Solar forecast
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 0,          # 1 = use average of available forecast / generation
-    'annual_consumption': None        # optional annual consumption in kWh
+    'annual_consumption': None,       # optional annual consumption in kWh
+    'time_shift': None,               # offset local time by x hours
+    'timed_mode': 0,                  # 1 = apply timed work mode changes
+    'force_charge': 0                 # 1 = apply force charge for any remaining charge time
 }
 
 ##################################################################################################
@@ -1489,14 +1510,12 @@ charge_config = {
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
-#  force_charge: if True, force charge is set. If false, force charge is not set
-#  run_after: time constraint for Solcast and updating settings. The default is 21:00.
 #  update_settings: 1 allows inverter charge time settings to be updated. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
+#  run_after: over-ride time constraint for Solcast and updating settings. The default is 21:00.
 
-def charge_needed(forecast = None, force_charge = None, timed_mode = None,
-        update_settings = 0, show_data = None, show_plot = None, run_after = None, **settings):
+def charge_needed(forecast = None, update_settings = 0, show_data = None, show_plot = None, run_after = None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -1511,9 +1530,7 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
     if len(s) > 0:
         print(f"Parameters: {s}")
     # convert any boolean flag values and set default parameters
-    force_charge = 1 if force_charge is not None and (force_charge == 1 or force_charge == True) else 0
     update_settings = 1 if update_settings is not None and (update_settings == 1 or update_settings == True) else 0
-    timed_mode = 1 if timed_mode is not None and (timed_mode == 1 or timed_mode == True) else 0
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
     run_after = time_hours(run_after, 22)
@@ -1521,11 +1538,13 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
-    hour_now = time_hours(f"{now.hour:02}:{now.minute:02}")
+    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(now)
+    hour_now = round_time(now.hour + time_shift + now.minute / 60)
     print(f"  datetime = {today} {hours_time(hour_now)}")
     if tariff is not None:
         print(f"  tariff = {tariff['name']}")
     # get next charge times from am/pm charge times
+    force_charge = charge_config['force_charge']
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
     end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
     force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else 1
@@ -1608,7 +1627,7 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
         consumption_span = charge_config['consumption_span']
         consumption_span = 'week' if consumption_span not in ['week', 'weekday'] else consumption_span
-        history = get_report('day', d = date_list(span=consumption_span, today=1)[-consumption_days:], v='loads')
+        history = get_report('day', d = date_list(span=consumption_span, today=1 if hour_now >= charge_config['use_today'] else 0)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
         print(f"\nConsumption (kWh):")
         s = ""
@@ -1657,6 +1676,8 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
     pv_history = {}
     for day in history:
         date = day['date']
+        if date == today and hour_now < charge_config['use_today']:
+            continue
         if pv_history.get(date) is None:
             pv_history[date] = 0.0
         pv_history[date] += round(day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh'], 1)
@@ -1664,7 +1685,7 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
     pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
     print(f"\nGeneration (kWh):")
     s = ""
-    for d in sorted(pv_history.keys()):
+    for d in sorted(pv_history.keys())[-gen_days:]:
         s += f"  {d} = {pv_history[d]:4.1f},"
     print(s[:-1])
     generation = round(pv_sum / gen_days, 1)
@@ -1680,7 +1701,7 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
         generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
         print(f"\nUsing manual forecast of {expected}kWh with {sun_name} sun profile")
     elif charge_config['forecast_selection'] == 1:
-        values = [generation, solcast_value, solar_value]
+        values = [solcast_value, solar_value, generation]
         n = sum([1 for x in values if x is not None])
         expected = round(sum([x for x in values if x is not None]) / n, 1)
         generation_timed = [round(expected * x / sun_sum, 3) for x in sun_timed]
@@ -1701,6 +1722,7 @@ def charge_needed(forecast = None, force_charge = None, timed_mode = None,
     charge_timed = [round(x * charge_config['dc_conversion_loss'], 3) for x in generation_timed]
     discharge_timed = [round(x / charge_config['dc_conversion_loss'], 3) for x in consumption_timed]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
+    timed_mode = charge_config['timed_mode']
     for i in range(0, run_time):
         h = int(hour_now) + i
         # cap charge / discharge power
@@ -1841,8 +1863,8 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
     today = 0 if today == False else 1 if today == True else today
     if today == 0:
         latest_date -= timedelta(days=1)
-    first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if s is not None else None
-    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if e is not None else None
+    first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if type(s) is str else s.date() if s is not None else None
+    last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if type(e) is str else e.date() if e is not None else None
     step = 1
     if first is None and last is None:
         last = latest_date
@@ -1888,7 +1910,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
     else:
         limit = 200 if limit is None or limit < 1 else limit
     last = latest_date if last is None or (last > latest_date and today != 2) else last
-    d = latest_date if first is None or first > latest_date else first
+    d = latest_date if first is None or (first > latest_date and today != 2) else first
     if d > last:
         d, last = last, d
     l = [datetime.strftime(d, '%Y-%m-%d')]

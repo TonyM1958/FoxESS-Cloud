@@ -273,6 +273,7 @@ The following parameters / default values are used to configure charge_needed an
 + generation_days: 3            # number of days to use for average generation (1-7)
 + consumption_days: 3           # number of days to use for average consumption (1-7)
 + consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
++ use_today: 21.0               # hour when today's generation and consumption data will be used
 + min_hours: 0.25               # minimum charge time to set (in decimal hours)
 + min_kwh: 1.0                  # minimum charge to add in kwh
 + solcast_start: 21.0           # earliest time to get Solcast forecast (decimal hours)
@@ -281,6 +282,8 @@ The following parameters / default values are used to configure charge_needed an
 + solar_adjust:  100            # % adjustment to make to Solar forecast
 + forecast_selection: 0         # 1 = use average of available forecast / generation
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
++ time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
++ force_charge: 0               # 1 = apply force charge for any remaining charge time
 
 These values are stored / available in f.charge_config.
 
@@ -305,6 +308,20 @@ You can use 'span' as follows:
 + '2days' will provide the dates of yesterday and today
 + 'weekday' will provide the dates of the same day of the week, going backwards (or forwards) up to 7 weeks
 
+```
+f.british_summer_time(d)                         # 1 if d is in Britsh Summer Time, 0 if not
+```
+
+## Time Periods
+
+Times and time period settings are held as decimal hours. Functions for working with time strings with the format 'HH:MM:SS' and decimal hours include:
+
+```
+f.time_hours(t, d=None)                          # convert time to decimal hours. t is a time string ('HH:MM' or 'HH:MM:SS'), d is optional and is the default time if s is None
+f.hours_time(h, mm=True, ss=False, day=False)    # convert decimal hours to time (HH:MM:SS). mm = include minutes, ss = include seconds, day = include /n for day when hours > 24
+f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in the time period a -> b
+```
+
 ## Tariffs
 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
@@ -328,19 +345,6 @@ f.tariff = f.octopus_flux
 
 Note: when TOU is applied, energy values uploaded to PV Output are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
 
-Time period settings are held as decimal hours. Functions are available to convert time strings with the format 'HH:MM:SS' to decimal hours and back are:
-
-```
-f.time_hours(s, d)                          # convert time to decimal hours. d is the default value if s is None
-f.hours_time(h, ss)                         # convert decimal hours to time
-f.hours_in(h, {'start': a, 'end': b})       # True if decimal hour h is in the time period a -> b
-```
-
-Where:
-+ s: is a time string ('HH:MM' or 'HH:MM:SS')
-+ d: is optional and is the default time if s is None
-+ h: is decimal hours (e.g 1.5)
-+ ss: is optional. When True, time strings include seconds HH:MM:SS, otherwise they are hours and minutes 'HH:MM' 
 
 
 # PV Output
@@ -453,7 +457,8 @@ This setting can be:
 
 ## Version Info
 
-0.5.6:<br>
+0.5.8:<br>
+Added time_shift and daylight_saving to correct time now when running in the cloud
 Adjustment and average of forecast / generation. Check for battery temperature. Updated plots for get_report(). Update set_pvoutput exception handling. Changed show_plot to 3 by default.
 Updated error handling. Fix default charge current. Improve charge setting message.
 Updated handling of settings / contingency for charge_needed(). Added get_schedule / set_schedule.
