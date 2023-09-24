@@ -178,15 +178,18 @@ def get_info():
 
 site_list = None
 site = None
+station_id = None
 
 def get_site(name=None):
-    global token, site_list, site, debug_setting, messages
+    global token, site_list, site, debug_setting, messages, station_id
     if get_token() is None:
         return None
     if site is not None and name is None:
         return site
     if debug_setting > 1:
         print(f"getting sites")
+    site = None
+    station_id = None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
     response = requests.post(url="https://www.foxesscloud.com/c/v1/plant/list", headers=headers, data=json.dumps(query))
@@ -218,6 +221,7 @@ def get_site(name=None):
     else:
         n = 0
     site = site_list[n]
+    station_id = site['stationID']
     return site
 
 ##################################################################################################
@@ -787,7 +791,9 @@ def set_schedule(enable=1, pollcy = None):
 # v = list of variables to get
 # summary = 0: raw data, 1: add max, min, sum, 2: summarise and drop raw data, 3: calculate state
 # save = "xxxxx": save the raw results to xxxxx_raw_<time_span>_<d>.json
-# load= "<file>": load the raw results from <file>
+# load = "<file>": load the raw results from <file>
+# plot = 0: no plot, 1: plot variables separately, 2: combine variables 
+# station = 0: use device_id, 1: use station_id
 ##################################################################################################
 
 # variables that cover inverter power data: generationPower must be first
@@ -795,10 +801,14 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
-def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
+def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
     global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw, messages
-    if get_device() is None:
+    if station == 0 and get_device() is None:
         return None
+    elif station == 1 and get_site() is None:
+        return None
+    id_name = 'deviceID' if station == 0 else 'stationID'
+    id_code = device_id if station == 0 else station_id
     time_span = time_span.lower()
     if d is None:
         d = datetime.strftime(datetime.now() - timedelta(minutes=5), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
@@ -811,7 +821,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
                 return None
             result_list += result
         if plot > 0:
-            plot_raw(result_list, plot)
+            plot_raw(result_list, plot, station)
         return result_list
     if v is None:
         if raw_vars is None:
@@ -828,7 +838,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         print(f"getting raw data")
     if load is None:
         headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-        query = {'deviceID': device_id, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
+        query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
         if response.status_code != 200:
             print(f"** get_raw() got response code: {response.status_code}")
@@ -926,11 +936,12 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
                 var['unit'] = 'kWh'
             del var['data']
     if plot > 0 and summary < 2:
-        plot_raw(result)
+        plot_raw(result, plot, station)
     return result
 
 # plot raw results data
-def plot_raw(result, plot=1):
+def plot_raw(result, plot=1, station=0):
+    global site, device_sn
     if result is None:
         return
     # work out what we have
@@ -966,7 +977,7 @@ def plot_raw(result, plot=1):
             if lines >= 1 and (plot == 1 or d == dates[-1]) :
                 if lines > 1:
                     plt.legend(fontsize=6)
-                title = f"({unit})"
+                title = f"({unit}) for {site['name'] if station == 1 else device_sn}"
                 if plot == 1 or len(dates) == 1 or lines == 1:
                     title = f"for {d} {title}"
                 if len(vars) == 1 or lines == 1:
@@ -987,7 +998,9 @@ def plot_raw(result, plot=1):
 # v = list of report variables to get
 # summary = 0, 1, 2: do a quick total energy report for a day
 # save = "xxxxx": save the report results to xxxxx_raw_<time_span>_<d>.json
-# load= "<file>": load the report results from <file>
+# load = "<file>": load the report results from <file>
+# plot = 0: no plot, 1 = plot variables separately, 2 = combine variables
+# station = 0: use device_id, 1 = use station_id
 ##################################################################################################
 
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
@@ -998,10 +1011,14 @@ fix_values = 1
 fix_value_threshold = 200000000.0
 fix_value_mask = 0x0000FFFF
 
-def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_id, var_list, debug_setting, report_vars, messages
-    if get_device() is None:
+def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
+    global token, device_id, station_id, var_list, debug_setting, report_vars, messages, station_id
+    if station == 0 and get_device() is None:
         return None
+    elif station == 1 and get_site() is None:
+        return None
+    id_name = 'deviceID' if station == 0 else 'stationID'
+    id_code = device_id if station == 0 else station_id
     # process list of days
     if d is not None and type(d) is list:
         result_list = []
@@ -1011,7 +1028,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                 return None
             result_list += result
         if plot > 0:
-            plot_report(result_list, plot)
+            plot_report(result_list, plot, station)
         return result_list
     # validate parameters
     report_type = report_type.lower()
@@ -1041,7 +1058,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         # side report needed
         side_date = query_date(d, -7) if report_type == 'week' else main_date
         if report_type == 'day' or main_date['month'] != side_date['month']:
-            query = {'deviceID': device_id, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
+            query = {id_name: id_code, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
             response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
             if response.status_code != 200:
                 print(f"** get_report() side report got response code: {response.status_code}")
@@ -1057,7 +1074,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                         if data['value'] > fix_value_threshold:
                             data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
     if summary < 2:
-        query = {'deviceID': device_id, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
+        query = {id_name: id_code, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
         if response.status_code != 200:
             print(f"** get_report() main report got response code: {response.status_code}")
@@ -1137,13 +1154,14 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             var['min'] = round(min,3) if min is not None else None
             var['min_index'] = [y['value'] for y in var['data']].index(min) if min is not None else None
     if plot > 0 and summary < 2:
-        plot_report(result, plot)
+        plot_report(result, plot, station)
     return result
 
 months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 # plot get_report result
-def plot_report(result, plot=1):
+def plot_report(result, plot=1, station=0):
+    global site, device_sn
     if result is None:
         return
     # work out what we have
@@ -1206,6 +1224,7 @@ def plot_report(result, plot=1):
                 title = f"{name} {title} (kWh)"
             else:
                 title = f"Report {title} (kWh)"
+            title += f" for {site['name'] if station == 1 else device_sn}"
             plt.title(title, fontsize=12)
             plt.grid()
             plt.show()

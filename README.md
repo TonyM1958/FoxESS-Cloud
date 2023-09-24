@@ -50,9 +50,7 @@ f.get_logger()
 f.get_device()
 ```
 
-By default, this will load the first item in the list provided by the cloud.
-
-If there is more than 1 item, the call will show the list of items. To select a specific item to work with, call a qualifier:
+By default, this will load the first item in the list provided by the cloud. If there is more than 1 item, the call will show the list of items. To select a specific item to work with, call a qualifier:
 + Site: full or partial name of the site
 + Logger: full or partial serial number
 + Inverter: full or partial serial number
@@ -117,7 +115,7 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
-f.get_raw(time_span, d, v, summary, save, load, plot)
+f.get_raw(time_span, d, v, summary, save, load, plot, station)
 ```
 
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
@@ -127,6 +125,7 @@ f.get_raw(time_span, d, v, summary, save, load, plot)
 + save: set to the root part of a filename to save the results
 + load: set to the full filename to load previously saved results
 + plot is optional. 1 plots the results with a chart per unit and per day. 2 plots multiple days on the same chart. Default is 0, no plots
++ station is optional. 1 gets data for a site (using f.station_id), 0 gets data for a device (using f.device_id). The default is 0.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -162,7 +161,7 @@ For power values, the summary performs a Riemann sum of the data, integrating kW
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
 
 ```
-f.get_report(report_type, d, v, summary, save, load, plot)
+f.get_report(report_type, d, v, summary, save, load, plot, station)
 ```
 + report_type sets the period covered by the report and is one of 'day', 'week', 'month', 'year':
 + when 'day' is selected, energy is reported each hour through the day
@@ -175,6 +174,7 @@ f.get_report(report_type, d, v, summary, save, load, plot)
 + save: set to the root part of a filename to save the results
 + load: set to the full filename to load previously saved results
 + plot is optional. 1 to plot results
++ station is optional. 1 gets data for a site (using f.station_id), 0 gets data for a device (using f.device_id). The default is 0.
 
 The list of variables that can be reported on is stored in f.report_vars.
 
@@ -456,6 +456,9 @@ This setting can be:
 
 
 ## Version Info
+
+0.6.0<br>
+Added station parameter to get_raw() and get_report()
 
 0.5.9:<br>
 Tweak calibration for charge time, add battery power / charging indicator to charge_needed().
