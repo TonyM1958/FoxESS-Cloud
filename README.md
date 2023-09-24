@@ -457,7 +457,8 @@ This setting can be:
 
 ## Version Info
 
-0.5.8:<br>
+0.5.9:<br>
+Tweak calibration for charge time, add battery power / charging indicator to charge_needed().
 Added time_shift and daylight_saving to correct time now when running in the cloud
 Adjustment and average of forecast / generation. Check for battery temperature. Updated plots for get_report(). Update set_pvoutput exception handling. Changed show_plot to 3 by default.
 Updated error handling. Fix default charge current. Improve charge setting message.

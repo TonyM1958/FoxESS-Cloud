@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  23 September 2023
+Updated:  24 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.8"
+version = "0.5.9"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1477,20 +1477,20 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 
 # charge_needed settings
 charge_config = {
-    'contingency': 15,                # % of consumption to allow as contingency
+    'contingency': 20,                # % of consumption to allow as contingency
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
     'ac_conversion_loss': 0.96,       # loss from inverter AC - DC conversion (e.g. AC => charge)
     'dc_conversion_loss': 0.95,       # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
-    'battery_loss': 0.97,             # loss from battery charge to residual
+    'battery_loss': 0.95,             # loss from battery charge to residual
     'operation_loss': 0.1,            # inverter operating power kW
-    'volt_swing': 4,                  # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.01,           # increase in bat volt when charging (compared with discharging)
+    'volt_swing': 4.5,                # bat volt % swing from 0% to 100% SoC
+    'volt_overdrive': 1.018,          # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
-    'use_today': 21.0,                 # hour when todays consumption and generation can be used
+    'use_today': 21.0,                # hour when todays consumption and generation can be used
     'min_hours': 0.25,                # minimum charge time in decimal hours
     'min_kwh': 1.0,                   # minimum to add in kwh
     'solcast_start': 21.0,            # earliest time to get Solcast forecast
@@ -1575,8 +1575,9 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     get_battery()
     min_soc = battery_settings['minGridSoc']
     soc = battery['soc']
-    bat_volt = battery['volt']
-    temperature = battery['temperature']
+    bat_volt = round(battery['volt'], 1)
+    bat_power = round(battery['power'], 3)
+    temperature = round(battery['temperature'], 1)
     residual = round(battery['residual']/1000, 1)
     capacity = round(residual * 100 / soc if soc > 0 else residual, 1)
     reserve = round(capacity * min_soc / 100, 1)
@@ -1584,6 +1585,7 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     print(f"\nBattery:")
     print(f"  Capacity = {capacity}kWh")
     print(f"  Voltage = {bat_volt}v")
+    print(f"  Power = {bat_power}kW {'(charging)' if bat_power < 0 else ''}")
     print(f"  Temperature = {temperature}°C")
     print(f"  Min SoC on Grid = {min_soc}%")
     print(f"  Current SoC = {soc}%")
@@ -1600,7 +1602,7 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
         device_power = 3.68
         device_current = 26
     # discharge limit
-    discharge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100)
+    discharge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - soc) / 100) / (charge_config['volt_overdrive'] if bat_power < 0 else 1.0)
     discharge_limit = round(device_power / charge_config['dc_conversion_loss'], 1)
     discharge_power = round(discharge_volt * (charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current) / 1000, 1)
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
@@ -1613,6 +1615,7 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     export_limit = round((device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['dc_conversion_loss'], 1)
     if debug_setting > 1:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
+        print(f"\ndischarge_volt = {discharge_volt:.1f}, charge_volt = {charge_volt:.1f}")
         print(f"\ndevice_power = {device_power}, device_current = {device_current}")
         print(f"discharge_limit = {discharge_limit}, charge_limit = {charge_limit}, export_limit = {export_limit}")
     # get consumption data
@@ -1814,6 +1817,9 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
             print(f"** battery full, a capacity of {bigger_battery}kWh would be required")
             kwh_needed = capacity - start_residual
         # calculate charging time
+        if charge_limit < 0.1:
+            print(f"** charge limit is too low ({charge_limit} kW)")
+            charge_limit = 0.1
         hours = round_time(kwh_needed / charge_limit / charge_config['battery_loss'])
         # don't charge for less than minimum time period
         if hours > 0.0 and hours < charge_config['min_hours']:
