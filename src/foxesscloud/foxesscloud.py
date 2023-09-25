@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  24 September 2023
+Updated:  25 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.5.9"
+version = "0.6.0"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -170,6 +170,33 @@ def get_info():
         return None
     info['access'] = result['access']
     return info
+
+##################################################################################################
+# get status
+##################################################################################################
+
+status = None
+
+def get_status(station=0):
+    global token, debug_setting, info, messages, status
+    if get_token() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting status")
+    url = "https://www.foxesscloud.com/c/v0/device/status/all" if station == 0 else "https://www.foxesscloud.com/c/v0/plant/status/all"
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    response = requests.get(url=url, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_status() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        print(type(errno))
+        print(f"** get_status(), no result data, {errno_message(errno)}")
+        return None
+    status = result
+    return result
 
 
 ##################################################################################################
@@ -971,19 +998,18 @@ def plot_raw(result, plot=1, station=0):
                 x = [time_hours(v['data'][i]['time'][11:16]) for i in range(0, n)]
                 y = [v['data'][i]['value'] for i in range(0, n)]
                 name = v['name']
-                label = f"{name} {d}" if plot == 2 and len(dates) > 1 else name
+                label = f"{name} / {d}" if plot == 2 and len(dates) > 1 else name
                 plt.plot(x, y ,label=label)
                 lines += 1
             if lines >= 1 and (plot == 1 or d == dates[-1]) :
                 if lines > 1:
                     plt.legend(fontsize=6)
-                title = f"({unit}) for {site['name'] if station == 1 else device_sn}"
+                title = ""
                 if plot == 1 or len(dates) == 1 or lines == 1:
-                    title = f"for {d} {title}"
+                    title = f"{d} / "
                 if len(vars) == 1 or lines == 1:
-                    title = f"{name} {title}"
-                else:
-                    title = f"Parameters {title}"
+                    title = f"{name} / {title}"
+                title = f"{title}{unit} / {site['name'] if station == 1 else device_sn}"
                 plt.title(title, fontsize=12)
                 plt.grid()
                 plt.show()
@@ -1211,20 +1237,20 @@ def plot_report(result, plot=1, station=0):
         if lines >= 1 and (plot == 1 or len(dates) > 1 or var == vars[-1]):
             if lines > 1:
                 plt.legend(fontsize=6)
-            title = "Report"
+            title = ""
             if types[0] == 'day' and (lines == 1 or len(dates) == 1):
-                title = f"for {d}"
+                title = f"{d} / "
             elif types[0] == 'week':
-                title = f"for week to {d}"
+                title = f"Week to {d} / "
             elif types[0] == 'month':
-                title = f"for month of {months[int(d[5:7])]} {d[:4]}"
+                title = f"Month of {months[int(d[5:7])]} {d[:4]} / "
             elif types[0] == 'year':
-                title = f"for {d[:4]}"
+                title = f"Year {d[:4]} / "
             if len(vars) == 1 or plot == 1:
-                title = f"{name} {title} (kWh)"
+                title = f"{name} / {title}kWh / "
             else:
-                title = f"Report {title} (kWh)"
-            title += f" for {site['name'] if station == 1 else device_sn}"
+                title = f"{title} kWh / "
+            title = f"{title}{site['name'] if station == 1 else device_sn}"
             plt.title(title, fontsize=12)
             plt.grid()
             plt.show()
@@ -1237,14 +1263,17 @@ def plot_report(result, plot=1, station=0):
 ##################################################################################################
 
 def get_earnings():
-    global token, device_id, var_list, debug_setting, messages
+    global token, device_id, station_id, var_list, debug_setting, messages
     if get_device() is None:
         return None
+    id_name = 'deviceID'
+    id_code = device_id
+    url = "https://www.foxesscloud.com/c/v0/device/earnings"
     if debug_setting > 1:
         print(f"getting earnings")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    params = {'deviceID': device_id}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/earnings", params=params, headers=headers)
+    params = {id_name: id_code}
+    response = requests.get(url=url, params=params, headers=headers)
     if response.status_code != 200:
         print(f"** get_earnings() got response code: {response.status_code}")
         return None
@@ -1520,7 +1549,9 @@ charge_config = {
     'annual_consumption': None,       # optional annual consumption in kWh
     'time_shift': None,               # offset local time by x hours
     'timed_mode': 0,                  # 1 = apply timed work mode changes
-    'force_charge': 0                 # 1 = apply force charge for any remaining charge time
+    'force_charge': 0,                # 1 = apply force charge for any remaining charge time
+    'special_contingency': 40,        # contingency for special days when consumption might be higher
+    'special_days': ['11-23', '12-25', '12-26', '01-01']
 }
 
 ##################################################################################################
@@ -1818,17 +1849,18 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
         plt.xticks(rotation=90, ha='center', fontsize=8)
         plt.show()
     # work out what we need to add to stay above reserve and provide contingency
-    kwh_contingency = round(consumption * charge_config['contingency'] / 100,1)
+    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
+    kwh_contingency = round(consumption * contingency / 100,1)
     kwh_needed = round(reserve - kwh_min + kwh_contingency, 1)
     if kwh_needed < charge_config['min_kwh']:
         day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
         print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour)} {day_when} (Residual = {kwh_min}kWh)")
-        print(f"  Contingency of {kwh_contingency}kWh ({charge_config['contingency']}%) is available, no charging is needed")
+        print(f"  Contingency of {kwh_contingency}kWh ({contingency}%) is available, no charging is needed")
         hours = 0.0
         start1 = start_at
         end1 = start1
     else:
-        print(f"\nCharge of {kwh_needed}kWh needed for contingency of {kwh_contingency}kWh ({charge_config['contingency']}%)")
+        print(f"\nCharge of {kwh_needed}kWh needed for contingency of {kwh_contingency}kWh ({contingency}%)")
         start_residual = bat_timed[time_to_next]
         start_soc = int(start_residual / capacity * 100)
         if (start_residual + kwh_needed) > capacity:

@@ -32,14 +32,17 @@ For example, replace _my.fox_username_ with the login name and _my.fox_password_
 
 Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
-## User Information
-Load information about the user:
+## Information
+Load information about the user, site or device:
 
 ```
 f.get_info()
+f.get_status(station)
 ```
 
-This set the variable f.info and returns a dictionary containing user information.
+f.get_info() sets the variable f.info and returns a dictionary containing user information.
+
+f.get_status() sets the variable f.status and returns a dictionary containing status information for devices (station=0) or sites (station=1).
 
 ## Site, Logger and Device Information
 Load information about a site, data logger or inverter (device):
@@ -260,7 +263,7 @@ Given the data available, the modelling works as follows:
 ### Configuration Parameters
 
 The following parameters / default values are used to configure charge_needed and may be updated if required using name=value:
-+ contingency: 15               # % of consumption to allow as contingency
++ contingency: 20               # % of consumption to allow as contingency
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 + export_limit: None            # maximum export power. None uses the inverter power rating
@@ -284,6 +287,8 @@ The following parameters / default values are used to configure charge_needed an
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
 + time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
 + force_charge: 0               # 1 = apply force charge for any remaining charge time
++ special_contingency: 40       # contingency for special days when consumption might be higher
++ special_days: ['11-23', '12-25', '12-26', '01-01']
 
 These values are stored / available in f.charge_config.
 
@@ -458,7 +463,8 @@ This setting can be:
 ## Version Info
 
 0.6.0<br>
-Added station parameter to get_raw() and get_report()
+Added special_contingency and special_dates to f.charge_config.
+Added station parameter to get_raw() and get_report() to get data for site instead of device
 
 0.5.9:<br>
 Tweak calibration for charge time, add battery power / charging indicator to charge_needed().
