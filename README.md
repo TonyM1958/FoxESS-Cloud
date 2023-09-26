@@ -262,7 +262,7 @@ Given the data available, the modelling works as follows:
 
 ### Configuration Parameters
 
-The following parameters / default values are used to configure charge_needed and may be updated if required using name=value:
+The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
 + contingency: 20               # % of consumption to allow as contingency
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
@@ -289,6 +289,8 @@ The following parameters / default values are used to configure charge_needed an
 + force_charge: 0               # 1 = apply force charge for any remaining charge time
 + special_contingency: 40       # contingency for special days when consumption might be higher
 + special_days: ['11-23', '12-25', '12-26', '01-01']
++ full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
++ default_mode: None            # default work mode to set or None to disable timed work modes
 
 These values are stored / available in f.charge_config.
 
@@ -350,6 +352,7 @@ f.tariff = f.octopus_flux
 
 Note: when TOU is applied, energy values uploaded to PV Output are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
 
+In addition to energy tariffs, the tariff can contain timed work mode changes using the start, end and min_soc to use when changing work mode.
 
 
 # PV Output
@@ -462,7 +465,9 @@ This setting can be:
 
 ## Version Info
 
-0.6.0<br>
+0.6.2<br>
+Added default_mode and timed work mode changes.
+Added full_charge setting and check for valid parameter names.
 Added special_contingency and special_dates to f.charge_config.
 Added station parameter to get_raw() and get_report() to get data for site instead of device
 

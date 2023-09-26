@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  25 September 2023
+Updated:  27 September 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.6.0"
+version = "0.6.2"
 debug_setting = 1
 
 print(f"FoxESS-Cloud version {version}")
@@ -1392,8 +1392,8 @@ octopus_flux = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
     'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
-    'feedin': {'start': 16.0, 'end': 7.0},                      # when feedin work mode is set
-    'backup': {'start': 0.0, 'end': 0.0},                       # when backup work mode is set
+    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 50},       # when feedin work mode is set
+    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},         # when backup work mode is set
     }
 
 # time periods for Intelligent Octopus
@@ -1403,8 +1403,8 @@ intelligent_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'feedin': {'start': 0.0, 'end': 0.0},
-    'backup': {'start': 0.0, 'end': 0.0},
+    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
+    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
     }
 
 # time periods for Octopus Cosy
@@ -1414,9 +1414,9 @@ octopus_cosy = {
     'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'feedin': {'start': 0.0, 'end': 0.0},
-    'backup': {'start': 0.0, 'end': 0.0},
-    }   
+    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
+    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
+    }
 
 # time periods for Octopus Go
 octopus_go = {
@@ -1425,8 +1425,8 @@ octopus_go = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'feedin': {'start': 0.0, 'end': 0.0},
-    'backup': {'start': 0.0, 'end': 0.0},
+    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
+    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
     }
 
 # custom time periods / template
@@ -1435,8 +1435,8 @@ custom_periods = {'name': 'Custom',
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'feedin': {'start': 0.0, 'end': 0.0},
-    'backup': {'start': 0.0, 'end': 0.0},
+    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
+    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
@@ -1548,10 +1548,11 @@ charge_config = {
     'forecast_selection': 0,          # 1 = use average of available forecast / generation
     'annual_consumption': None,       # optional annual consumption in kWh
     'time_shift': None,               # offset local time by x hours
-    'timed_mode': 0,                  # 1 = apply timed work mode changes
     'force_charge': 0,                # 1 = apply force charge for any remaining charge time
     'special_contingency': 40,        # contingency for special days when consumption might be higher
-    'special_days': ['11-23', '12-25', '12-26', '01-01']
+    'special_days': ['11-23', '12-25', '12-26', '01-01'],
+    'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
+    'default_mode': None              # default work mode
 }
 
 ##################################################################################################
@@ -1575,8 +1576,11 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
         s += f"\n  {k} = {args[k]}"
     # store settings:
     for key, value in settings.items():
-        charge_config[key] = value
-        s += f"\n  {key} = {value}"
+        if key not in charge_config:
+            print(f"** unknown configuration parameter: {key}")
+        else:
+            charge_config[key] = value
+            s += f"\n  {key} = {value}"
     if len(s) > 0:
         print(f"Parameters: {s}")
     # convert any boolean flag values and set default parameters
@@ -1588,6 +1592,7 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
+    day_tomorrow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(now.weekday() + 1) % 7]
     time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(now)
     hour_now = round_time(now.hour + time_shift + now.minute / 60)
     print(f"  datetime = {today} {hours_time(hour_now)}")
@@ -1615,11 +1620,18 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     start_at = start_pm if charge_pm else start_am
     end_by = end_pm if charge_pm else end_am
     force_charge = force_charge_pm if charge_pm else force_charge_am
+    # work out if we need to do a full charge
+    full_charge = charge_config['full_charge'] if not charge_pm else None
+    if type(full_charge) is int:
+        full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
+    elif type(full_charge) is str:
+        full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow else None
     if debug_setting > 1:
         print(f"\nstart_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
         print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
+        print(f"full_charge = {full_charge}")
     # get battery info
     get_settings()
     get_battery()
@@ -1775,7 +1787,7 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
     charge_timed = [round(x * charge_config['dc_conversion_loss'], 3) for x in generation_timed]
     discharge_timed = [round(x / charge_config['dc_conversion_loss'], 3) for x in consumption_timed]
     # adjust charge / discharge profile for work mode, force charge and inverter power limit
-    timed_mode = charge_config['timed_mode']
+    target_mode = charge_config['default_mode']
     for i in range(0, run_time):
         h = int(hour_now) + i
         # cap charge / discharge power
@@ -1785,9 +1797,9 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
             discharge_timed[i] = 0.0
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
             discharge_timed[i] = 0.0
-        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['backup']):
+        elif target_mode is not None and tariff is not None and hour_in(h, tariff['Backup']):
             discharge_timed[i] = 0.0
-        elif timed_mode == 1 and tariff is not None and hour_in(h, tariff['feedin']):
+        elif target_mode is not None and tariff is not None and hour_in(h, tariff['Feedin']):
             (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
             0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
     # work out change in battery residual from charge / discharge
@@ -1849,10 +1861,15 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
         plt.xticks(rotation=90, ha='center', fontsize=8)
         plt.show()
     # work out what we need to add to stay above reserve and provide contingency
-    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
+    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] and not charge_pm else charge_config['contingency']
     kwh_contingency = round(consumption * contingency / 100,1)
     kwh_needed = round(reserve - kwh_min + kwh_contingency, 1)
-    if kwh_needed < charge_config['min_kwh']:
+    if full_charge is not None:
+            print(f"\nFull charge is set for {full_charge}")
+            start1 = start_at
+            end1 = end_by
+            hours = round_time(end1 - start1)
+    elif kwh_needed < charge_config['min_kwh']:
         day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
         print(f"\nLowest forecast SoC = {int(kwh_min / capacity * 100)}% at {hours_time(min_hour)} {day_when} (Residual = {kwh_min}kWh)")
         print(f"  Contingency of {kwh_contingency}kWh ({contingency}%) is available, no charging is needed")
@@ -1889,18 +1906,32 @@ def charge_needed(forecast = None, update_settings = 0, show_data = None, show_p
         print(f"  Charging for {int(hours * 60)} minutes at a charge rate of {charge_limit}kW adds {kwh_added}kWh")
         print(f"  Target SoC = {target_soc}% at {hours_time(end1)}, Residual = {target_residual}kWh")
         # work out charge periods settings
-    if force_charge == 1:
-        start2 = round_time(start1 if hours == 0 else end1 + 1 / 60)       # add 1 minute to end time
+    start2 = round_time(start1 if hours == 0 else end1 + 1 / 60)       # add 1 minute to end time
+    if force_charge == 1 and hour_in(start2, {'start':start_at, 'end': end_by}):
         start2 = end_by if start2 > end_by else start2
         end2 = end_by
     else:
-        start2 = 0
-        end2 = 0
+            start2 = 0
+            end2 = 0
     # setup charging
-    if update_settings == 1:
-        set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
-    else:
+    if update_settings == 0:
         print(f"\n** no changes have been made, update_settings=1 will set your battery charge times")
+        return None
+    set_charge(ch1 = True, st1 = start1, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
+    # timed work mode change
+    if target_mode is None:
+        return None
+    current_mode = get_work_mode()
+    if current_mode is None:
+        return None
+    for w in ['SelfUse', 'Feedin', 'Backup']:
+        if tariff.get(w) is not None:
+            if hour_in(hour_now, tariff[w]) and soc >= tariff[w]['min_soc']:
+                target_mode = w
+    if current_mode != target_mode:
+        result = set_work_mode(target_mode)
+        if result == target_mode:
+            print(f"\nChanged work mode from {current_mode} to {target_mode}")
     return None
 
 ##################################################################################################
