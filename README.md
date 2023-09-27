@@ -221,16 +221,17 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, run_after, update_setings, show_data, show_plot)
+f.charge_needed(forecast, force_charge, run_after, update_setings, timed_mode, show_data, show_plot)
 ```
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
 + run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
-+ update_settings: 1 allows charge_needed to update inverter settings. The default is 0
++ update_settings: 1 allows charge_needed to update inverter charge time, 2 allows charge_needed to update the work mode. The default is 0
++ timed_mode: 1 includes work mode changes in the battery calculations and allows work mode to be changed according to the tariff settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
-+ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3.
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
 ### Modelling
 
@@ -290,7 +291,6 @@ The following parameters and default values are used to configure charge_needed 
 + special_contingency: 40       # contingency for special days when consumption might be higher
 + special_days: ['11-23', '12-25', '12-26', '01-01']
 + full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
-+ default_mode: None            # default work mode to set or None to disable timed work modes
 
 These values are stored / available in f.charge_config.
 
@@ -465,8 +465,9 @@ This setting can be:
 
 ## Version Info
 
-0.6.2<br>
-Added default_mode and timed work mode changes.
+0.6.3<br>
+Updated data and plots in charge_needed to show residuals with charge added. Removed rounding of internal data but added format to print values.
+Added timed work mode changes and automated work mode changes.
 Added full_charge setting and check for valid parameter names.
 Added special_contingency and special_dates to f.charge_config.
 Added station parameter to get_raw() and get_report() to get data for site instead of device
