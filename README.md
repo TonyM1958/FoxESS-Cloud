@@ -221,7 +221,7 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, run_after, update_setings, timed_mode, show_data, show_plot)
+f.charge_needed(forecast, force_charge, run_after, update_setings, timed_mode, show_data, show_plot, test_charge)
 ```
 
 All the parameters are optional:
@@ -232,6 +232,7 @@ All the parameters are optional:
 + timed_mode: 1 includes work mode changes in the battery calculations and allows work mode to be changed according to the tariff settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
++ test_charge: inject a charge in kWh (for software testing). Does not update the inverter settings. Default None
 
 ### Modelling
 
@@ -465,7 +466,8 @@ This setting can be:
 
 ## Version Info
 
-0.6.3<br>
+0.6.4<br>
+Added test_charge and grid consumption when charing and updated calculations for battery residuals.
 Updated data and plots in charge_needed to show residuals with charge added. Removed rounding of internal data but added format to print values.
 Added timed work mode changes and automated work mode changes.
 Added full_charge setting and check for valid parameter names.
