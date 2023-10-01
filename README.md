@@ -466,7 +466,9 @@ This setting can be:
 
 ## Version Info
 
-0.6.4<br>
+0.6.6<br>
+Updated changing work mode so SoC is only checked when changing modes. Updated text output to provide more information.
+Updated charge_needed so it will not run less than 15 minutes before during a charge period starts or until it ends. Reworked SoC and residual at end of charging to improve accuracy.
 Added test_charge and grid consumption when charing and updated calculations for battery residuals.
 Updated data and plots in charge_needed to show residuals with charge added. Removed rounding of internal data but added format to print values.
 Added timed work mode changes and automated work mode changes.
