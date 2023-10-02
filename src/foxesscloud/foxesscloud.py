@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 October 2023
+Updated:  02 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.6.6"
+version = "0.6.7"
 debug_setting = 1
 
 # global plot parameters
@@ -1247,7 +1247,7 @@ def plot_report(result, plot=1, station=0):
             elif types[0] == 'week':
                 title = f"Week to {d} / "
             elif types[0] == 'month':
-                title = f"Month of {months[int(d[5:7])]} {d[:4]} / "
+                title = f"Month of {months[int(d[5:7])-1]} {d[:4]} / "
             elif types[0] == 'year':
                 title = f"Year {d[:4]} / "
             if len(vars) == 1 or plot == 1:
@@ -1377,14 +1377,19 @@ def british_summer_time(d=None):
         for x in d:
             l.append(british_summer_time(x))
         return l
-    d = datetime.strptime(d, '%Y-%m-%d') if type(d) is str else d.date() if d is not None else datetime.now().date()
-    start_date = d.replace(month=3, day=31)
+    dat = datetime.strptime(d, '%Y-%m-%d') if type(d) is str else d.date() if d is not None else datetime.now().date()
+    hour = None if type(d) is str else d.hour if d is not None else datetime.now().hour 
+    start_date = dat.replace(month=3, day=31)
     days = (start_date.weekday() + 1) % 7
     start_date = start_date - timedelta(days=days)
-    end_date = d.replace(month=10, day=31)
+    end_date = dat.replace(month=10, day=31)
     days = (end_date.weekday() + 1) % 7
     end_date = end_date - timedelta(days=days)
-    if d >= start_date and d < end_date:
+    if dat == start_date and hour is not None and hour < 1:
+        return 0
+    elif dat == end_date and hour is not None and hour < 2:
+        return 1
+    elif dat >= start_date and dat < end_date:
         return 1
     return 0
 
@@ -1400,9 +1405,9 @@ octopus_flux = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
     'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
+    'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},         # when backup work mode is set
-    'default_mode': 'SelfUse'
+    'forecast_times': [22, 23, 1]                               # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1412,9 +1417,7 @@ intelligent_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
-    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
-    'default_mode': 'SelfUse'
+    'forecast_times': [22, 23]
     }
 
 # time periods for Octopus Cosy
@@ -1424,9 +1427,7 @@ octopus_cosy = {
     'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
-    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
-    'default_mode': 'SelfUse'
+    'forecast_times': [2, 3, 11, 12]
     }
 
 # time periods for Octopus Go
@@ -1436,9 +1437,17 @@ octopus_go = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
-    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
-    'default_mode': 'SelfUse'
+    'forecast_times': [22, 23]
+    }
+
+# time periods for Agile Octopus
+agile_octopus = {
+    'name': 'Agile Octopus',
+    'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 12.5, 'end': 14.5, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [12, 22, 23]
     }
 
 # custom time periods / template
@@ -1447,9 +1456,7 @@ custom_periods = {'name': 'Custom',
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'Feedin': {'start': 0.0, 'end': 0.0, 'min_soc': 50},
-    'Backup': {'start': 0.0, 'end': 0.0, 'min_soc': 0},
-    'default_mode': 'SelfUse'
+    'forecast_times': [22, 23]
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
@@ -1538,7 +1545,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 
 # charge_needed settings
 charge_config = {
-    'contingency': 15,                # % of consumption to allow as contingency
+    'contingency': 10,                # % of consumption to allow as contingency
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
@@ -1550,15 +1557,13 @@ charge_config = {
     'volt_overdrive': 1.018,          # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
-    'consumption_span': 'week',       # 'week' = last 7 days or 'weekday' = last 7 weekdays
+    'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
     'use_today': 21.0,                # hour when todays consumption and generation can be used
     'min_hours': 0.25,                # minimum charge time in decimal hours
     'min_kwh': 1.0,                   # minimum to add in kwh
-    'solcast_start': 21.0,            # earliest time to get Solcast forecast
     'solcast_adjust': 100,            # % adjustment to make to Solcast forecast
-    'solar_start':  21.0,             # earliest time to get Solar forecast
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
-    'forecast_selection': 0,          # 1 = use average of available forecast / generation
+    'forecast_selection': 0,          # 1 = use average of available forecast / generation, 2 only run with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'time_shift': None,               # offset local time by x hours
     'force_charge': 0,                # 1 = apply force charge for any remaining charge time
@@ -1573,13 +1578,14 @@ charge_config = {
 ##################################################################################################
 
 # work out the charge times to set using the parameters:
-#  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast
-#  update_settings: 1 allows inverter charge time settings to be updated, 2 allows work mode to change. The default is 0
+#  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
+#  update_settings: 0 no updates, 1 update charge settings, 2 update work mode, 3 update both. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
-#  run_after: over-ride time constraint for Solcast and updating settings. The default is 21:00.
+#  run_after: 1 over-rides 'forecast_times'. The default is 0.
 
-def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_data = None, show_plot = None, run_after = None, test_charge=None, **settings):
+def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_data = None, show_plot = None, run_after = None,
+        test_time=None, test_soc = None, test_residual = None, test_charge = None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -1596,18 +1602,19 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
             s += f"\n  {key} = {value}"
     if len(s) > 0:
         print(f"Parameters: {s}")
-    # convert any boolean flag values and set default parameters
-    timed_mode = 0 if timed_mode is None else timed_mode
+    # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
-    run_after = time_hours(run_after, 22)
+    run_after = 0 if run_after is None else 1
+    timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('default_mode') is not None else 0 if timed_mode is None else timed_mode
     # get dates and times
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(now.weekday() + 1) % 7]
     time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(now)
-    hour_now = round_time(now.hour + time_shift + now.minute / 60)
+    hour_now = round_time(now.hour + time_shift + now.minute / 60) if test_time is None else test_time
+    base_hour = int(hour_now)
     print(f"  datetime = {today} {hours_time(hour_now)}")
     if tariff is not None:
         print(f"  tariff = {tariff['name']}")
@@ -1616,20 +1623,20 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
     end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
     force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else 1
-    time_to_am = round_time(start_am - hour_now)
+    time_to_am = round_time(start_am - base_hour)
     start_pm = time_hours(tariff['off_peak2']['start'] if tariff is not None else 0.0)
     end_pm = time_hours(tariff['off_peak2']['end'] if tariff is not None else 0.0)
     force_charge_pm = 0 if tariff is not None and tariff['off_peak2']['force'] == 0 or force_charge == 0 else 1
-    time_to_pm = round_time(start_pm - hour_now) if start_pm > 0 else None
+    time_to_pm = round_time(start_pm - base_hour) if start_pm > 0 else None
     no_go1 = time_to_am < 0.25 or time_to_pm is not None and time_to_pm < 0.25
     no_go2 = hour_in(hour_now, {'start': start_pm, 'end': end_pm}) or hour_in(hour_now, {'start': start_am, 'end': end_am})
-    if run_after != 0 and (no_go1 or no_go2):
+    if run_after != 1 and (no_go1 or no_go2):
         print(f"** cannot configure next charging period until current one ends")
         return None
     # choose and configure parameters for next charge time period
     charge_pm = time_to_pm is not None and time_to_pm < time_to_am
-    time_to_next = int(time_to_pm if charge_pm else time_to_am) + 1
-    run_time = int(time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 2
+    time_to_next = int(time_to_pm if charge_pm else time_to_am)
+    run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1
     start_at = start_pm if charge_pm else start_am
     end_by = end_pm if charge_pm else end_am
     charge_time = round_time(end_by - start_at)
@@ -1648,14 +1655,22 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
         print(f"full_charge = {full_charge}")
 #        return None
     # get battery info from inverter
-    get_settings()
-    get_battery()
-    min_soc = battery_settings['minGridSoc']
-    current_soc = battery['soc']
-    bat_volt = battery['volt']
-    bat_power = battery['power']
-    temperature = battery['temperature']
-    residual = battery['residual']/1000
+    get_settings()      # also needed to fetch data on the inverter
+    if test_soc is None:
+        min_soc = battery_settings['minGridSoc']
+        get_battery()
+        current_soc = battery['soc']
+        bat_volt = battery['volt']
+        bat_power = battery['power']
+        temperature = battery['temperature']
+        residual = battery['residual']/1000
+    else:
+        current_soc = test_soc
+        residual = test_residual
+        min_soc = 10
+        bat_volt = 4 * 53
+        bat_power = 0
+        temperature = 30
     capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
@@ -1698,10 +1713,9 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
-        consumption = annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality)
+        consumption = annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality) * 12
         consumption_by_hour = daily_consumption
         print(f"\nEstimated consumption: {consumption:.1f}kWh")
-        consumption = consumption * (1 + contingency / 100)
     else:
         consumption_days = charge_config['consumption_days']
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
@@ -1722,35 +1736,32 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     # get Solcast data and produce time line
     solcast_value = None
     solcast_profile = None
-    if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key':
-        if hour_now >= run_after or hour_now >= charge_config['solcast_start']:
-            fsolcast = Solcast(quiet=True, estimated=0)
-            if fsolcast is not None:
-                (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
-                print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
-                adjust = charge_config['solcast_adjust']
-                if adjust != 100:
-                    solcast_value = solcast_value * adjust / 100
-                    solcast_timed = [v * adjust / 100 for v in solcast_timed]
-                    print(f"  Adjusted forecast: {solcast_value:.1f}kWh ({adjust}%)")
-        else:
-            print(f"\nSolcast forecast will run after {hours_time(charge_config['solcast_start'])}")
+    forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
+    if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 1):
+        fsolcast = Solcast(quiet=True, estimated=0)
+        if fsolcast is not None:
+            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
+            print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
+            adjust = charge_config['solcast_adjust']
+            if adjust != 100:
+                solcast_value = solcast_value * adjust / 100
+                solcast_timed = [v * adjust / 100 for v in solcast_timed]
+                print(f"  Adjusted forecast: {solcast_value:.1f}kWh ({adjust}%)")
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
-    if solar_arrays is not None:
-        if hour_now >= run_after or hour_now >= charge_config['solar_start']:
-            fsolar = Solar(quiet=True)
-            if fsolar is not None:
-                (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
-                print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
-                adjust = charge_config['solar_adjust']
-                if adjust != 100:
-                    solar_value = solar_value * adjust / 100
-                    solar_timed = [v * adjust / 100 for v in solar_timed]
-                    print(f"  Adjusted forecast: {solar_value:.1f}kWh ({adjust}%)")
-        else:
-            print(f"\nSolar forecast will run after {hours_time(charge_config['solar_start'])}")
+    if solar_arrays is not None and (base_hour in forecast_times or run_after == 1):
+        fsolar = Solar(quiet=True)
+        if fsolar is not None:
+            (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
+            print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
+            adjust = charge_config['solar_adjust']
+            if adjust != 100:
+                solar_value = solar_value * adjust / 100
+                solar_timed = [v * adjust / 100 for v in solar_timed]
+                print(f"  Adjusted forecast: {solar_value:.1f}kWh ({adjust}%)")
+    if solcast_value is None and solar_value is None and debug_setting > 1:
+        print(f"\nNo forecasts available at this time")
     # get generation data
     history = get_raw('week', d=today, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
@@ -1780,12 +1791,6 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
         print(f"\nUsing manual forecast: {expected:.1f}kWh with {sun_name} sun profile")
-    elif charge_config['forecast_selection'] == 1:
-        values = [solcast_value, solar_value, generation]
-        n = sum([1 for x in values if x is not None])
-        expected = sum([x for x in values if x is not None]) / n
-        generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing average forecast/generation: {expected:.1f}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
@@ -1797,13 +1802,16 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     else:
         expected = generation
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing forecast generation of {expected:.1f}kWh with {sun_name} sun profile")
+        print(f"\nUsing generation of {expected:.1f}kWh with {sun_name} sun profile")
+        if charge_config['forecast_selection'] == 1 and update_settings > 0:
+            print(f"  Settings will not be updated when forecast is not available")
+            update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['dc_conversion_loss'] for x in generation_timed]
     discharge_timed = [x / charge_config['ac_conversion_loss'] for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     for i in range(0, run_time):
-        h = int(hour_now) + i
+        h = base_hour + i
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
         discharge_timed[i] = discharge_limit if discharge_timed[i] > discharge_limit else discharge_timed[i]
@@ -1811,9 +1819,9 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
             discharge_timed[i] = 0.0
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
             discharge_timed[i] = 0.0
-        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff['Backup']):
+        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Backup')):
             discharge_timed[i] = 0.0
-        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff['Feedin']):
+        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Feedin')):
             (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
             0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
     if debug_setting > 1:
@@ -1823,7 +1831,7 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
         print(f"Discharge timed: {discharge_timed}")
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now to what it was at the start of current hour
-    h = int(hour_now)
+    h = base_hour
     kwh_timed = [charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
     kwh_current = residual - kwh_timed[0] * (hour_now - h)
     bat_timed = []
@@ -1842,7 +1850,7 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
-    start_part_hour = start_at - int(start_at)                                                                                 # before charging starts
+    start_part_hour = start_at - int(start_at)
     start_residual = bat_timed[time_to_next] * (1 - start_part_hour) + bat_timed[time_to_next+1] * start_part_hour      # residual when charging starts
     if kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
         print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.1f}kWh)")
@@ -1854,17 +1862,17 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     else:
         charge_message = "with charge added"
         if full_charge is not None:
-            kwh_needed = capacity - start_residual
-            print(f"\nFull charge required for {full_charge}, adding {kwh_needed:.1f}kWh")
+            kwh_needed = (capacity - start_residual) * 1.1
+            print(f"\nFull charge set for {full_charge}, adding {kwh_needed:.1f}kWh")
         elif test_charge is None:
-            print(f"\nCharge of {kwh_needed:.1f}kWh is needed to give contingency of {kwh_contingency:.1f}kWh ({contingency}%) at {hours_time(min_hour)} {day_when}")
+            print(f"\nCharge of {kwh_needed:.1f}kWh is needed for a contingency of {kwh_contingency:.1f}kWh ({contingency}%) at {hours_time(min_hour)} {day_when}")
         else:
             print(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
             kwh_needed = test_charge
-        if (start_residual + kwh_needed) > capacity and full_charge is None:
-            kwh_needed = capacity - start_residual
-            print(f"** reduced charge to {kwh_needed:.1f}kWh, as this should fill the battery")
+        if (start_residual + kwh_needed - capacity) > charge_config['min_kwh'] and full_charge is None:
+            kwh_needed = (capacity - start_residual) * 1.1
+            print(f"** reduced charge to {kwh_needed:.1f}kWh to fill the battery")
         # work out time to add kwh_needed to battery
         if charge_limit < 0.5:
             print(f"** limit is too low for charge from grid ({charge_limit:.1f} kW)")
@@ -1891,7 +1899,7 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
             discharge_timed[i] *= (1-t)
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
-        h = int(hour_now)
+        h = base_hour
         kwh_timed = [charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
         kwh_current = residual - kwh_timed[0] * (hour_now - h)
         bat_timed_old = [x for x in bat_timed]     # save for comparison when plotting
@@ -1901,20 +1909,20 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
             bat_timed.append(kwh_current)
             kwh_current += kwh_timed[i]
             h += 1
-        time_to_end = int(time_to_next + hours + 1)
+        time_to_end = int(end_timed) + 1
         kwh_added = bat_timed[time_to_end] - bat_timed_old[time_to_end]
         end_part_hour = end_timed - int(end_timed)
         old_residual = bat_timed_old[time_to_end - 1] * (1 - end_part_hour) + bat_timed_old[time_to_end] * end_part_hour
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         print(f"  Charging for {int(hours * 60)} minutes at {charge_limit:.1f}kW adds {kwh_added:.1f}kWh")
-        print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:4.1f}kWh)")
-        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:4.1f}kWh)")
-        print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:4.1f}kWh)")
+        print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.1f}kWh)")
+        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.1f}kWh)")
+        print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.1f}kWh)")
         print(f"\nGrid Consumption: {sum(grid_timed):.1f}kWh (including house consumption while charging)")
     if show_data > 0:
         s = f"\nBattery Energy kWh ({charge_message}):\n" if show_data == 2 else f"\nBattery SoC % ({charge_message}):\n"
-        s += "                 " * (int(hour_now) % 6)
-        h = int(hour_now)
+        s += "                 " * (base_hour % 6)
+        h = base_hour
         for r in bat_timed:
             s += "\n" if h > hour_now and h % 6 == 0 else ""
             if show_data == 2:
@@ -1927,7 +1935,7 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(0, run_time)]
-        plt.xticks(ticks=x_timed, labels=[hours_time(int(hour_now + x), day=True) for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x, day=True) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Battery SoC % ({charge_message})"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
@@ -1956,26 +1964,28 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     else:
             end2 = start2
     # setup charging
-    if update_settings > 0:
+    if update_settings in [1,3]:
         set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2)
+    else:
+        print(f"\nNo changes made to charge settings")
     # timed work mode change
-    target_mode = tariff['default_mode'] if tariff is not None else None
+    target_mode = tariff.get('default_mode') if tariff is not None else None
+    if update_settings in [0,1] or target_mode is None:
+        return None
     required_soc = 0
     current_mode = get_work_mode()
     if current_mode is None:
         return None
-    for w in ['SelfUse', 'Feedin', 'Backup']:
+    for w in work_modes:
         if tariff.get(w) is not None and hour_in(hour_now, tariff[w]):
                 target_mode = w
                 required_soc = tariff[w].get('min_soc') if tariff[w].get('min_soc') is not None else 0
-    if update_settings == 2 and target_mode is not None and current_mode != target_mode and current_soc >= required_soc:
+    if update_settings in [2,3] and current_mode != target_mode and current_soc >= required_soc:
         print(f"\nCurrent SoC = {current_soc}%, Required SoC = {required_soc}%")
         if set_work_mode(target_mode) == target_mode:
             print(f"  Changed work mode from '{current_mode}' to '{target_mode}'")
     else:
         print(f"\nCurrent work mode is '{current_mode}'")
-    if update_settings == 0:
-        print(f"\n** no changes have been made, update_settings = 0")
     return None
 
 ##################################################################################################
