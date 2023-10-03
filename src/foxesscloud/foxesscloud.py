@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  03 October 2023
+Updated:  04 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.6.8"
+version = "0.6.9"
 debug_setting = 1
 
 # global plot parameters
@@ -1533,7 +1533,7 @@ def report_value_profile(result):
 # take forecast and return (value and timed profile)
 def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
     if not hasattr(forecast, 'daily'):
-        return None
+        return (None, None)
     value = forecast.daily[tomorrow]['kwh']
     profile = []
     for h in range(0, 24):
@@ -1606,7 +1606,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
-    run_after = 0 if run_after is None else 1
+    run_after = 21 if run_after is None else run_after 
     timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('default_mode') is not None else 0 if timed_mode is None else timed_mode
     if forecast_times is None:
         forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
@@ -1741,9 +1741,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get Solcast data and produce time line
     solcast_value = None
     solcast_profile = None
-    if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 1):
+    if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 1):
         fsolcast = Solcast(quiet=True, estimated=0)
-        if fsolcast is not None:
+        if fsolcast is not None and hasattr(fsolcast, 'daily'):
             (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
             print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
@@ -1754,9 +1754,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
-    if solar_arrays is not None and (base_hour in forecast_times or run_after == 1):
+    if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 1):
         fsolar = Solar(quiet=True)
-        if fsolar is not None:
+        if fsolar is not None and hasattr(fsolar, 'daily'):
             (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
             print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']

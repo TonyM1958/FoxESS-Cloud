@@ -466,7 +466,10 @@ This setting can be:
 
 ## Version Info
 
-0.6.8<br>
+0.6.9<br>
+Fixed problem when Solcast or Solar ran out of API calls and forecast data wasn't handled correctly.
+Updated so manual forecast input disables calls to Solcast and Solar to preserve API calls.
+Fixed problem with run_after incorrectly enabling forecasts calls when not set to 0 or 1.
 Added 'forecast_times' as parameter for charge_needed().
 Fixed problems with charging window when it does not start on the hour. Updated default contingency to 10%.
 Changed update_settings so 1 updates charge times, 2 updates work mode, 3 updates both
