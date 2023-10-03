@@ -221,13 +221,14 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, forecast_selection, run_after, update_setings, show_data, show_plot)
+f.charge_needed(forecast, force_charge, forecast_selection, forecast_times,run_after, update_setings, show_data, show_plot)
 ```
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
++ forecast_times: a list of hours when forecasts can be obtained
 + run_after: if set to 1, forecast_times are ignored and forecast data is fetched. Default is 0, forecasts are onky fetched at forecast_times
 + update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
@@ -260,6 +261,7 @@ Given the data available, the modelling works as follows:
 + works out if there is a deficit (i.e. when the battery would be discharged below your min_soc)
 + reports the charge needed (deficit) or the minimum expected battery level
 + updates your battery charge settings (if update_settings is not 0)
++ gets the current work mode and updates this if timed work mode changes are configured
 
 ### Configuration Parameters
 
@@ -332,9 +334,9 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ f.octous_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts between 22:00 and 23:59
++ f.octous_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
 + f.intelligent_octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
-+ f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 11:00 to 12:59
++ f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + f.octopus_go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
 + f.agile_octopus: off-peak from 02:30 to 05:00 and 12:30 to 14:30, peak from 16:00 to 19:00, forecasts from 12:00 to 12:59 and 22:00 to 23:59
 
@@ -464,7 +466,8 @@ This setting can be:
 
 ## Version Info
 
-0.6.7<br>
+0.6.8<br>
+Added 'forecast_times' as parameter for charge_needed().
 Fixed problems with charging window when it does not start on the hour. Updated default contingency to 10%.
 Changed update_settings so 1 updates charge times, 2 updates work mode, 3 updates both
 Changed charge_needed so it does not update charge settings when forecast_selection=1 and no forecast is available.

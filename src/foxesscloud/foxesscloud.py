@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  02 October 2023
+Updated:  03 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.6.7"
+version = "0.6.8"
 debug_setting = 1
 
 # global plot parameters
@@ -1407,7 +1407,7 @@ octopus_flux = {
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [22, 23, 1]                               # hours in a day to get a forecast
+    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1427,7 +1427,7 @@ octopus_cosy = {
     'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [2, 3, 11, 12]
+    'forecast_times': [2, 3, 12]
     }
 
 # time periods for Octopus Go
@@ -1459,7 +1459,7 @@ custom_periods = {'name': 'Custom',
     'forecast_times': [22, 23]
     }
 
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, custom_periods]
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, custom_periods]
 tariff = octopus_flux
 
 # how consumption varies by month across a year. 12 values.
@@ -1583,9 +1583,10 @@ charge_config = {
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 #  run_after: 1 over-rides 'forecast_times'. The default is 0.
+#  forecast_times: list of base_hours when forecast can be fetched
 
-def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_data = None, show_plot = None, run_after = None,
-        test_time=None, test_soc = None, test_residual = None, test_charge = None, **settings):
+def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
+        forecast_times=None, test_time=None, test_soc=None, test_residual=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -1607,6 +1608,10 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
     run_after = 0 if run_after is None else 1
     timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('default_mode') is not None else 0 if timed_mode is None else timed_mode
+    if forecast_times is None:
+        forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
+    if type(forecast_times) is not list:
+        forecast_times = [forecast_times]
     # get dates and times
     now = datetime.now()
     today = datetime.strftime(now, '%Y-%m-%d')
@@ -1631,7 +1636,7 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     no_go1 = time_to_am < 0.25 or time_to_pm is not None and time_to_pm < 0.25
     no_go2 = hour_in(hour_now, {'start': start_pm, 'end': end_pm}) or hour_in(hour_now, {'start': start_am, 'end': end_am})
     if run_after != 1 and (no_go1 or no_go2):
-        print(f"** cannot configure next charging period until current one ends")
+        print(f"\nCannot configure next charging period before current one ends")
         return None
     # choose and configure parameters for next charge time period
     charge_pm = time_to_pm is not None and time_to_pm < time_to_am
@@ -1736,7 +1741,6 @@ def charge_needed(forecast = None, update_settings = 0, timed_mode = None, show_
     # get Solcast data and produce time line
     solcast_value = None
     solcast_profile = None
-    forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
     if solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 1):
         fsolcast = Solcast(quiet=True, estimated=0)
         if fsolcast is not None:
