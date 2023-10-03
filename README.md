@@ -221,13 +221,14 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, run_after, update_setings, show_data, show_plot)
+f.charge_needed(forecast, force_charge, forecast_selection, run_after, update_setings, show_data, show_plot)
 ```
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
-+ run_after: the time in hours when the charge calculation should take place. The default is 22 (10pm). You can set run_after=0 to force forecast to be fetched
++ forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
++ run_after: if set to 1, forecast_times are ignored and forecast data is fetched. Default is 0, forecasts are onky fetched at forecast_times
 + update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
@@ -248,7 +249,7 @@ charge_needed() uses a number of models to better estimate the state of the batt
 
 **Historic Generation:** If 'forecast' is not provided and Solcast and Solar forecasts are not available, your generation history is used. By default, this looks at your average solar generation for the last 3 days and applies the **f.seasonal_sun** profile.
 
-Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. It is recommended that charge_needed is scheduled to run once between 8pm and midnight to update the charging schedule. Running at this time gives a better view of the residual charge in the battery after charging from solar has finished for the day and peak early evening consumption is tailing off.
+Note: if using Solcast or forecast.solar, calls to the API are very limited so repeated calls to charge_needed can exhaust the calls available, resulting in failure to get a forecast. The tariff forecast_times set the hours when forecast data is fetched (see tariffs).
 
 Given the data available, the modelling works as follows:
 + gets current information on your battery
@@ -258,7 +259,7 @@ Given the data available, the modelling works as follows:
 + uses the charge available now and the expected charging or discharging of the battery to forecast the battery state
 + works out if there is a deficit (i.e. when the battery would be discharged below your min_soc)
 + reports the charge needed (deficit) or the minimum expected battery level
-+ updates your battery charge settings (if update_settings=1)
++ updates your battery charge settings (if update_settings is not 0)
 
 ### Configuration Parameters
 
