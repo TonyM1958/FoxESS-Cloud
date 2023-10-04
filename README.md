@@ -221,7 +221,7 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, forecast_selection, forecast_times,run_after, update_setings, show_data, show_plot)
+f.charge_needed(forecast, force_charge, forecast_selection, forecast_times, update_setings, show_data, show_plot)
 ```
 
 All the parameters are optional:
@@ -229,7 +229,6 @@ All the parameters are optional:
 + force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
 + forecast_times: a list of hours when forecasts can be obtained
-+ run_after: if set to 1, forecast_times are ignored and forecast data is fetched. Default is 0, forecasts are onky fetched at forecast_times
 + update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
@@ -270,10 +269,11 @@ The following parameters and default values are used to configure charge_needed 
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 + export_limit: None            # maximum export power. None uses the inverter power rating
-+ ac_conversion_loss: 0.96      # loss from inverter AC - DC conversion (e.g. AC => charge)
-+ dc_conversion_loss: 0.95      # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
-+ battery_loss: 0.97            # loss from battery charge to residual
-+ operation_loss: 0.1           # inverter operating power drain in kW
++ discharge_loss: 0.98,         # loss converting battery discharge power to AC
++ pv_charge_loss: 0.95,         # loss converting PV power to battery charge power
++ grid_charge_loss: 0.96,       # loss converting grid AC to battery charge DC
++ battery_loss: 0.95,           # loss converting battery charge into residual
++ operation_loss: 0.07,         # inverter / bms static power consumption kW
 + volt_swing: 4                 # battery voltage % swing from 0% to 100% SoC when discharging
 + volt_overdrive: 1.01          # increase in battery volt when charging (compared with discharging)
 + generation_days: 3            # number of days to use for average generation (1-7)
@@ -466,10 +466,13 @@ This setting can be:
 
 ## Version Info
 
+0.7.0:<br>
+Updated losses from calibration data, reducing battery discharge at night.
+
 0.6.9<br>
 Fixed problem when Solcast or Solar ran out of API calls and forecast data wasn't handled correctly.
 Updated so manual forecast input disables calls to Solcast and Solar to preserve API calls.
-Fixed problem with run_after incorrectly enabling forecasts calls when not set to 0 or 1.
+Fixed problem with run_after incorrectly enabling forecasts calls when not set to 0.
 Added 'forecast_times' as parameter for charge_needed().
 Fixed problems with charging window when it does not start on the hour. Updated default contingency to 10%.
 Changed update_settings so 1 updates charge times, 2 updates work mode, 3 updates both
@@ -478,7 +481,6 @@ Added 'forecast_times' to tariff as a list of hours when a forecast can be fetch
 Changed 'run_after' so run_after=1 over-rides 'forecast_times' and any other value does not.
 Changed 'timed_mode' so it uses 'default_mode' in f.tariff to automatically enable work mode changes.
 Added the tariff 'agile_octopus'
-
 Added test_time, test_soc, test_residual and test_charge parameters for simulation of specific scenarios. 
 Updated changing work mode so SoC is only checked when changing modes. Updated text output to provide more information.
 Updated charge_needed so it will not run less than 15 minutes before during a charge period starts or until it ends. Reworked SoC and residual at end of charging to improve accuracy.

@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.6.9"
+version = "0.7.0"
 debug_setting = 1
 
 # global plot parameters
@@ -1549,10 +1549,11 @@ charge_config = {
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
-    'ac_conversion_loss': 0.96,       # loss from inverter AC - DC conversion (e.g. AC => charge)
-    'dc_conversion_loss': 0.95,       # loss from inverter DC - AC conversion (e.g. PV => AC, Battery => AC)
-    'battery_loss': 0.95,             # loss from battery charge to residual
-    'operation_loss': 0.1,            # inverter operating power kW
+    'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
+    'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
+    'grid_charge_loss': 0.96,         # loss converting grid power to battery charge power
+    'battery_loss': 0.95,             # loss converting battery charge into residual
+    'operation_loss': 0.07,           # inverter / bms static power consumption kW
     'volt_swing': 4.5,                # bat volt % swing from 0% to 100% SoC
     'volt_overdrive': 1.018,          # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
@@ -1582,7 +1583,7 @@ charge_config = {
 #  update_settings: 0 no updates, 1 update charge settings, 2 update work mode, 3 update both. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
-#  run_after: 1 over-rides 'forecast_times'. The default is 0.
+#  run_after: 0 over-rides 'forecast_times'. The default is 1.
 #  forecast_times: list of base_hours when forecast can be fetched
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
@@ -1606,7 +1607,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
-    run_after = 21 if run_after is None else run_after 
+    run_after = 1 if run_after is None else run_after 
     timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('default_mode') is not None else 0 if timed_mode is None else timed_mode
     if forecast_times is None:
         forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
@@ -1635,9 +1636,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     time_to_pm = round_time(start_pm - base_hour) if start_pm > 0 else None
     no_go1 = time_to_am < 0.25 or time_to_pm is not None and time_to_pm < 0.25
     no_go2 = hour_in(hour_now, {'start': start_pm, 'end': end_pm}) or hour_in(hour_now, {'start': start_am, 'end': end_am})
-    if run_after != 1 and (no_go1 or no_go2):
+    if no_go1 or no_go2:
         print(f"\nCannot configure next charging period before current one ends")
-        return None
+        if run_after != 0:
+            return None
+        update_settings = 0
     # choose and configure parameters for next charge time period
     charge_pm = time_to_pm is not None and time_to_pm < time_to_am
     time_to_next = int(time_to_pm if charge_pm else time_to_am)
@@ -1701,15 +1704,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         device_power = 3.68
         device_current = 26
     # work out discharge limit = max power coming from the battery before ac conversion losses
-    discharge_limit = device_power / charge_config['dc_conversion_loss']
+    discharge_limit = device_power / charge_config['discharge_loss']
     discharge_power = discharge_volt * (charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current) / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
     # work out charge limit = max power going into the battery after ac conversion losses
-    charge_limit = device_power * charge_config['ac_conversion_loss']
+    charge_limit = device_power * charge_config['grid_charge_loss']
     charge_power = charge_volt * (charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current) / 1000
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
     # charging happens if generation exceeds export limit in feedin work mode
-    export_limit = (device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['dc_conversion_loss']
+    export_limit = (device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['discharge_loss']
     if debug_setting > 1:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
         print(f"\ndischarge_volt = {discharge_volt:.1f}, charge_volt = {charge_volt:.1f}")
@@ -1741,7 +1744,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get Solcast data and produce time line
     solcast_value = None
     solcast_profile = None
-    if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 1):
+    if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, estimated=0)
         if fsolcast is not None and hasattr(fsolcast, 'daily'):
             (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
@@ -1754,7 +1757,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
-    if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 1):
+    if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
         if fsolar is not None and hasattr(fsolar, 'daily'):
             (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
@@ -1811,8 +1814,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             print(f"  Settings will not be updated when forecast is not available")
             update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
-    charge_timed = [x * charge_config['dc_conversion_loss'] for x in generation_timed]
-    discharge_timed = [x / charge_config['ac_conversion_loss'] for x in consumption_timed]
+    charge_timed = [x * charge_config['pv_charge_loss'] for x in generation_timed]
+    discharge_timed = [x / charge_config['discharge_loss'] for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     for i in range(0, run_time):
         h = base_hour + i
@@ -1899,7 +1902,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             charge_added = charge_limit * t
             charge_added = charge_limit - charge_timed[i] if charge_timed[i] + charge_added > charge_limit else charge_added
             charge_timed[i] += charge_added
-            grid_timed[i] = charge_added / charge_config['ac_conversion_loss'] + consumption_timed[i] * t
+            grid_timed[i] = charge_added / charge_config['grid_charge_loss'] + consumption_timed[i] * t
             discharge_timed[i] *= (1-t)
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
@@ -1946,14 +1949,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         else:
             title = f"Energy Flow kWh ({charge_message})"
             plt.plot(x_timed, bat_timed, label='Battery', color='blue')
-            plt.plot(x_timed, generation_timed, label='Generation', color='orange')
+            plt.plot(x_timed, generation_timed, label='Generation', color='green')
             plt.plot(x_timed, consumption_timed, label='Consumption', color='red')
             if kwh_needed > 0:
-                plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='lightblue')
+                plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='blue', linestyle='dotted')
                 plt.plot(x_timed, grid_timed, label='Grid Consumption', color='grey')
             if show_plot == 3:
-                plt.plot(x_timed, charge_timed, label='Charge', color='green')
-                plt.plot(x_timed, discharge_timed, label='Discharge', color='brown')
+                plt.plot(x_timed, charge_timed, label='Charge', color='orange', linestyle='dotted')
+                plt.plot(x_timed, discharge_timed, label='Discharge', color='brown', linestyle='dotted')
         plt.title(title, fontsize=12)
         plt.grid()
         if show_plot > 1:
