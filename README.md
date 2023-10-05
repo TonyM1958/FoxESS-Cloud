@@ -466,8 +466,11 @@ This setting can be:
 
 ## Version Info
 
-0.7.0:<br>
+0.7.1:<br>
+Added calibration variables to get_pvoutput() and adjusted calibration to match HA.
 Updated losses from calibration data, reducing battery discharge at night.
+Fixed time shifting of date and time e.g. GMT 23:00 today is BST 00:00 tomorrow.
+Fixed 'weekday' to use tomorrow instead of today for weekday history.
 
 0.6.9<br>
 Fixed problem when Solcast or Solar ran out of API calls and forecast data wasn't handled correctly.

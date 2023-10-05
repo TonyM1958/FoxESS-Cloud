@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  04 October 2023
+Updated:  05 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,12 +9,16 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.0"
+version = "0.7.1"
 debug_setting = 1
 
+# constants
+month_names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 # global plot parameters
 figure_width = 9       # width of plots
 legend_location = "upper right"
+
 
 print(f"FoxESS-Cloud version {version}")
 
@@ -1187,8 +1191,6 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         plot_report(result, plot, station)
     return result
 
-months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
 # plot get_report result
 def plot_report(result, plot=1, station=0):
     global site, device_sn
@@ -1227,7 +1229,7 @@ def plot_report(result, plot=1, station=0):
             elif types[0] == 'month':
                 plt.xticks(ticks=index, labels=date_list(s=dates[0][:-2]+'01', limit=len(index), today=2), rotation=45, fontsize=8, ha='right', rotation_mode='anchor')
             elif types[0] == 'year':
-                plt.xticks(ticks=index, labels=[m[:3] for m in months[:len(index)]], rotation=45, fontsize=10, ha='right', rotation_mode='anchor')
+                plt.xticks(ticks=index, labels=[m[:3] for m in month_names[:len(index)]], rotation=45, fontsize=10, ha='right', rotation_mode='anchor')
         for v in [v for v in result if v['variable'] == var]:
             name = v['name']
             d = v['date']
@@ -1247,7 +1249,7 @@ def plot_report(result, plot=1, station=0):
             elif types[0] == 'week':
                 title = f"Week to {d} / "
             elif types[0] == 'month':
-                title = f"Month of {months[int(d[5:7])-1]} {d[:4]} / "
+                title = f"Month of {month_names[int(d[5:7])-1]} {d[:4]} / "
             elif types[0] == 'year':
                 title = f"Year {d[:4]} / "
             if len(vars) == 1 or plot == 1:
@@ -1377,17 +1379,21 @@ def british_summer_time(d=None):
         for x in d:
             l.append(british_summer_time(x))
         return l
-    dat = datetime.strptime(d, '%Y-%m-%d') if type(d) is str else d.date() if d is not None else datetime.now().date()
-    hour = None if type(d) is str else d.hour if d is not None else datetime.now().hour 
+    elif type(d) is str:
+        dat = datetime.strptime(d[:10], '%Y-%m-%d')
+        hour = int(d[11:13]) if len(d) >= 16 else 0
+    else:
+        dat =  d.date() if d is not None else datetime.now().date()
+        hour = d.hour if d is not None else datetime.now().hour 
     start_date = dat.replace(month=3, day=31)
     days = (start_date.weekday() + 1) % 7
     start_date = start_date - timedelta(days=days)
     end_date = dat.replace(month=10, day=31)
     days = (end_date.weekday() + 1) % 7
     end_date = end_date - timedelta(days=days)
-    if dat == start_date and hour is not None and hour < 1:
+    if dat == start_date and hour < 1:
         return 0
-    elif dat == end_date and hour is not None and hour < 2:
+    elif dat == end_date and hour < 1:
         return 1
     elif dat >= start_date and dat < end_date:
         return 1
@@ -1532,8 +1538,6 @@ def report_value_profile(result):
 
 # take forecast and return (value and timed profile)
 def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
-    if not hasattr(forecast, 'daily'):
-        return (None, None)
     value = forecast.daily[tomorrow]['kwh']
     profile = []
     for h in range(0, 24):
@@ -1549,9 +1553,9 @@ charge_config = {
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
-    'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
+    'discharge_loss': 0.985,          # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
-    'grid_charge_loss': 0.96,         # loss converting grid power to battery charge power
+    'grid_charge_loss': 0.958,        # loss converting grid power to battery charge power
     'battery_loss': 0.95,             # loss converting battery charge into residual
     'operation_loss': 0.07,           # inverter / bms static power consumption kW
     'volt_swing': 4.5,                # bat volt % swing from 0% to 100% SoC
@@ -1614,12 +1618,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
-    now = datetime.now()
+    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(test_time)
+    now = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')) + timedelta(hours=time_shift)
     today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
-    day_tomorrow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(now.weekday() + 1) % 7]
-    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(now)
-    hour_now = round_time(now.hour + time_shift + now.minute / 60) if test_time is None else test_time
+    day_tomorrow = day_names[(now.weekday() + 1) % 7]
+    hour_now = round_time(now.hour + now.minute / 60)
     base_hour = int(hour_now)
     print(f"  datetime = {today} {hours_time(hour_now)}")
     if tariff is not None:
@@ -1654,7 +1658,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(full_charge) is int:            # value = day of month
         full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
     elif type(full_charge) is str:          # value = daily or day of week
-        full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow else None
+        full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
     if debug_setting > 1:
         print(f"\nstart_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
@@ -1728,16 +1732,17 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         consumption_days = charge_config['consumption_days']
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
         consumption_span = charge_config['consumption_span']
-        consumption_span = 'week' if consumption_span not in ['week', 'weekday'] else consumption_span
-        history = get_report('day', d = date_list(span=consumption_span, today=1 if hour_now >= charge_config['use_today'] else 0)[-consumption_days:], v='loads')
+        if consumption_span == 'weekday':
+            history = get_report('day', d = date_list(e=tomorrow, span='weekday')[-consumption_days-1:-1], v='loads')
+        else:
+            history = get_report('day', d = date_list(span='week', today=1 if hour_now >= charge_config['use_today'] else 0)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
         print(f"\nConsumption (kWh):")
         s = ""
         for h in history:
             s += f"  {h['date']}: {h['total']:4.1f},"
         print(s[:-1])
-        s = ""
-        print(f"  Average of last {consumption_days} days: {consumption:.1f}kWh")
+        print(f"  Average of last {consumption_days} {day_tomorrow if consumption_span=='weekday' else 'day'}s: {consumption:.1f}kWh")
     # time line has 1 hour buckets of consumption
     daily_sum = sum(consumption_by_hour)
     consumption_timed = timed_list([consumption * x / daily_sum for x in consumption_by_hour], hour_now, run_time)
@@ -1746,7 +1751,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, estimated=0)
-        if fsolcast is not None and hasattr(fsolcast, 'daily'):
+        if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(tomorrow) is not None:
             (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
             print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
@@ -1759,7 +1764,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solar_profile = None
     if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
-        if fsolar is not None and hasattr(fsolar, 'daily'):
+        if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(tomorrow) is not None:
             (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
             print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
@@ -2027,9 +2032,9 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
             last = first + timedelta(days=1) if first is not None else last
             first = last - timedelta(days=1) if first is None else first
         elif span == 'weekday':
-            # e.g. last 7 days with same day of the week
-            last = first + timedelta(days=42) if first is not None else last
-            first = last - timedelta(days=42) if first is None else first
+            # e.g. last 8 days with same day of the week
+            last = first + timedelta(days=49) if first is not None else last
+            first = last - timedelta(days=49) if first is None else first
             step = 7
         elif span == 'week':
             # number of days in a week less 1 day
@@ -2078,6 +2083,9 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
 # validate pv power data by checking it does not exceed a limit. Used to cover the situation where
 # Fox returns PV Voltage instead of PV Power. For example, over 100v instead of under 100kW.
 max_pv_power = 100
+# data calibration settings compared with HA inverter data 
+pv_calibration = 0.98
+ct2_calibration = 0.92
 
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
@@ -2087,7 +2095,7 @@ max_pv_power = 100
 # tou: 0 = no time of use, 1 = use time of use periods if available
 
 def get_pvoutput(d = None, tou = 0):
-    global tariff
+    global tariff, pv_calibration, ct2_calibration
     if d is None:
         d = date_list()[0]
     tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
@@ -2115,14 +2123,14 @@ def get_pvoutput(d = None, tou = 0):
         return None
     if raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
         return(f"# error: {d.replace('-','')} No generation data")
-    # merge raw_data for meterPower2 into pvPower:
+    # apply calibration and merge raw_data for meterPower2 into pvPower:
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
     for i, data in enumerate(raw_data[ct2_index]['data']):
         # meterPower2 is -ve when generating
-        raw_data[pv_index]['data'][i]['value'] -= data['value'] / 0.92 if data['value'] <= 0.0 else 0
+        raw_data[pv_index]['data'][i]['value'] -= data['value'] / ct2_calibration if data['value'] <= 0.0 else 0
     # kwh is positive for generation
-    raw_data[pv_index]['kwh'] += raw_data[ct2_index]['kwh'] / 0.92
+    raw_data[pv_index]['kwh'] = raw_data[pv_index]['kwh'] / pv_calibration + raw_data[ct2_index]['kwh_neg'] / ct2_calibration
     pv_max = max(data['value'] for data in raw_data[pv_index]['data'])
     max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
     raw_data[pv_index]['max'] = pv_max
