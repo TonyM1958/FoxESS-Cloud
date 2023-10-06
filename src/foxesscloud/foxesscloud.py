@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 October 2023
+Updated:  06 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.1"
+version = "0.7.2"
 debug_setting = 1
 
 # constants
@@ -1381,7 +1381,7 @@ def british_summer_time(d=None):
         return l
     elif type(d) is str:
         dat = datetime.strptime(d[:10], '%Y-%m-%d')
-        hour = int(d[11:13]) if len(d) >= 16 else 0
+        hour = int(d[11:13]) if len(d) >= 16 else 3
     else:
         dat =  d.date() if d is not None else datetime.now().date()
         hour = d.hour if d is not None else datetime.now().hour 
@@ -1398,6 +1398,8 @@ def british_summer_time(d=None):
     elif dat >= start_date and dat < end_date:
         return 1
     return 0
+
+daylight_saving = british_summer_time
 
 ##################################################################################################
 # Tariffs / time of user (TOU)
@@ -1553,13 +1555,13 @@ charge_config = {
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
-    'discharge_loss': 0.985,          # loss converting battery discharge power to grid power
+    'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
     'grid_charge_loss': 0.958,        # loss converting grid power to battery charge power
-    'battery_loss': 0.95,             # loss converting battery charge into residual
+    'bat_resistance': 0.15,           # internal resistance of a battery in ohms
     'operation_loss': 0.07,           # inverter / bms static power consumption kW
-    'volt_swing': 4.5,                # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.018,          # increase in bat volt when charging (compared with discharging)
+    'volt_swing': 2,                  # bat volt % swing from 0% to 100% SoC
+    'volt_overdrive': 1.02,           # increase in bat volt when charging (compared with discharging)
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1573,8 +1575,8 @@ charge_config = {
     'time_shift': None,               # offset local time by x hours
     'force_charge': 0,                # 1 = apply force charge for any remaining charge time
     'timed_mode': 0,                  # 1 = timed changes in work mode, 0 = None
-    'special_contingency': 40,        # contingency for special days when consumption might be higher
-    'special_days': ['11-23', '12-25', '12-26', '01-01'],
+    'special_contingency': 25,        # contingency for special days when consumption might be higher
+    'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None               # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
 }
 
@@ -1608,6 +1610,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             s += f"\n  {key} = {value}"
     if len(s) > 0:
         print(f"Parameters: {s}")
+    if tariff is not None:
+        print(f"  tariff = {tariff['name']}")
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
@@ -1618,16 +1622,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
-    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else british_summer_time(test_time)
+    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else daylight_saving(test_time) if daylight_saving is not None else 0
     now = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')) + timedelta(hours=time_shift)
     today = datetime.strftime(now, '%Y-%m-%d')
+    base_hour = now.hour
+    hour_now = now.hour + now.minute / 60
+    print(f"  datetime = {today} {hours_time(hour_now)}")
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = day_names[(now.weekday() + 1) % 7]
-    hour_now = round_time(now.hour + now.minute / 60)
-    base_hour = int(hour_now)
-    print(f"  datetime = {today} {hours_time(hour_now)}")
-    if tariff is not None:
-        print(f"  tariff = {tariff['name']}")
+    # tomorrow can lose 1 hour if clocks go forward or gain 1 hour if clocks go back
+    change_hour = 0
+    hour_adjustment = 0 if daylight_saving is None else daylight_saving(f"{today} {base_hour:02}:00") - daylight_saving(f"{tomorrow} {base_hour:02}:00")
+    if hour_adjustment != 0:    # change happens in the next 24 hours - work out if today or tomorrow
+        change_hour = 26 if daylight_saving(f"{today} 00:00") - daylight_saving(f"{tomorrow} 00:00") == 0 else 2
     # get next charge times from am/pm charge times
     force_charge = charge_config['force_charge']
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
@@ -1638,21 +1645,21 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     end_pm = time_hours(tariff['off_peak2']['end'] if tariff is not None else 0.0)
     force_charge_pm = 0 if tariff is not None and tariff['off_peak2']['force'] == 0 or force_charge == 0 else 1
     time_to_pm = round_time(start_pm - base_hour) if start_pm > 0 else None
-    no_go1 = time_to_am < 0.25 or time_to_pm is not None and time_to_pm < 0.25
-    no_go2 = hour_in(hour_now, {'start': start_pm, 'end': end_pm}) or hour_in(hour_now, {'start': start_am, 'end': end_am})
+    no_go1 = time_to_am is not None and hour_in(hour_now, {'start': round_time(start_am - 0.25), 'end': round_time(end_am + 1)})
+    no_go2 = time_to_pm is not None and hour_in(hour_now, {'start': round_time(start_pm - 0.25), 'end': round_time(end_pm + 1)})
     if no_go1 or no_go2:
-        print(f"\nCannot configure next charging period before current one ends")
+        print(f"\nCannot configure next charge when current time is less than 15 minutes before or 60 minutes after a charging period")
         if run_after != 0:
             return None
         update_settings = 0
     # choose and configure parameters for next charge time period
     charge_pm = time_to_pm is not None and time_to_pm < time_to_am
-    time_to_next = int(time_to_pm if charge_pm else time_to_am)
-    run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1
     start_at = start_pm if charge_pm else start_am
     end_by = end_pm if charge_pm else end_am
     charge_time = round_time(end_by - start_at)
     force_charge = force_charge_pm if charge_pm else force_charge_am
+    time_to_next = int(time_to_pm if charge_pm else time_to_am) + (hour_adjustment if start_at >= 2 else 0)
+    run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1 + hour_adjustment
     # if we need to do a full charge, full_charge is the date, otherwise None
     full_charge = charge_config['full_charge'] if not charge_pm else None
     if type(full_charge) is int:            # value = day of month
@@ -1660,9 +1667,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif type(full_charge) is str:          # value = daily or day of week
         full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
     if debug_setting > 1:
-        print(f"\nstart_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
+        print(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}")
+        print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
+        print(f"hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
         print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"full_charge = {full_charge}")
 #        return None
@@ -1715,13 +1724,17 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     charge_limit = device_power * charge_config['grid_charge_loss']
     charge_power = charge_volt * (charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current) / 1000
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
+    # work out losses when charging using charge current, number of batteries and internal resistance
+    charge_current = charge_limit * 1000 / charge_volt
+    battery_loss = 1.0 - charge_current ** 2 * round(charge_volt / 53, 0) * charge_config['bat_resistance'] / 1000 / charge_limit
     # charging happens if generation exceeds export limit in feedin work mode
     export_limit = (device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['discharge_loss']
     if debug_setting > 1:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
         print(f"\ndischarge_volt = {discharge_volt:.1f}, charge_volt = {charge_volt:.1f}")
-        print(f"\ndevice_power = {device_power:1f}, device_current = {device_current:.1f}")
+        print(f"device_power = {device_power:1f}, device_current = {device_current:.1f}")
         print(f"discharge_limit = {discharge_limit:.3f}, charge_limit = {charge_limit:.3f}, export_limit = {export_limit:.3f}")
+        print(f"charge_current = {charge_current:.1f}, battery_loss = {battery_loss:.3f}")
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
@@ -1844,7 +1857,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now to what it was at the start of current hour
     h = base_hour
-    kwh_timed = [charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
+    kwh_timed = [charge * battery_loss - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
     kwh_current = residual - kwh_timed[0] * (hour_now - h)
     bat_timed = []
     kwh_min = kwh_current
@@ -1889,7 +1902,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if charge_limit < 0.5:
             print(f"** limit is too low for charge from grid ({charge_limit:.1f} kW)")
             charge_limit = 0.5
-        hours = round_time(kwh_needed / (charge_limit * charge_config['battery_loss'] + discharge_timed[time_to_next]))
+        hours = round_time(kwh_needed / (charge_limit * battery_loss + discharge_timed[time_to_next]))
         # don't charge for less than minimum time period or longer than charge_time
         hours = charge_config['min_hours'] if hours < charge_config['min_hours'] else hours
         if hours > charge_time:
@@ -1912,7 +1925,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
         h = base_hour
-        kwh_timed = [charge * charge_config['battery_loss'] - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
+        kwh_timed = [charge * battery_loss - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
         kwh_current = residual - kwh_timed[0] * (hour_now - h)
         bat_timed_old = [x for x in bat_timed]     # save for comparison when plotting
         bat_timed = []
@@ -1937,17 +1950,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         h = base_hour
         for r in bat_timed:
             s += "\n" if h > hour_now and h % 6 == 0 else ""
-            if show_data == 2:
-                s += f"  {hours_time(h, day=True)} = {r:4.1f},"
-            else:
-                s += f"  {hours_time(h, day=True)} = {r / capacity * 100:3.0f}%,"
+            s += f"  {hours_time(h - (hour_adjustment if h >= change_hour else 0), day=True)}"
+            s += f" = {r:4.1f}," if show_data == 2 else f" = {r / capacity * 100:3.0f}%,"
             h += 1
         print(s[:-1])
     if show_plot > 0:
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(0, run_time)]
-        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x, day=True) for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=True) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Battery SoC % ({charge_message})"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
