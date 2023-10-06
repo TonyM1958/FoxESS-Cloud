@@ -466,9 +466,9 @@ This setting can be:
 
 ## Version Info
 
-0.7.2:<br>
+0.7.3:<br>
 Dynamic battery_loss calculation added.
-Updated daylight_saving for change in clocks.
+Updated daylight_saving for change in clocks / times displayed.
 Added calibration variables to get_pvoutput() and adjusted calibration to match HA.
 Updated losses from calibration data, reducing battery discharge at night.
 Fixed time shifting of date and time e.g. GMT 23:00 today is BST 00:00 tomorrow.

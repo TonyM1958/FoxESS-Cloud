@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  06 October 2023
+Updated:  07 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.2"
+version = "0.7.3"
 debug_setting = 1
 
 # constants
@@ -1626,15 +1626,18 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     now = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')) + timedelta(hours=time_shift)
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
+    gmt_hour = int(round_time(base_hour - time_shift))
     hour_now = now.hour + now.minute / 60
     print(f"  datetime = {today} {hours_time(hour_now)}")
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = day_names[(now.weekday() + 1) % 7]
-    # tomorrow can lose 1 hour if clocks go forward or gain 1 hour if clocks go back
+    yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
+    # work out if we lose 1 hour if clocks go forward or gain 1 hour if clocks go back
     change_hour = 0
-    hour_adjustment = 0 if daylight_saving is None else daylight_saving(f"{today} {base_hour:02}:00") - daylight_saving(f"{tomorrow} {base_hour:02}:00")
+    hour_adjustment = 0 if daylight_saving is None else daylight_saving(f"{today} {gmt_hour:02}:00") - daylight_saving(f"{tomorrow} {gmt_hour:02}:00")
     if hour_adjustment != 0:    # change happens in the next 24 hours - work out if today or tomorrow
-        change_hour = 26 if daylight_saving(f"{today} 00:00") - daylight_saving(f"{tomorrow} 00:00") == 0 else 2
+        change_hour = 25 if daylight_saving(f"{today} {gmt_hour:02}:00") - daylight_saving(f"{tomorrow} 00:00") == 0 else 1
+        change_hour += 1 if hour_adjustment > 0 else 0
     # get next charge times from am/pm charge times
     force_charge = charge_config['force_charge']
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
@@ -1671,7 +1674,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
-        print(f"hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
+        print(f"gmt_hour = {gmt_hour}, base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
         print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"full_charge = {full_charge}")
 #        return None
@@ -1746,9 +1749,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
         consumption_span = charge_config['consumption_span']
         if consumption_span == 'weekday':
-            history = get_report('day', d = date_list(e=tomorrow, span='weekday')[-consumption_days-1:-1], v='loads')
+            history = get_report('day', d=date_list(span='weekday', e=tomorrow, today=2)[-consumption_days-1:-1], v='loads')
         else:
-            history = get_report('day', d = date_list(span='week', today=1 if hour_now >= charge_config['use_today'] else 0)[-consumption_days:], v='loads')
+            last_date = today if hour_now >= charge_config['use_today'] else yesterday
+            history = get_report('day', d=date_list(span='week', e=last_date, today=2)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
         print(f"\nConsumption (kWh):")
         s = ""
@@ -1788,12 +1792,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if solcast_value is None and solar_value is None and debug_setting > 1:
         print(f"\nNo forecasts available at this time")
     # get generation data
-    history = get_raw('week', d=today, v=['pvPower','meterPower2'], summary=2)
+    last_date = today if hour_now >= charge_config['use_today'] else yesterday
+    history = get_raw('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
     for day in history:
         date = day['date']
-        if date == today and hour_now < charge_config['use_today']:
-            continue
         if pv_history.get(date) is None:
             pv_history[date] = 0.0
         pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
@@ -2003,9 +2006,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if tariff.get(w) is not None and hour_in(hour_now, tariff[w]):
                 target_mode = w
                 required_soc = tariff[w].get('min_soc') if tariff[w].get('min_soc') is not None else 0
-    if update_settings in [2,3] and current_mode != target_mode and current_soc >= required_soc:
-        print(f"\nCurrent SoC = {current_soc}%, Required SoC = {required_soc}%")
-        if set_work_mode(target_mode) == target_mode:
+    if update_settings in [2,3] and current_mode != target_mode:
+        print(f"\nCurrent SoC = {current_soc}%, Required SoC = {required_soc}%, Target work mode = '{target_mode}'")
+        if current_soc >= required_soc and set_work_mode(target_mode) == target_mode:
             print(f"  Changed work mode from '{current_mode}' to '{target_mode}'")
     else:
         print(f"\nCurrent work mode is '{current_mode}'")
