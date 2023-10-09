@@ -265,17 +265,16 @@ Given the data available, the modelling works as follows:
 ### Configuration Parameters
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
-+ contingency: 20               # % of consumption to allow as contingency
++ contingency: 10               # % of consumption to allow as contingency
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 + export_limit: None            # maximum export power. None uses the inverter power rating
-+ discharge_loss: 0.98,         # loss converting battery discharge power to AC
-+ pv_charge_loss: 0.95,         # loss converting PV power to battery charge power
-+ grid_charge_loss: 0.96,       # loss converting grid AC to battery charge DC
-+ battery_loss: 0.95,           # loss converting battery charge into residual
-+ operation_loss: 0.07,         # inverter / bms static power consumption kW
-+ volt_swing: 4                 # battery voltage % swing from 0% to 100% SoC when discharging
-+ volt_overdrive: 1.01          # increase in battery volt when charging (compared with discharging)
++ discharge_loss: 0.98          # loss converting battery discharge power to AC
++ pv_charge_loss: 0.95          # loss converting PV power to battery charge power
++ grid_charge_loss: 0.96        # loss converting grid AC to battery charge DC
++ operation_loss: 0.12          # inverter / bms static power consumption kW
++ bat_resistance: 0.45          # internal resistance of battery / BMS circuit in ohms
++ volt_swing: 4.7               # battery voltage % swing from 0% to 100% SoC when discharging
 + generation_days: 3            # number of days to use for average generation (1-7)
 + consumption_days: 3           # number of days to use for average consumption (1-7)
 + consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
@@ -288,8 +287,8 @@ The following parameters and default values are used to configure charge_needed 
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
 + time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
 + force_charge: 0               # 1 = apply force charge for any remaining charge time
-+ special_contingency: 40       # contingency for special days when consumption might be higher
-+ special_days: ['11-23', '12-25', '12-26', '01-01']
++ special_contingency: 25       # contingency for special days when consumption might be higher
++ special_days: ['12-25', '12-26', '01-01']
 + full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
 
 These values are stored / available in f.charge_config.
@@ -466,7 +465,8 @@ This setting can be:
 
 ## Version Info
 
-0.7.3:<br>
+0.7.4:<br>
+Correct day when using 'weekday' for consumption_span
 Dynamic battery_loss calculation added.
 Updated daylight_saving for change in clocks / times displayed.
 Added calibration variables to get_pvoutput() and adjusted calibration to match HA.

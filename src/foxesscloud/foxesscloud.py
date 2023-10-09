@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  07 October 2023
+Updated:  09 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.3"
+version = "0.7.4"
 debug_setting = 1
 
 # constants
@@ -772,7 +772,7 @@ def get_schedule():
 # set schedule
 ##################################################################################################
 
-pollcy_item = {'startH': 7, 'startM': 0, 'endH': 12, 'endM': 0, 'workMode': 'SelfUse', 'soc': 15}
+pollcy_item = {'startH': 7, 'startM': 0, 'endH': 12, 'endM': 0, 'workMode': 'SelfUse', 'soc': 12}
 
 def set_schedule(enable=1, pollcy = None):
     global token, device_sn, debug_setting, messages, schedule
@@ -1399,7 +1399,12 @@ def british_summer_time(d=None):
         return 1
     return 0
 
+# hook for alternative daylight saving methods
 daylight_saving = british_summer_time
+
+# helper function to return change in daylight saving between 2 datetimes
+def daylight_changes(a,b):
+    return daylight_saving(a) - daylight_saving(b)
 
 ##################################################################################################
 # Tariffs / time of user (TOU)
@@ -1558,10 +1563,9 @@ charge_config = {
     'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
     'grid_charge_loss': 0.958,        # loss converting grid power to battery charge power
-    'bat_resistance': 0.15,           # internal resistance of a battery in ohms
-    'operation_loss': 0.07,           # inverter / bms static power consumption kW
-    'volt_swing': 2,                  # bat volt % swing from 0% to 100% SoC
-    'volt_overdrive': 1.02,           # increase in bat volt when charging (compared with discharging)
+    'operation_loss': 0.04,           # BMS static power consumption kW
+    'bat_resistance': 0.45,           # internal resistance of battery / BMS in ohms
+    'volt_swing': 4.7,                # battery volt % swing from 0% to 100% SoC
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1623,20 +1627,21 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         forecast_times = [forecast_times]
     # get dates and times
     time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else daylight_saving(test_time) if daylight_saving is not None else 0
-    now = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')) + timedelta(hours=time_shift)
+    gmt = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M'))
+    now = gmt + timedelta(hours=time_shift)
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
-    gmt_hour = int(round_time(base_hour - time_shift))
     hour_now = now.hour + now.minute / 60
     print(f"  datetime = {today} {hours_time(hour_now)}")
+    yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = day_names[(now.weekday() + 1) % 7]
-    yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
+    day_after_tomorrow = datetime.strftime(now + timedelta(days=2), '%Y-%m-%d')
     # work out if we lose 1 hour if clocks go forward or gain 1 hour if clocks go back
     change_hour = 0
-    hour_adjustment = 0 if daylight_saving is None else daylight_saving(f"{today} {gmt_hour:02}:00") - daylight_saving(f"{tomorrow} {gmt_hour:02}:00")
-    if hour_adjustment != 0:    # change happens in the next 24 hours - work out if today or tomorrow
-        change_hour = 25 if daylight_saving(f"{today} {gmt_hour:02}:00") - daylight_saving(f"{tomorrow} 00:00") == 0 else 1
+    hour_adjustment = 0 if daylight_saving is None else daylight_changes(gmt, gmt + timedelta(days=2))
+    if hour_adjustment != 0:    # change happens in the next 2 days - work out if today, tomorrow or day after tomorrow
+        change_hour = 1 if daylight_changes(gmt, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
         change_hour += 1 if hour_adjustment > 0 else 0
     # get next charge times from am/pm charge times
     force_charge = charge_config['force_charge']
@@ -1661,7 +1666,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     end_by = end_pm if charge_pm else end_am
     charge_time = round_time(end_by - start_at)
     force_charge = force_charge_pm if charge_pm else force_charge_am
-    time_to_next = int(time_to_pm if charge_pm else time_to_am) + (hour_adjustment if start_at >= 2 else 0)
+    time_to_next = int(time_to_pm if charge_pm else time_to_am) + (hour_adjustment if start_at >= 2 and change_hour < 48 else 0)
     run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1 + hour_adjustment
     # if we need to do a full charge, full_charge is the date, otherwise None
     full_charge = charge_config['full_charge'] if not charge_pm else None
@@ -1674,7 +1679,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
-        print(f"gmt_hour = {gmt_hour}, base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
+        print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
         print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"full_charge = {full_charge}")
 #        return None
@@ -1695,22 +1700,21 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_volt = 4 * 53
         bat_power = 0
         temperature = 30
+    bat_current = bat_power * 1000 / bat_volt
     capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
     print(f"\nBattery:")
     print(f"  Capacity:    {capacity:.1f}kWh")
-    print(f"  Voltage:     {bat_volt:.1f}v")
-    print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.1f}kW)")
+    print(f"  Voltage:     {bat_volt:.1f}V")
+    print(f"  Current:     {bat_current:.1f}A")
+    print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
     print(f"  Current SoC: {current_soc}% ({residual:.1f}kWh)")
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     # charge times are not reliable if BMS dynamically limits charge current
     if temperature < 20 or temperature > 40:
         print(f"** battery temperature may affect the battery charge rate / time")
-    # approximate battery voltage at full charge when discharing / charging
-    discharge_volt = bat_volt * (1 + charge_config['volt_swing'] / 100 * (100 - current_soc) / 100) / (charge_config['volt_overdrive'] if bat_power < 0 else 1.0)
-    charge_volt = discharge_volt * charge_config['volt_overdrive']
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
@@ -1719,22 +1723,27 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"** could not get parameters for {model}")
         device_power = 3.68
         device_current = 26
+    # work out nominal battery voltage
+    bat_resistance = charge_config['bat_resistance']
+    ideal_volt = (bat_volt + bat_current * bat_resistance) * (1 + charge_config['volt_swing'] / 100 * (100 - current_soc) / 100)
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_limit = device_power / charge_config['discharge_loss']
-    discharge_power = discharge_volt * (charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current) / 1000
+    discharge_current = charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current
+    discharge_power = ideal_volt * discharge_current / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
     # work out charge limit = max power going into the battery after ac conversion losses
     charge_limit = device_power * charge_config['grid_charge_loss']
-    charge_power = charge_volt * (charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current) / 1000
+    charge_current = charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current
+    charge_power = ideal_volt * charge_current / 1000
     charge_limit = charge_power if charge_power < charge_limit else charge_limit
-    # work out losses when charging using charge current, number of batteries and internal resistance
-    charge_current = charge_limit * 1000 / charge_volt
-    battery_loss = 1.0 - charge_current ** 2 * round(charge_volt / 53, 0) * charge_config['bat_resistance'] / 1000 / charge_limit
+    # work out losses when charging using charge current and resistance
+    charge_current = charge_limit * 1000 / ideal_volt
+    battery_loss = 1.0 - charge_current ** 2 * bat_resistance  / 1000 / charge_limit
     # charging happens if generation exceeds export limit in feedin work mode
     export_limit = (device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['discharge_loss']
     if debug_setting > 1:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
-        print(f"\ndischarge_volt = {discharge_volt:.1f}, charge_volt = {charge_volt:.1f}")
+        print(f"\nideal_volt = {ideal_volt:.1f}, bat_resistance = {bat_resistance:.2f}")
         print(f"device_power = {device_power:1f}, device_current = {device_current:.1f}")
         print(f"discharge_limit = {discharge_limit:.3f}, charge_limit = {charge_limit:.3f}, export_limit = {export_limit:.3f}")
         print(f"charge_current = {charge_current:.1f}, battery_loss = {battery_loss:.3f}")
@@ -1752,7 +1761,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             history = get_report('day', d=date_list(span='weekday', e=tomorrow, today=2)[-consumption_days-1:-1], v='loads')
         else:
             last_date = today if hour_now >= charge_config['use_today'] else yesterday
-            history = get_report('day', d=date_list(span='week', e=last_date, today=2)[-consumption_days:], v='loads')
+            history = get_report('day', d=date_list(span='week', e=last_date, today=1)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
         print(f"\nConsumption (kWh):")
         s = ""
@@ -2033,6 +2042,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
         latest_date -= timedelta(days=1)
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if type(s) is str else s.date() if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if type(e) is str else e.date() if e is not None else None
+    last = latest_date if last is not None and last > latest_date and today != 2 else last
     step = 1
     if first is None and last is None:
         last = latest_date
