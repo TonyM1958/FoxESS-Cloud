@@ -465,7 +465,8 @@ This setting can be:
 
 ## Version Info
 
-0.7.4:<br>
+0.7.5:<br>
+Update to only apply 'operation_loss' during force charge.
 Correct day when using 'weekday' for consumption_span
 Dynamic battery_loss calculation added.
 Updated daylight_saving for change in clocks / times displayed.

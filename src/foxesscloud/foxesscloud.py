@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  09 October 2023
+Updated:  10 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.4"
+version = "0.7.5"
 debug_setting = 1
 
 # constants
@@ -1563,7 +1563,7 @@ charge_config = {
     'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
     'grid_charge_loss': 0.958,        # loss converting grid power to battery charge power
-    'operation_loss': 0.04,           # BMS static power consumption kW
+    'operation_loss': 0.12,           # Inverter / BMS static power consumption kW
     'bat_resistance': 0.45,           # internal resistance of battery / BMS in ohms
     'volt_swing': 4.7,                # battery volt % swing from 0% to 100% SoC
     'generation_days': 3,             # number of days to use for average generation (1-7)
@@ -1846,6 +1846,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_charge_loss'] for x in generation_timed]
     discharge_timed = [x / charge_config['discharge_loss'] for x in consumption_timed]
+    operation_loss = charge_config['operation_loss']
     # adjust charge and discharge time lines for work mode, force charge and power limits
     for i in range(0, run_time):
         h = base_hour + i
@@ -1853,14 +1854,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
         discharge_timed[i] = discharge_limit if discharge_timed[i] > discharge_limit else discharge_timed[i]
         if force_charge_am == 1 and hour_in(h, {'start': start_am, 'end': end_am}):
-            discharge_timed[i] = 0.0
+            discharge_timed[i] = operation_loss if charge_timed[i] == 0.0 else 0.0
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
-            discharge_timed[i] = 0.0
+            discharge_timed[i] = operation_loss if charge_timed[i] == 0.0 else 0.0
         elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Backup')):
-            discharge_timed[i] = 0.0
+            discharge_timed[i] = operation_loss if charge_timed[i] == 0.0 else 0.0
         elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Feedin')):
             (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
-            0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
+                0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
     if debug_setting > 1:
         print(f"\nGeneration timed: {generation_timed}")
         print(f"Charge timed: {charge_timed}")
@@ -1869,7 +1870,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now to what it was at the start of current hour
     h = base_hour
-    kwh_timed = [charge * battery_loss - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
+    kwh_timed = [charge * battery_loss - discharge for charge, discharge in zip(charge_timed, discharge_timed)]
     kwh_current = residual - kwh_timed[0] * (hour_now - h)
     bat_timed = []
     kwh_min = kwh_current
@@ -1937,7 +1938,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
         h = base_hour
-        kwh_timed = [charge * battery_loss - discharge - charge_config['operation_loss'] for charge, discharge in zip(charge_timed, discharge_timed)]
+        kwh_timed = [charge * battery_loss - discharge for charge, discharge in zip(charge_timed, discharge_timed)]
         kwh_current = residual - kwh_timed[0] * (hour_now - h)
         bat_timed_old = [x for x in bat_timed]     # save for comparison when plotting
         bat_timed = []
