@@ -465,7 +465,7 @@ This setting can be:
 
 ## Version Info
 
-0.7.6:<br>
+0.7.7:<br>
 Updates to allow manual working for charge_needed when no report data is available from Fox cloud.
 Update to only apply 'operation_loss' during force charge.
 Correct day when using 'weekday' for consumption_span

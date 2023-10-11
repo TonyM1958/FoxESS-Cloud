@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.6"
+version = "0.7.7"
 debug_setting = 1
 
 # constants
@@ -879,9 +879,9 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             print(f"** get_raw() got response code: {response.status_code}")
             return None
         result = response.json().get('result')
-        if result is None:
-            errno = response.json().get('errno')
-            print(f"** no raw data, {errno_message(errno)}")
+        errno = response.json().get('errno')
+        if errno > 0 or result is None or len(result) == 0:
+            print(f"** get_raw(), no raw data, {errno_message(errno)}")
             return None
     else:
         file = open(load)
@@ -1098,9 +1098,9 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                 print(f"** get_report() side report got response code: {response.status_code}")
                 return None
             side_result = response.json().get('result')
-            if side_result is None:
-                errno = response.json().get('errno')
-                print(f"** get_report(), no side report data, {errno_message(errno)}")
+            errno = response.json().get('errno')
+            if errno > 0 or side_result is None or len(side_result) == 0:
+                print(f"** get_report(), no report data available, {errno_message(errno)}")
                 return None
             if fix_values == 1:
                 for var in side_result:
@@ -1114,9 +1114,9 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             print(f"** get_report() main report got response code: {response.status_code}")
             return None
         result = response.json().get('result')
-        if result is None:
-            errno = response.json().get('errno')
-            print(f"** get_report(), no main report data, {errno_message(errno)}")
+        errno = response.json().get('errno')
+        if errno > 0 or result is None or len(result) == 0:
+            print(f"** get_report(), no report data available, {errno_message(errno)}")
             return None
         # correct errors in report values:
         if fix_values == 1:
@@ -1765,14 +1765,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             last_date = today if hour_now >= charge_config['use_today'] else yesterday
             history = get_report('day', d=date_list(span='week', e=last_date, today=1)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
+        if consumption is None:
+            print(f"No consumption data available")
+            return None
         print(f"\nConsumption (kWh):")
         s = ""
         for h in history:
             s += f"  {h['date']}: {h['total']:4.1f},"
         print(s[:-1])
-        if consumption is None:
-            print(f"  No consumption data available")
-            return None
         print(f"  Average of last {consumption_days} {day_tomorrow if consumption_span=='weekday' else 'day'}s: {consumption:.1f}kWh")
     # time line has 1 hour buckets of consumption
     daily_sum = sum(consumption_by_hour)
@@ -1811,13 +1811,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     gen_days = charge_config['generation_days']
     history = get_raw('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
-    for day in history:
-        date = day['date']
-        if pv_history.get(date) is None:
-            pv_history[date] = 0.0
-        pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
-    pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
-    if len(history) > 0:
+    if history is not None and len(history) > 0:
+        for day in history:
+            date = day['date']
+            if pv_history.get(date) is None:
+                pv_history[date] = 0.0
+            pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
+        pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
         print(f"\nGeneration (kWh):")
         s = ""
         for d in sorted(pv_history.keys())[-gen_days:]:
