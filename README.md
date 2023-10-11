@@ -333,7 +333,7 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ f.octous_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
++ f.octopus_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
 + f.intelligent_octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
 + f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + f.octopus_go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
