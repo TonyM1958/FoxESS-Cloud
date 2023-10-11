@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  10 October 2023
+Updated:  11 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.5"
+version = "0.7.6"
 debug_setting = 1
 
 # constants
@@ -1516,8 +1516,7 @@ def timed_list(data, hour_now, run_time=None):
 # take a report and return (average value and 24 hour profile)
 def report_value_profile(result):
     if type(result) is not list or result[0]['type'] != 'day':
-        print(f"** can only create 24 hour profile from report_type 'day' or 'week'")
-        return None
+        return (None, None)
     data = []
     for h in range(0,24):
         data.append((0.0, 0)) # value sum, count of values
@@ -1536,9 +1535,8 @@ def report_value_profile(result):
     by_hour = []
     for h in data:
         by_hour.append(h[0] / h[1] if h[1] != 0 else 0.0)   # sum / count
-    if daily_average is None:
-        print(f"** cannot create profile where daily average is None")
-        return None
+    if daily_average is None or daily_average == 0.0:
+        return (None, None)
     # rescale to match daily_average
     current_total = sum(by_hour)
     return (daily_average, [h * daily_average / current_total for h in by_hour])
@@ -1562,10 +1560,10 @@ charge_config = {
     'export_limit': None,             # maximum export power
     'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
-    'grid_charge_loss': 0.958,        # loss converting grid power to battery charge power
+    'grid_charge_loss': 0.96,         # loss converting grid power to battery charge power
     'operation_loss': 0.12,           # Inverter / BMS static power consumption kW
     'bat_resistance': 0.45,           # internal resistance of battery / BMS in ohms
-    'volt_swing': 4.7,                # battery volt % swing from 0% to 100% SoC
+    'volt_swing': 4.5,                # battery volt % swing from 0% to 100% SoC
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1688,9 +1686,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if test_soc is None:
         min_soc = battery_settings['minGridSoc']
         get_battery()
+        if battery['status'] != 1:
+            print(f"\nBattery status is not available")
+            return None
         current_soc = battery['soc']
         bat_volt = battery['volt']
         bat_power = battery['power']
+        bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']/1000
     else:
@@ -1700,7 +1702,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_volt = 4 * 53
         bat_power = 0
         temperature = 30
-    bat_current = bat_power * 1000 / bat_volt
+        bat_current = 0.0
     capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
@@ -1768,6 +1770,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         for h in history:
             s += f"  {h['date']}: {h['total']:4.1f},"
         print(s[:-1])
+        if consumption is None:
+            print(f"  No consumption data available")
+            return None
         print(f"  Average of last {consumption_days} {day_tomorrow if consumption_span=='weekday' else 'day'}s: {consumption:.1f}kWh")
     # time line has 1 hour buckets of consumption
     daily_sum = sum(consumption_by_hour)
@@ -1801,7 +1806,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if solcast_value is None and solar_value is None and debug_setting > 1:
         print(f"\nNo forecasts available at this time")
     # get generation data
+    generation = None
     last_date = today if hour_now >= charge_config['use_today'] else yesterday
+    gen_days = charge_config['generation_days']
     history = get_raw('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
     for day in history:
@@ -1809,15 +1816,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if pv_history.get(date) is None:
             pv_history[date] = 0.0
         pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
-    gen_days = charge_config['generation_days']
     pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
-    print(f"\nGeneration (kWh):")
-    s = ""
-    for d in sorted(pv_history.keys())[-gen_days:]:
-        s += f"  {d}: {pv_history[d]:4.1f},"
-    print(s[:-1])
-    generation = pv_sum / gen_days
-    print(f"  Average of last {gen_days} days: {generation:.1f}kWh")
+    if len(history) > 0:
+        print(f"\nGeneration (kWh):")
+        s = ""
+        for d in sorted(pv_history.keys())[-gen_days:]:
+            s += f"  {d}: {pv_history[d]:4.1f},"
+        print(s[:-1])
+        generation = pv_sum / gen_days
+        print(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
     quarter = now.month // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
@@ -1836,6 +1843,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         expected = solar_value
         generation_timed = solar_timed
         print(f"\nUsing Solar forecast: {expected:.1f}kWh")
+    elif generation is None or generation == 0.0:
+        print(f"\nNo generation data available")
+        return None
     else:
         expected = generation
         generation_timed = [expected * x / sun_sum for x in sun_timed]
@@ -2144,10 +2154,8 @@ def get_pvoutput(d = None, tou = 0):
     # get raw power data for the day
     v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
     raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
-    if raw_data is None:
-        return None
-    if raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
-        return(f"# error: {d.replace('-','')} No generation data")
+    if raw_data is None or len(raw_data) == 0 or raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
+        return(f"# error: {d.replace('-','')} No generation data available")
     # apply calibration and merge raw_data for meterPower2 into pvPower:
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
