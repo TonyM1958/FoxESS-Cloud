@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  11 October 2023
+Updated:  15 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.7.7"
+version = "0.7.9"
 debug_setting = 1
 
 # constants
@@ -1554,16 +1554,18 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 
 # charge_needed settings
 charge_config = {
-    'contingency': 10,                # % of consumption to allow as contingency
+    'contingency': 15,                # % of consumption to allow as contingency
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
-    'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
+    'discharge_loss': 0.97,           # loss converting battery discharge power to grid power
     'pv_charge_loss': 0.95,           # loss converting PV power to battery charge power
-    'grid_charge_loss': 0.96,         # loss converting grid power to battery charge power
-    'operation_loss': 0.12,           # Inverter / BMS static power consumption kW
-    'bat_resistance': 0.45,           # internal resistance of battery / BMS in ohms
-    'volt_swing': 4.5,                # battery volt % swing from 0% to 100% SoC
+    'grid_charge_loss': 0.97,         # loss converting grid power to battery charge power
+    'battery_loss': 0.96,             # loss converting charge power into residual
+    'operation_loss': 0.160,          # Inverter and BMS static power consumption kW
+    'bms_loss': 0.08,                 # BMS static power consumption kW
+    'bat_resistance': 0.476,          # internal resistance of BMS and battery
+    'volt_swing': 3,                  # battery OCV % change from 10% to 100% SoC
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1703,20 +1705,23 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = 0
         temperature = 30
         bat_current = 0.0
+    bat_resistance = charge_config['bat_resistance']
+    bat_ocv = (bat_volt + bat_current * bat_resistance) * (1 + charge_config['volt_swing'] / 100 * (100 - current_soc) / 90)
+    bat_nominal = bat_ocv * (1 - charge_config['volt_swing'] / 200)
     capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
     print(f"\nBattery:")
     print(f"  Capacity:    {capacity:.1f}kWh")
-    print(f"  Voltage:     {bat_volt:.1f}V")
+    print(f"  Voltage:     {bat_volt:.1f}V ({bat_ocv:.1f} OCV)")
     print(f"  Current:     {bat_current:.1f}A")
     print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
     print(f"  Current SoC: {current_soc}% ({residual:.1f}kWh)")
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     # charge times are not reliable if BMS dynamically limits charge current
-    if temperature < 20 or temperature > 40:
-        print(f"** battery temperature may affect the battery charge rate / time")
+    if temperature < 25 or temperature > 35:
+        print(f"** battery temperature may affect the charge rate and time")
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
@@ -1725,30 +1730,27 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"** could not get parameters for {model}")
         device_power = 3.68
         device_current = 26
-    # work out nominal battery voltage
-    bat_resistance = charge_config['bat_resistance']
-    ideal_volt = (bat_volt + bat_current * bat_resistance) * (1 + charge_config['volt_swing'] / 100 * (100 - current_soc) / 100)
+    # work out charge limit = max power going into the battery after ac conversion losses
+    device_limit = device_power * charge_config['grid_charge_loss']
+    charge_current = charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current
+    charge_power = charge_current * (bat_nominal + charge_current * bat_resistance) / 1000
+    charge_limit = (charge_power if charge_power < device_limit else device_limit) - charge_config['bms_loss']
+    # work out losses when charging
+    battery_loss = 1.0 - charge_limit * 2000 * bat_resistance / bat_nominal ** 2
+#    battery_loss = charge_config['battery_loss']
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_limit = device_power / charge_config['discharge_loss']
     discharge_current = charge_config['discharge_current'] if charge_config['discharge_current'] is not None else device_current
-    discharge_power = ideal_volt * discharge_current / 1000
+    discharge_power = discharge_current * bat_ocv / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
-    # work out charge limit = max power going into the battery after ac conversion losses
-    charge_limit = device_power * charge_config['grid_charge_loss']
-    charge_current = charge_config['charge_current'] if charge_config['charge_current'] is not None else device_current
-    charge_power = ideal_volt * charge_current / 1000
-    charge_limit = charge_power if charge_power < charge_limit else charge_limit
-    # work out losses when charging using charge current and resistance
-    charge_current = charge_limit * 1000 / ideal_volt
-    battery_loss = 1.0 - charge_current ** 2 * bat_resistance  / 1000 / charge_limit
     # charging happens if generation exceeds export limit in feedin work mode
     export_limit = (device_power if charge_config['export_limit'] is None else charge_config['export_limit']) / charge_config['discharge_loss']
     if debug_setting > 1:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
-        print(f"\nideal_volt = {ideal_volt:.1f}, bat_resistance = {bat_resistance:.2f}")
-        print(f"device_power = {device_power:1f}, device_current = {device_current:.1f}")
+        print(f"\nbat_ocv = {bat_ocv:.1f}, bat_nominal = {bat_nominal:.1f}")
+        print(f"device_power = {device_power:.1f}, device_current = {device_current:.1f}")
         print(f"discharge_limit = {discharge_limit:.3f}, charge_limit = {charge_limit:.3f}, export_limit = {export_limit:.3f}")
-        print(f"charge_current = {charge_current:.1f}, battery_loss = {battery_loss:.3f}")
+        print(f"bat_resistance = {bat_resistance:.3f}, battery_loss = {battery_loss:.3f}")
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
@@ -1781,7 +1783,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_value = None
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
-        fsolcast = Solcast(quiet=True, estimated=0)
+        fsolcast = Solcast(quiet=True, estimated=0, time_shift=time_shift)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(tomorrow) is not None:
             (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
             print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
@@ -1834,15 +1836,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing manual forecast: {expected:.1f}kWh with {sun_name} sun profile")
+        print(f"\nUsing manual forecast for {tomorrow}: {expected:.1f}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        print(f"\nUsing Solcast forecast: {expected:.1f}kWh")
+        print(f"\nUsing Solcast forecast for {tomorrow}: {expected:.1f}kWh")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        print(f"\nUsing Solar forecast: {expected:.1f}kWh")
+        print(f"\nUsing Solar forecast for {tomorrow}: {expected:.1f}kWh")
     elif generation is None or generation == 0.0:
         print(f"\nNo generation data available")
         return None
@@ -1855,7 +1857,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_charge_loss'] for x in generation_timed]
-    discharge_timed = [x / charge_config['discharge_loss'] for x in consumption_timed]
+    discharge_timed = [x / charge_config['discharge_loss'] + charge_config['bms_loss'] for x in consumption_timed]
     operation_loss = charge_config['operation_loss']
     # adjust charge and discharge time lines for work mode, force charge and power limits
     for i in range(0, run_time):
@@ -1943,7 +1945,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             charge_added = charge_limit * t
             charge_added = charge_limit - charge_timed[i] if charge_timed[i] + charge_added > charge_limit else charge_added
             charge_timed[i] += charge_added
-            grid_timed[i] = charge_added / charge_config['grid_charge_loss'] + consumption_timed[i] * t
+            grid_timed[i] = (charge_added + charge_config['bms_loss'] * t) / charge_config['grid_charge_loss'] + consumption_timed[i] * t
             discharge_timed[i] *= (1-t)
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
@@ -2292,7 +2294,7 @@ class Solcast :
     Load Solcast Estimate / Actuals / Forecast daily yield
     """ 
 
-    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0) :
+    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0, time_shift=None) :
         # days sets the number of days to get for forecasts (and estimated if enabled)
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
@@ -2362,7 +2364,7 @@ class Solcast :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
-                        hour = int(period_end[11:13])
+                        hour = (int(period_end[11:13]) + (time_shift if time_shift is not None else daylight_saving(date))) % 24
                         if date not in self.daily.keys() :
                             self.daily[date] = {'hourly': {}, 'kwh': 0.0}
                         if hour not in self.daily[date]['hourly'].keys():

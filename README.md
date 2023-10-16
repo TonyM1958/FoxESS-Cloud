@@ -465,7 +465,9 @@ This setting can be:
 
 ## Version Info
 
-0.7.7:<br>
+0.7.9:<br>
+Correct daylight saving hour adjustment for Solcast forecast
+Adjustments for losses and BMS power consumption when charging.
 Updates to allow manual working for charge_needed when no report data is available from Fox cloud.
 Update to only apply 'operation_loss' during force charge.
 Correct day when using 'weekday' for consumption_span
