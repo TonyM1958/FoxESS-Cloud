@@ -230,7 +230,7 @@ All the parameters are optional:
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
 + forecast_times: a list of hours when forecasts can be obtained
 + update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
-+ show_data: 1 show battery SoC data, 2 show battery Residual data. The default is 1.
++ show_data: 1 show battery SoC data, 2 show battery Residual data, 3 show timed data, 4 show timed data before and after charging. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
 ### Modelling
@@ -265,16 +265,19 @@ Given the data available, the modelling works as follows:
 ### Configuration Parameters
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
-+ contingency: 10               # % of consumption to allow as contingency
++ contingency: 15               # % of consumption to allow as contingency
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 + export_limit: None            # maximum export power. None uses the inverter power rating
-+ discharge_loss: 0.98          # loss converting battery discharge power to AC
-+ pv_charge_loss: 0.95          # loss converting PV power to battery charge power
-+ grid_charge_loss: 0.96        # loss converting grid AC to battery charge DC
-+ operation_loss: 0.12          # inverter / bms static power consumption kW
-+ bat_resistance: 0.45          # internal resistance of battery / BMS circuit in ohms
-+ volt_swing: 4.7               # battery voltage % swing from 0% to 100% SoC when discharging
++ discharge_loss: 0.97          # loss converting battery discharge power to grid power
++ pv_loss: 0.95                 # loss converting PV power to battery charge power
++ grid_loss: 0.97               # loss converting grid power to battery charge power
++ charge_loss: None             # loss converting charge power to residual
++ inverter_power: 120           # inverter power consumption W
++ bms_power: 50                 # BMS power consumption W
++ bat_resistance: 0.075         # internal resistance of a battery in ohms
++ bat_volt: 53                  # nominal voltage of a battery
++ volt_swing: 3.0               # battery OCV % change from 10% to 100% SoC
 + generation_days: 3            # number of days to use for average generation (1-7)
 + consumption_days: 3           # number of days to use for average consumption (1-7)
 + consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
@@ -464,6 +467,11 @@ This setting can be:
 
 
 ## Version Info
+
+0.8.0<br>
+Changed bat-resistance to per battery to better scale losses.
+Added battery count and resistance to Battery Info and Device Info in charge_needed().
+Updated show_data to display raw generation, consumption, charge, discharge and residual data.
 
 0.7.9:<br>
 Correct daylight saving hour adjustment for Solcast forecast
