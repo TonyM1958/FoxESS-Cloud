@@ -94,7 +94,8 @@ You can change inverter settings using:
 f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
-f.set_schedule(enable, pollcy)
+f.set_period(start, end, mode, min_soc, fdsoc, fdpwr)
+f.set_schedule(enable, periods)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
@@ -111,8 +112,14 @@ set_charge() takes the charge times from the battery_settings and applies these 
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
+set_period() returns a period structure that can be used to build a list of strategy periods for set_schedule()
++ start, end, mode: required parameters
++ min_soc: optional, default is 10
++ fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
++ fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode. 
+
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled.
-+ pollcy: a list of schedules with start (H/M) and end (H/M) times, work mode and soc values. f.pollcy_item provides an example / template for the structure.
++ periods: a period or list of periods created using f.set_period.
 
 ## Raw Data
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
@@ -340,7 +347,8 @@ There are a number of different pre-configured tariffs:
 + f.intelligent_octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
 + f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + f.octopus_go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
-+ f.agile_octopus: off-peak from 02:30 to 05:00 and 12:30 to 14:30, peak from 16:00 to 19:00, forecasts from 12:00 to 12:59 and 22:00 to 23:59
++ f.agile_octopus: off-peak from 02:30 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
++ f.bg_driver: off-peak from 00:00 to 05:00, forecasts from 22:00 to 23:59
 
 Custom periods can be configured for specific times if required:
 + f.custom_periods: charging from 02:00 to 05:00, no off-peak or peak times, forecasts from 22:00 to 23:59
@@ -468,7 +476,9 @@ This setting can be:
 
 ## Version Info
 
-0.8.0<br>
+0.8.1<br>
+Added bg_driver tariff.
+Updated set_schedule() and added set_period()
 Changed bat-resistance to per battery to better scale losses.
 Added battery count and resistance to Battery Info and Device Info in charge_needed().
 Updated show_data to display raw generation, consumption, charge, discharge and residual data.

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  20 October 2023
+Updated:  21 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.0"
+version = "0.8.1"
 debug_setting = 1
 
 # constants
@@ -706,14 +706,15 @@ def get_work_mode():
 # set work mode
 ##################################################################################################
 
-work_modes = ['SelfUse', 'Feedin', 'Backup', 'PowerStation', 'PeakShaving', 'ForceCharge']
+work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
+settable_modes = work_modes[:3]
 
 def set_work_mode(mode):
     global token, device_id, work_modes, work_mode, debug_setting, messages
     if get_device() is None:
         return None
-    if mode not in work_modes:
-        print(f"** work mode: must be one of {work_modes}")
+    if mode not in settable_modes:
+        print(f"** work mode: must be one of {settable_modes}")
         return None
     if debug_setting > 1:
         print(mode)
@@ -772,9 +773,27 @@ def get_schedule():
 # set schedule
 ##################################################################################################
 
-pollcy_item = {'startH': 7, 'startM': 0, 'endH': 12, 'endM': 0, 'workMode': 'SelfUse', 'soc': 12}
+# create a period structure
+def set_period(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
+    if type(start) is str:
+        start = time_hours(start)
+    if type(end) is str:
+        end = time_hours(end)
+    if start is None or end is None:
+        return None
+    if mode not in work_modes:
+        print(f"** mode must be one of {work_modes}")
+        return None
+    start_h, start_m = split_hours(start)
+    end_h, end_m = split_hours(end)
+    period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minSocOnGrid': min_soc}
+    if mode in ['ForceCharge', 'ForceDischarge']:
+        period['fdSoc'] = fdsoc
+        period['fdPwr'] = fdpwr
+    return period
 
-def set_schedule(enable=1, pollcy = None):
+# set a schedule from a period or list of periods
+def set_schedule(enable=1, periods = None):
     global token, device_sn, debug_setting, messages, schedule
     if get_device() is None:
         return None
@@ -794,14 +813,14 @@ def set_schedule(enable=1, pollcy = None):
         schedule['enable'] = False
         schedule['pollcy'] = []
     else:
-        if pollcy is None:
-            print(f"** set_schedule() requires pollcy data")
+        if periods is None:
+            print(f"** set_schedule() requires strategy period data")
             return None
-        if type(pollcy) is not list:
-            pollcy = [pollcy]
-        for p in pollcy:
-            p['soc'] = f"{p['soc']}"        # send text not number
-        data = {'pollcy': pollcy, 'deviceSN': device_sn}
+        if type(periods) is not list:
+            periods = [periods]
+        for p in periods:
+            p['minSocOnGrid'] = f"{p['minSocOnGrid']}"        # send text not number
+        data = {'pollcy': periods, 'deviceSN': device_sn}
         response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
         if response.status_code != 200:
             print(f"** set_schedule() got enable response code: {response.status_code}")
@@ -813,7 +832,7 @@ def set_schedule(enable=1, pollcy = None):
         if debug_setting > 1:
             print(f"success")
         schedule['enable'] = True
-        schedule['pollcy'] = pollcy
+        schedule['pollcy'] = periods
     return schedule
 
 
@@ -1333,11 +1352,21 @@ def get_remote_setting():
 
 # roll over decimal times after maths and round to 1 minute
 def round_time(h):
+    if h is None:
+        return None
     while h < 0:
         h += 24
     while h >= 24:
         h -= 24
     return int(h) + int(60 * (h - int(h)) + 0.5) / 60
+
+# split decimal hours into hours and minutes
+def split_hours(h):
+    if h is None:
+        return (None, None)
+    hours = int(h % 24)
+    minutes = int (h % 1 * 60 + 0.5)
+    return (hours, minutes)
 
 # convert time string HH:MM:SS to decimal hours
 def time_hours(t, d = None):
@@ -1350,7 +1379,7 @@ def time_hours(t, d = None):
     elif type(t) is str and t.replace(':', '').isnumeric() and t.count(':') <= 2:
         t += ':00' if t.count(':') == 1 else ''
         return sum(float(t) / x for x, t in zip([1, 60, 3600], t.split(":")))
-    print(f"** invalid time string for time_hours()")
+    print(f"** invalid time string {t}")
     return None
 
 # convert decimal hours to time string HH:MM:SS
@@ -1485,10 +1514,20 @@ octopus_go = {
 agile_octopus = {
     'name': 'Agile Octopus',
     'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 12.5, 'end': 14.5, 'force': 0},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [12, 22, 23]
+    'forecast_times': [22, 23]
+    }
+
+# time periods for British Gas Electric Driver
+bg_driver = {
+    'name': 'British Gas Electric Driver',
+    'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
     }
 
 # custom time periods / template
@@ -1500,7 +1539,7 @@ custom_periods = {'name': 'Custom',
     'forecast_times': [22, 23]
     }
 
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, custom_periods]
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
 tariff = octopus_flux
 
 # how consumption varies by month across a year. 12 values.
@@ -1941,8 +1980,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     start_part_hour = start_at - int(start_at)
     start_residual = bat_timed[time_to_next] * (1 - start_part_hour) + bat_timed[time_to_next+1] * start_part_hour      # residual when charging starts
     if kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
-        print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.1f}kWh)")
-        print(f"  Contingency of {kwh_contingency:.1f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
+        print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
+        print(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
@@ -1951,9 +1990,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "with charge added"
         if full_charge is not None:
             kwh_needed = capacity - start_residual
-            print(f"\nFull charge set for {full_charge}, adding {kwh_needed:.1f} kWh")
+            print(f"\nFull charge set for {full_charge}, adding {kwh_needed:.2f} kWh")
         elif test_charge is None:
-            print(f"\nCharge of {kwh_needed:.1f} kWh is needed for a contingency of {kwh_contingency:.1f} kWh ({contingency}%) at {hours_time(min_hour)} {day_when}")
+            print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour)} {day_when}")
         else:
             print(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
@@ -2003,10 +2042,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         end_part_hour = end_timed - int(end_timed)
         old_residual = bat_timed_old[time_to_end - 1] * (1 - end_part_hour) + bat_timed_old[time_to_end] * end_part_hour
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
-        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.1f}kWh")
-        print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.1f}kWh)")
-        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.1f}kWh)")
-        print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.1f}kWh)")
+        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh")
+        print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
+        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
+        print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
         print(f"\nEstimated Grid Consumption: {sum(grid_timed):.1f} kWh (including house consumption while charging)")
     if show_data > 2:
         print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
@@ -2020,12 +2059,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 print(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed_old[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed_old[i]:6.3f}, {bat_timed_old[i]:6.3f}")
     if show_data > 0:
         s = f"\nBattery Energy kWh ({charge_message}):\n" if show_data == 2 else f"\nBattery SoC % ({charge_message}):\n"
-        s += "                 " * (base_hour % 6)
+        s += " " * (18 if show_data == 2 else 17) * (base_hour % 6)
         h = base_hour
         for r in bat_timed:
             s += "\n" if h > hour_now and h % 6 == 0 else ""
             s += f"  {hours_time(h - (hour_adjustment if h >= change_hour else 0), day=True)}"
-            s += f" = {r:4.1f}," if show_data == 2 else f" = {r / capacity * 100:3.0f}%,"
+            s += f" = {r:5.2f}," if show_data == 2 else f" = {r / capacity * 100:3.0f}%,"
             h += 1
         print(s[:-1])
     if show_plot > 0:
