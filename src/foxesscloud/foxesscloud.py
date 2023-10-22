@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  21 October 2023
+Updated:  22 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.1"
+version = "0.8.2"
 debug_setting = 1
 
 # constants
@@ -1621,7 +1621,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
 
 # charge_needed settings
 charge_config = {
-    'contingency': 15,                # % of consumption to allow as contingency
+    'contingency': 20,                # % of consumption to allow as contingency
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
@@ -1647,7 +1647,7 @@ charge_config = {
     'time_shift': None,               # offset local time by x hours
     'force_charge': 0,                # 1 = apply force charge for any remaining charge time
     'timed_mode': 0,                  # 1 = timed changes in work mode, 0 = None
-    'special_contingency': 25,        # contingency for special days when consumption might be higher
+    'special_contingency': 30,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None               # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
 }
@@ -1695,8 +1695,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         forecast_times = [forecast_times]
     # get dates and times
     time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else daylight_saving(test_time) if daylight_saving is not None else 0
-    gmt = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M'))
-    now = gmt + timedelta(hours=time_shift)
+    system_time = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M'))
+    now = system_time + timedelta(hours=time_shift)
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
     hour_now = now.hour + now.minute / 60
@@ -1707,9 +1707,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     day_after_tomorrow = datetime.strftime(now + timedelta(days=2), '%Y-%m-%d')
     # work out if we lose 1 hour if clocks go forward or gain 1 hour if clocks go back
     change_hour = 0
-    hour_adjustment = 0 if daylight_saving is None else daylight_changes(gmt, gmt + timedelta(days=2))
+    hour_adjustment = 0 if daylight_saving is None else daylight_changes(system_time, system_time + timedelta(days=2))
     if hour_adjustment != 0:    # change happens in the next 2 days - work out if today, tomorrow or day after tomorrow
-        change_hour = 1 if daylight_changes(gmt, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
+        change_hour = 1 if daylight_changes(system_time, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
         change_hour += 1 if hour_adjustment > 0 else 0
     # get next charge times from am/pm charge times
     force_charge = charge_config['force_charge']
@@ -1767,9 +1767,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         residual = battery['residual']/1000
     else:
         current_soc = test_soc
-        residual = test_soc * 10.24 / 100
+        residual = test_soc * 8.2 / 100
         min_soc = 10
-        bat_volt = 4 * 53
+        bat_volt = 2 * 53
         bat_power = 0
         temperature = 30
         bat_current = 0.0
@@ -1979,7 +1979,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
     start_part_hour = start_at - int(start_at)
     start_residual = bat_timed[time_to_next] * (1 - start_part_hour) + bat_timed[time_to_next+1] * start_part_hour      # residual when charging starts
-    if kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
+    if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
         print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
         print(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
         charge_message = "no charge needed"
@@ -2071,7 +2071,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(0, run_time)]
-        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=True) for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=False) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Battery SoC % ({charge_message})"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
@@ -2750,41 +2750,118 @@ class Solar :
 regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Merseyside and Northern Wales', 'E':'West Midlands', 'F':'North Eastern England', 'G':'North Western England', 'H':'Southern England',
     'J':'South Eastern England', 'K':'Southern Wales', 'L':'South Western England', 'M':'Yorkshire', 'N':'Southern Scotland', 'P':'Northern Scotland'}
 
+# default products
 product_code = "AGILE-FLEX-22-11-25"
 region_code = "H"
 
+# time in hours when tomorrow's prices are available
+agile_update_time = 17
 
-def get_agile(period_from=None, duration=3):
-    global product_code, region_code
+# weighted average for pricing over period:
+front_weighted = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+first_hour =     [1.0, 1.0]
+agile_weighting = None
+
+# get prices and work out lowest weighted average price time period
+def get_agile_period(d=None, product=None, region=None, duration=None, time_shift=None):
+    global product_code, region_code, debug_setting, agile_update_time
     url = "https://api.octopus.energy/v1/products/%P/electricity-tariffs/E-1R-%P-%R/standard-unit-rates/".replace("%P", product_code).replace("%R", region_code)
-    period_from = datetime.now().isoformat() if period_from is None else period_from
-    params = {'period_from': period_from}    
-    print(f"{url}, {params}")
+    if product is None:
+        product = product_code
+    if region is None:
+        region = region_code
+    if d is not None and len(d) < 11:
+        d += " 18:00"
+    if region not in regions:
+        print(f"** region {region} not recognised, valid regions are {regions}")
+        return None
+    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
+    span = int(duration * 2 + 0.5)
+    time_offset = daylight_saving(d) if daylight_saving is not None else 0
+    if time_shift is None:
+        time_shift = time_offset
+    elif time_shift != 0:
+        time_offset = time_shift
+    system_time = (datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M'))
+    now = system_time + timedelta(hours=time_shift)
+    hour_now = now.hour + now.minute / 60
+    today = datetime.strftime(now + timedelta(days=0 if hour_now >= agile_update_time else -1), '%Y-%m-%d')
+    tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= agile_update_time else 0), '%Y-%m-%d')
+    # get prices from 11pm today to 11pm tomorrow
+    print(f"Product {product} in {regions[region]} region from {today} 23:00 to {tomorrow} 23:00")
+    zulu_hour = "T" + hours_time(23 - time_offset, ss=True) + "Z"
+    period_from = today + zulu_hour
+    period_to = tomorrow + zulu_hour
+    params = {'period_from': period_from, 'period_to': period_to }
+    if debug_setting > 1:
+        print(f"time_offset = {time_offset}, time_shift = {time_shift}, params = {params}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"** get_agile() response code: {response.status_code}")
+        print(f"** get_agile_period() response code: {response.status_code}")
         return None
-    results = response.json().get('results')
-    prices = {}
-    for r in results:
-        time = r['valid_from'][11:16]
-        price = r['value_inc_vat']
-        prices[time] = r['value_inc_vat']
-    keys = sorted(prices.keys())
+    # results are in reverse chronological order...
+    results = response.json().get('results')[::-1]
+    times = []          # ordered list of times
+    prices = []         # ordered list of prices inc VAT
+    cover = 16          # 8 hours cover from 23:00 to 07:00 +/- 1 hour when clocks change
+    if len(results) < (cover + span):
+        print(f"** get_agile_period(): prices are not available for {tomorrow}")
+        return None
+    for r in results[:cover + span]:
+        times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset))
+        prices.append(r['value_inc_vat'])
     period = {}
-    min_time = None
-    min_value = None
-    for i in range(0, 12):
-        p = [prices[keys[x]] for x in range(i, i + int(duration * 2))]
-        h = time_hours(keys[i])
-        avg = sum(p) / duration / 2
-        period[h] = {}
-        period[h]['values'] = p
-        period[h]['avg'] = round(avg,2)
-        if min_value is None or avg < min_value:
-            min_value = avg
-            min_time = h
-    period['start'] = hours_time(min_time)
-    period['end'] = hours_time(min_time + duration)
-    period['price'] = round(min_value,2)
+    min_t = None
+    min_v = None
+    weights = [1.0] * span if agile_weighting is None else (agile_weighting + [0.0] * span)[:span]
+    for i in range(0, cover):
+        start = times[i]
+        p_span = prices[i: i + span]
+        wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
+        period[start] = {'wavg': wavg, 'prices':p_span, 'times': times[i: i + span]}
+        if min_v is None or wavg < min_v:
+            min_v = wavg
+            min_t = start
+    period['product'] = product
+    period['region'] = region
+#    period['url'] = url
+#    period['params'] = params
+    period['duration'] = duration
+    period['span'] = span
+    period['start'] = min_t
+    period['end'] = hours_time(time_hours(min_t) + duration)
+    period['price'] = min_v
     return period
+
+
+agile_period = None
+
+# set tariff and charge time period based on pricing for Agile Octopus
+def set_agile_period(d=None, product=None, region=None, duration=None, time_shift=None, update=0, show_data=0):
+    global debug_setting, agile_octopus, tariff, regions, agile_period_data
+    print(f"\n------------- set_agile_period ---------------")
+    agile_period = None
+    period = get_agile_period(d=d, product=product, region=region, duration=duration, time_shift=time_shift)
+    if period is None:
+        return None
+    start = period['start']
+    end = period['end']
+    duration = period['duration']
+    span = period['span']
+    price = period['price']
+    prices = period[start]['prices']
+    times = period[start]['times']
+    print(f"{duration} hour charging period from {start} to {end} has a weighted average price of {price:.2f} p/kWh inc VAT")
+    if show_data > 0:
+        s = ""
+        for i in range(0, span):
+            s += "\n" if i % 6 == 0 else ""
+            s += f"  {times[i]} = {prices[i]:.2f}"
+        print(s)
+    if update > 0:
+        tariff = agile_octopus
+        tariff['off_peak1']['start'] = time_hours(start)
+        tariff['off_peak1']['end'] = time_hours(end)
+        print(f"\nTariff has been updated")
+    agile_period = period
+    return None

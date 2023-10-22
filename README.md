@@ -365,6 +365,31 @@ Note: when TOU is applied, energy values uploaded to PV Output are estimated usi
 
 In addition to energy tariffs, the tariff can contain timed work mode changes using the start, end and min_soc to use when changing work mode.
 
+### Dynamic charging for Agile Octopus
+
+A price based charging period can be configured when using Agile Octopus:
+
+```
+f.set_agile_period(d, product, region, duration, span, time_shift, update)
+```
+
+This gets the latest 30 minute pricing and uses this to work out the lowest price off peak charging period.
++ d: optional historic date / time to check prices for. Default is current date / time
++ product: optional Agile Octopus product code, the default is "AGILE-FLEX-22-11-25"
++ region: optional region to use for prices. Available regions are listed in 'f.regions', the default is 'H' (Southern England)
++ duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
++ time_shift: optional shift from local time. The default assumes BST and local time is UTC
++ update: optional, default is 0. Setting to 1 will change f.tariff to use f.agile_octopus and update the off peak AM charge time period
+
+Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from yesterday are used. By default, prices for tomorrow are fetched after 5pm:
++ f.agile_update_time = 17
+
+Charging occurs at the start of the time period with a variable duration. You can bias the weighted average price towards a specific time by setting f.agile_weighting. A number of default weightings are provided:
++ f.front_weighted: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
++ f.first_hour: [1.0, 1.0]
+
+By default, f.agile_weighting = None, which applies a flat weighting to all the prices over the charge period duration/
+
 
 # PV Output
 These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
@@ -476,7 +501,9 @@ This setting can be:
 
 ## Version Info
 
-0.8.1<br>
+0.8.2<br>
+Added set_agile_period() using public Octopus Agile API pricing to select lowest price charging period
+Fixed bug where charge_needed() did not charge if predicted soc was less than min_soc and contingency=0.
 Added bg_driver tariff.
 Updated set_schedule() and added set_period()
 Changed bat-resistance to per battery to better scale losses.
