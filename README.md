@@ -69,6 +69,7 @@ f.get_settings()
 f.get_charge()
 f.get_min()
 f.get_work_mode()
+f.get_templates()
 f.get_schedule()
 f.get_earnings()
 
@@ -83,6 +84,8 @@ get_settings() will return the battery settings and is equivalent to get_charge(
 
 get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
+get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
+
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 
 get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
@@ -95,7 +98,7 @@ f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
 f.set_period(start, end, mode, min_soc, fdsoc, fdpwr)
-f.set_schedule(enable, periods)
+f.set_schedule(enable, periods, template)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
@@ -118,8 +121,10 @@ set_period() returns a period structure that can be used to build a list of stra
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode. 
 
-set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled.
-+ periods: a period or list of periods created using f.set_period.
+set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide either a list of periods or a template ID
++ enable: 1 to enable a schedule 0 to disable. The default is 1.
++ periods: a period or list of periods created using f.set_period().
++ template: a template ID from get_templates() or find_template()
 
 ## Raw Data
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:

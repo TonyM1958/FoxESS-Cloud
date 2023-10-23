@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  22 October 2023
+Updated:  23 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.2"
+version = "0.8.3"
 debug_setting = 1
 
 # constants
@@ -319,7 +319,7 @@ device_sn = None
 raw_vars = None
 
 def get_device(sn=None):
-    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting, messages
+    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting, messages, schedule, templates
     if get_token() is None:
         return None
     if device is not None:
@@ -369,6 +369,8 @@ def get_device(sn=None):
     firmware = None
     battery = None
     battery_settings = None
+    schedule = None
+    templates = None
     raw_vars = get_vars()
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper()
@@ -568,7 +570,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times'][1]['endTime']['hour'] = int(en2)
         battery_settings['times'][1]['endTime']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
     if debug_setting > 1:
-        print(battery_settings)
+        print(f"set_charge(): {battery_settings}")
         return None
     if debug_setting > 0:
         print(f"\nSetting time periods:")
@@ -636,10 +638,10 @@ def set_min(minGridSoc = None, minSoc = None):
     if minSoc is not None:
         battery_settings['minSoc'] = minSoc
     if debug_setting > 1:
-        print(battery_settings)
+        print(f"set_min(): {battery_settings}")
         return None
-    if debug_setting > 1:
-        print(f"setting min soc")
+    if debug_setting > 0:
+        print(f"\nSetting minSoc = {battery_settings['minSoc']}, minGridSoc = {battery_settings['minGridSoc']}")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/soc/set", headers=headers, data=json.dumps(data))
@@ -653,8 +655,6 @@ def set_min(minGridSoc = None, minSoc = None):
         else:
             print(f"** set_min(), {errno_message(errno)}")
         return None
-    elif debug_setting > 1:
-        print(f"success") 
     return battery_settings
 
 ##################################################################################################
@@ -717,10 +717,10 @@ def set_work_mode(mode):
         print(f"** work mode: must be one of {settable_modes}")
         return None
     if debug_setting > 1:
-        print(mode)
+        print(f"set_work_mode(): {mode}")
         return None
-    if debug_setting > 1:
-        print(f"setting work mode")
+    if debug_setting > 0:
+        print(f"\nSetting work mode: {mode}")
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = requests.post(url="https://www.foxesscloud.com/c/v0/device/setting/set", headers=headers, data=json.dumps(data))
@@ -734,8 +734,6 @@ def set_work_mode(mode):
         else:
             print(f"** set_work_mode(), {errno_message(errno)}")
         return None
-    elif debug_setting > 1:
-        print(f"success")
     work_mode = mode
     return work_mode
 
@@ -745,7 +743,9 @@ def set_work_mode(mode):
 ##################################################################################################
 
 schedule = None
+templates = None
 
+# get the current schedule
 def get_schedule():
     global token, device_id, schedule, debug_setting, messages
     if get_device() is None:
@@ -769,6 +769,77 @@ def get_schedule():
     schedule = result
     return schedule
 
+# get the details for a specific template
+def get_template_detail(template):
+    global token, device_id, schedule, debug_setting, messages, templates
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting template detail")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    params = {'templateID': template, 'deviceSN': device_sn}
+    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/detail", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_schedule() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        if errno == 40256:
+            print(f"** get_schedule(), not suported on this device")
+        else:
+            print(f"** get_schedule(), no result data, {errno_message(errno)}")
+        return None
+    return result
+
+# get the preset templates that contains periods
+def get_templates(template_type=[1,2]):
+    global token, device_id, schedule, debug_setting, messages, templates
+    if get_device() is None:
+        return None
+    if templates is None:
+        templates = {}
+    if type(template_type) is list:
+        for x in template_type:
+            get_templates(x)
+        return templates
+    if debug_setting > 1:
+        print(f"getting templates")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    params = {'templateType': template_type, 'deviceSN': device_sn}
+    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/edit/list", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_schedule() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        if errno == 40256:
+            print(f"** get_schedule(), not suported on this device")
+        else:
+            print(f"** get_schedule(), no result data, {errno_message(errno)}")
+        return None
+    for t in result['data']:
+        id = t['templateID']
+        templates[id] = t
+        templates[id]['templateType'] = template_type
+        detail = get_template_detail(id)
+        if detail is not None:
+            for d in detail.keys():
+                templates[id][d] = detail[d]
+    return templates
+
+# search templates for a specific name and return the ID
+def find_template(name):
+    global templates
+    if templates is None:
+        get_templates()
+    for k in templates.keys():
+        if templates[k]['templateName'][:len(name)].lower() == name.lower():
+            return k
+    return None
+
+
 ##################################################################################################
 # set schedule
 ##################################################################################################
@@ -787,21 +858,33 @@ def set_period(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
     start_h, start_m = split_hours(start)
     end_h, end_m = split_hours(end)
     period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minSocOnGrid': min_soc}
-    if mode in ['ForceCharge', 'ForceDischarge']:
+    if mode in ['ForceDischarge']:
+        device_power = device.get('power')
+        if device_power is None:
+            device_power = 12000
+        if fdpwr < 0 or fdpwer > 12000:
+            print(f"** fdpwr must be between 0 and {device_power}")
+            return None
+        if fdsoc < 10 or fdsoc > 100:
+            print(f"** fdsoc must between 10 and 100")
+            return None
         period['fdSoc'] = fdsoc
         period['fdPwr'] = fdpwr
     return period
 
 # set a schedule from a period or list of periods
-def set_schedule(enable=1, periods = None):
+def set_schedule(enable=1, periods = None, template=None):
     global token, device_sn, debug_setting, messages, schedule
-    if get_device() is None:
-        return None
+    if schedule is None:
+        schedule = get_schedule()
     if debug_setting > 1:
-        print(f"setting schedule")
+        print(f"set_schedule(): enable = {enable}, periods = {periods}")
+        return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
     if enable == 0:
+        if debug_setting > 0:
+            print(f"\nDisabling schedule periods")
         response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
         if response.status_code != 200:
             print(f"** set_schedule() got disable response code: {response.status_code}")
@@ -811,16 +894,18 @@ def set_schedule(enable=1, periods = None):
             print(f"** set_schedule(), disable, {errno_message(errno)}")
             return None
         schedule['enable'] = False
-        schedule['pollcy'] = []
     else:
-        if periods is None:
-            print(f"** set_schedule() requires strategy period data")
+        if periods is not None:
+            if type(periods) is not list:
+                periods = [periods]
+            data = {'pollcy': periods, 'deviceSN': device_sn}
+        elif template is not None:
+            data = {'templateID': template, 'deviceSN': device_sn}
+        else:
+            print(f"** set_schedule() requires strategy periods or a template")
             return None
-        if type(periods) is not list:
-            periods = [periods]
-        for p in periods:
-            p['minSocOnGrid'] = f"{p['minSocOnGrid']}"        # send text not number
-        data = {'pollcy': periods, 'deviceSN': device_sn}
+        if debug_setting > 0:
+            print(f"\nEnabling schedule periods")
         response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
         if response.status_code != 200:
             print(f"** set_schedule() got enable response code: {response.status_code}")
@@ -829,10 +914,9 @@ def set_schedule(enable=1, periods = None):
         if errno != 0:
             print(f"** set_schedule(), enable, {errno_message(errno)}")
             return None
-        if debug_setting > 1:
-            print(f"success")
         schedule['enable'] = True
         schedule['pollcy'] = periods
+        schedule['templateID'] = template
     return schedule
 
 
@@ -1639,7 +1723,7 @@ charge_config = {
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
     'use_today': 21.0,                # hour when todays consumption and generation can be used
     'min_hours': 0.25,                # minimum charge time in decimal hours
-    'min_kwh': 1.0,                   # minimum to add in kwh
+    'min_kwh': 0.5,                   # minimum to add in kwh
     'solcast_adjust': 100,            # % adjustment to make to Solcast forecast
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 0,          # 1 = use average of available forecast / generation, 2 only run with forecast
@@ -2750,33 +2834,25 @@ class Solar :
 regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Merseyside and Northern Wales', 'E':'West Midlands', 'F':'North Eastern England', 'G':'North Western England', 'H':'Southern England',
     'J':'South Eastern England', 'K':'Southern Wales', 'L':'South Western England', 'M':'Yorkshire', 'N':'Southern Scotland', 'P':'Northern Scotland'}
 
-# default products
+# default settings
+octopus_api_url = "https://api.octopus.energy/v1/products/%PRODUCT%/electricity-tariffs/E-1R-%PRODUCT%-%REGION%/standard-unit-rates/"
 product_code = "AGILE-FLEX-22-11-25"
 region_code = "H"
+agile_update_time = 17      # time in hours when tomorrow's data can be fetched
 
-# time in hours when tomorrow's prices are available
-agile_update_time = 17
-
-# weighted average for pricing over period:
+# weightings for average pricing over period:
 front_weighted = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 first_hour =     [1.0, 1.0]
 agile_weighting = None
 
 # get prices and work out lowest weighted average price time period
 def get_agile_period(d=None, product=None, region=None, duration=None, time_shift=None):
-    global product_code, region_code, debug_setting, agile_update_time
-    url = "https://api.octopus.energy/v1/products/%P/electricity-tariffs/E-1R-%P-%R/standard-unit-rates/".replace("%P", product_code).replace("%R", region_code)
-    if product is None:
-        product = product_code
-    if region is None:
-        region = region_code
-    if d is not None and len(d) < 11:
-        d += " 18:00"
-    if region not in regions:
-        print(f"** region {region} not recognised, valid regions are {regions}")
-        return None
+    global product_code, region_code, debug_setting, agile_update_time, octopus_api_url
+    # get time, dates and duration
     duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
     span = int(duration * 2 + 0.5)
+    if d is not None and len(d) < 11:
+        d += " 18:00"
     time_offset = daylight_saving(d) if daylight_saving is not None else 0
     if time_shift is None:
         time_shift = time_offset
@@ -2787,14 +2863,23 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
     hour_now = now.hour + now.minute / 60
     today = datetime.strftime(now + timedelta(days=0 if hour_now >= agile_update_time else -1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= agile_update_time else 0), '%Y-%m-%d')
+    # get product and region
+    product = (product_code if product is None else product).upper()
+    region = (region_code if region is None else region).upper()
+    if region not in regions:
+        print(f"** region {region} not recognised, valid regions are {regions}")
+        return None
     # get prices from 11pm today to 11pm tomorrow
-    print(f"Product {product} in {regions[region]} region from {today} 23:00 to {tomorrow} 23:00")
+    print(f"Tariff: {product} {regions[region]}")
+    print(f"Target: {tomorrow}")
     zulu_hour = "T" + hours_time(23 - time_offset, ss=True) + "Z"
+    url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
     period_from = today + zulu_hour
     period_to = tomorrow + zulu_hour
     params = {'period_from': period_from, 'period_to': period_to }
     if debug_setting > 1:
-        print(f"time_offset = {time_offset}, time_shift = {time_shift}, params = {params}")
+        print(f"time_offset = {time_offset}, time_shift = {time_shift}")
+        print(f"period_from = {period_from}, period_to = {period_to}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
         print(f"** get_agile_period() response code: {response.status_code}")
@@ -2807,9 +2892,11 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
     if len(results) < (cover + span):
         print(f"** get_agile_period(): prices are not available for {tomorrow}")
         return None
+    # extract times and prices
     for r in results[:cover + span]:
         times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset))
         prices.append(r['value_inc_vat'])
+    # work out weighted average for each period and track lowest price
     period = {}
     min_t = None
     min_v = None
@@ -2822,15 +2909,19 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
         if min_v is None or wavg < min_v:
             min_v = wavg
             min_t = start
+    # save results
+    start = min_t
+    end = hours_time(time_hours(min_t) + duration)
+    price = min_v
     period['product'] = product
     period['region'] = region
-#    period['url'] = url
-#    period['params'] = params
-    period['duration'] = duration
     period['span'] = span
-    period['start'] = min_t
-    period['end'] = hours_time(time_hours(min_t) + duration)
-    period['price'] = min_v
+    period['start'] = start
+    period['end'] = end
+    period['duration'] = duration
+    period['price'] = price
+    print(f"Charge: {start} to {end}")
+    print(f"Price:  {price:.2f} p/kWh inc VAT")
     return period
 
 
@@ -2846,17 +2937,11 @@ def set_agile_period(d=None, product=None, region=None, duration=None, time_shif
         return None
     start = period['start']
     end = period['end']
-    duration = period['duration']
-    span = period['span']
-    price = period['price']
-    prices = period[start]['prices']
-    times = period[start]['times']
-    print(f"{duration} hour charging period from {start} to {end} has a weighted average price of {price:.2f} p/kWh inc VAT")
     if show_data > 0:
         s = ""
-        for i in range(0, span):
+        for i in range(0, period['span']):
             s += "\n" if i % 6 == 0 else ""
-            s += f"  {times[i]} = {prices[i]:.2f}"
+            s += f"  {period[start]['times'][i]} = {period[start]['prices'][i]:.2f}"
         print(s)
     if update > 0:
         tariff = agile_octopus
