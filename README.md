@@ -506,7 +506,10 @@ This setting can be:
 
 ## Version Info
 
-0.8.2<br>
+0.8.3<br>
+Added support for templates to set_schedule().
+Cleaned up messages for inverter settings in debug more.
+Changes 'min_kwh' setting in charge_needed() to 0.5 from 1.0.
 Added set_agile_period() using public Octopus Agile API pricing to select lowest price charging period
 Fixed bug where charge_needed() did not charge if predicted soc was less than min_soc and contingency=0.
 Added bg_driver tariff.
