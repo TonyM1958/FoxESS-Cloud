@@ -1,70 +1,75 @@
-{
-  "name": "foxess",
-  "image": {
-    "name": "saturn-python",
-    "version": "2023.05.01",
-    "owner": "saturncloud"
-  },
-  "description": "Fox ESS management job - works out battery charge and uploads data to PV Output",
-  "environment_variables": {
-    "TARIFF": "octopus_flux",
-    "CHARGE_PARAMS": "update_settings=0,force_charge=0,charge_current=26"
-  },
-  "working_directory": "/home/jovyan/workspace",
-  "extra_packages": {
-    "pip": {
-      "install": "random-user-agent foxesscloud"
-    }
-  },
-  "start_script": "#! /usr/bin/bash\ncat > script.py <<EOF\nimport foxesscloud.foxesscloud as f\n\nf.username = $FOX_USERNAME\nf.password = $FOX_PASSWORD\nf.device_sn = ${FOX_DEVICE_SN:-None}\nf.pv_api_key = ${PV_API_KEY:-None}\nf.pv_system_id = ${PV_SYSTEM_ID:-None}\nf.solcast_api_key = ${SOLCAST_API_KEY:-None}\nf.tariff = f.${TARIFF:-octopus_flux}\nf.solar_array($PV1)\nf.solar_array($PV2)\n\nf.charge_needed($CHARGE_PARAMS)\nf.set_pvoutput()\n\nEOF\n",
-  "git_repositories": [],
-  "shared_folders": [],
-  "secrets": [
-    {
-      "location": "FOX_USERNAME",
-      "type": "environment_variable",
-      "description": "",
-      "name": "FOX_USERNAME"
-    },
-    {
-      "location": "FOX_PASSWORD",
-      "type": "environment_variable",
-      "description": "",
-      "name": "FOX_PASSWORD"
-    },
-    {
-      "location": "FOX_DEVICE_SN",
-      "type": "environment_variable",
-      "description": "",
-      "name": "FOX_DEVICE_SN"
-    },
-    {
-      "location": "PV_API_KEY",
-      "type": "environment_variable",
-      "description": "",
-      "name": "PV_API_KEY"
-    },
-    {
-      "location": "PV_SYSTEM_ID",
-      "type": "environment_variable",
-      "description": "",
-      "name": "PV_SYSTEM_ID"
-    },
-    {
-      "location": "SOLCAST_API_KEY",
-      "type": "environment_variable",
-      "description": "",
-      "name": "SOLCAST_API_KEY"
-    }
-  ],
-  "job": {
-    "instance_type": "medium",
-    "command": "python script.py",
-    "start_dind": false,
-    "schedule": "5 7,12,17,21 * * *",
-    "concurrency_policy": "Allow",
-    "backoff_limit": 0
-  },
-  "owner": "TonyM1958",
-  "schema_version": "2022.10.01"
-}
+schema_version: 2023.09.01
+type: job
+spec:
+  name: foxess
+  description: >-
+    Fox ESS management job - works out battery charge and uploads data to PV
+    Output
+  image: community/saturncloud/saturn-python:2023.05.01
+  instance_type: medium
+  environment_variables:
+    PV1: '''East'',lat=51.5478,lon=-1.7354,dec=30,az=260,kwp=3.2,inv=3.6'
+    PV2: '''West'',lat=51.5478,lon=-1.7354,dec=30,az=80,kwp=3.2,inv=3.6'
+    CHARGE_PARAMS: update_settings=1,charge_current=16,forecast_selection=1,timed_mode=0
+    TARIFF_PARAMS: '''flux'',region=''H'',update=0'
+  working_directory: /home/jovyan/workspace
+  extra_packages:
+    pip:
+      install: random-user-agent foxesscloud
+  start_script: |
+    #! /usr/bin/bash
+    cat > script.py <<EOF
+    import foxesscloud.foxesscloud as f
+
+    f.username = $FOX_USERNAME
+    f.password = $FOX_PASSWORD
+    f.device_sn = ${FOX_DEVICE_SN:-None}
+    f.pv_api_key = ${PV_API_KEY:-None}
+    f.pv_system_id = ${PV_SYSTEM_ID:-None}
+    f.solcast_api_key = ${SOLCAST_API_KEY:-None}
+    f.solar_array($PV1)
+    f.solar_array($PV2)
+
+    f.set_tariff($TARIFF_PARAMS)
+    f.charge_needed($CHARGE_PARAMS)
+    f.set_pvoutput()
+
+    EOF
+  git_repositories: []
+  secrets:
+    - location: FOX_USERNAME
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_USERNAME
+    - location: FOX_PASSWORD
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_PASSWORD
+    - location: FOX_DEVICE_SN
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_DEVICE_SN
+    - location: PV_API_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: PV_API_KEY
+    - location: PV_SYSTEM_ID
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: PV_SYSTEM_ID
+    - location: SOLCAST_API_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: SOLCAST_API_KEY
+  shared_folders: []
+  command: python script.py
+  scale: 1
+  schedule: 1 11,12,21,22 * * *
+  concurrency_policy: Allow
+  retries: 0

@@ -1562,83 +1562,8 @@ def daylight_changes(a,b):
     return daylight_saving(a) - daylight_saving(b)
 
 ##################################################################################################
-# Tariffs / time of user (TOU)
-# time values are decimal hours
+# calculate charge needed from current battery charge, forecast yield and expected load
 ##################################################################################################
-
-# time periods for Octopus Flux
-octopus_flux = {
-    'name': 'Octopus Flux',
-    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},        # off-peak period 1 / am charging period
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
-    'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
-    'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
-    'default_mode': 'SelfUse',                                  # default work mode
-    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
-    }
-
-# time periods for Intelligent Octopus
-intelligent_octopus = {
-    'name': 'Intelligent Octopus',
-    'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for Octopus Cosy
-octopus_cosy = {
-    'name': 'Octopus Cosy',
-    'off_peak1': {'start': 4.0, 'end': 7.0, 'force': 1},
-    'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [2, 3, 12]
-    }
-
-# time periods for Octopus Go
-octopus_go = {
-    'name': 'Octopus Go',
-    'off_peak1': {'start': 0.5, 'end': 4.5, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for Agile Octopus
-agile_octopus = {
-    'name': 'Agile Octopus',
-    'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for British Gas Electric Driver
-bg_driver = {
-    'name': 'British Gas Electric Driver',
-    'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# custom time periods / template
-custom_periods = {'name': 'Custom',
-    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
-tariff = octopus_flux
 
 # how consumption varies by month across a year. 12 values.
 # month                J   F   M   A   M   J   J   A   S   O   N   D
@@ -1749,10 +1674,6 @@ charge_config = {
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None               # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
 }
-
-##################################################################################################
-# calculate charge needed from current battery charge, forecast yield and expected load
-##################################################################################################
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
@@ -2842,11 +2763,88 @@ class Solar :
         return
 
 
+##################################################################################################
+##################################################################################################
+# Tariffs / time of user (TOU)
+# time values are decimal hours
+##################################################################################################
+##################################################################################################
+
+# time periods for Octopus Flux
+octopus_flux = {
+    'name': 'Octopus Flux',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},        # off-peak period 1 / am charging period
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
+    'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
+    'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
+    'default_mode': 'SelfUse',                                  # default work mode
+    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
+    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
+    }
+
+# time periods for Intelligent Octopus
+intelligent_octopus = {
+    'name': 'Intelligent Octopus',
+    'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for Octopus Cosy
+octopus_cosy = {
+    'name': 'Octopus Cosy',
+    'off_peak1': {'start': 4.0, 'end': 7.0, 'force': 1},
+    'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [2, 3, 12]
+    }
+
+# time periods for Octopus Go
+octopus_go = {
+    'name': 'Octopus Go',
+    'off_peak1': {'start': 0.5, 'end': 4.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for Agile Octopus
+agile_octopus = {
+    'name': 'Agile Octopus',
+    'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for British Gas Electric Driver
+bg_driver = {
+    'name': 'British Gas Electric Driver',
+    'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# custom time periods / template
+custom_periods = {'name': 'Custom',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
 
 ##################################################################################################
-##################################################################################################
 # Octopus Energy Agile Price
-##################################################################################################
 ##################################################################################################
 
 regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Merseyside and Northern Wales', 'E':'West Midlands', 'F':'North Eastern England', 'G':'North Western England', 'H':'Southern England',
@@ -2887,8 +2885,9 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
         print(f"** region {region} not recognised, valid regions are {regions}")
         return None
     # get prices from 11pm today to 11pm tomorrow
-    print(f"Tariff: {product} {regions[region]}")
-    print(f"Target: {tomorrow} AM charging period")
+    print(f"Product: {product}")
+    print(f"Region:  {regions[region]}")
+    print(f"Target:  {tomorrow} AM charging period")
     zulu_hour = "T" + hours_time(23 - time_offset, ss=True) + "Z"
     url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
     period_from = today + zulu_hour
@@ -2899,7 +2898,7 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
         print(f"period_from = {period_from}, period_to = {period_to}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"** get_agile_period() response code: {response.status_code}")
+        print(f"** get_agile_period() response code from Octopus API: {response.status_code}")
         return None
     # results are in reverse chronological order...
     results = response.json().get('results')[::-1]
@@ -2942,12 +2941,9 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
     return period
 
 
-agile_period = None
-
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(d=None, product=None, region=None, duration=None, update=1, weighting=None, time_shift=None):
-    global debug_setting, agile_octopus, tariff, regions, agile_period_data
-    print(f"\n------------- set_agile_period ---------------")
+def set_agile_period(d=None, product=None, region=None, duration=None, weighting=None, time_shift=None):
+    global debug_setting, agile_octopus, tariff, regions, agile_period
     agile_period = None
     period = get_agile_period(d=d, product=product, region=region, duration=duration, time_shift=time_shift, weighting=weighting)
     if period is None:
@@ -2966,12 +2962,36 @@ def set_agile_period(d=None, product=None, region=None, duration=None, update=1,
     print(f"\nBest {duration} hour AM charging period:")
     print(f"  Time:  {start} to {end}")
     print(f"  Price: {price:.2f} p/kWh inc VAT")
-    if update > 0:
-        agile_octopus['off_peak1']['start'] = time_hours(start)
-        agile_octopus['off_peak1']['end'] = time_hours(end)
-        print(f"\nAM charging period set for 'agile_octopus'")
-        if update > 1:
-            tariff = agile_octopus
-            print(f"Tariff set to 'agile_octopus'")
-    agile_period = period
+    agile_octopus['off_peak1']['start'] = time_hours(start)
+    agile_octopus['off_peak1']['end'] = time_hours(end)
+    print(f"\nAM charging period set for {agile_octopus['name']}")
+    return period
+
+tariff = octopus_flux
+
+# set tariff and charge time period based on pricing for Agile Octopus
+def set_tariff(find, product=None, region=None, duration=None, update=1, weighting=None, time_shift=None):
+    global debug_setting, agile_octopus, tariff, tariff_list
+    print(f"\n---------------- set_tariff -----------------")
+    found = []
+    if find in tariff_list:
+        found = [find]
+    elif type(find) is str:
+        for dict in tariff_list:
+            if find.lower() in dict['name'].lower():
+                found.append(dict)
+    if len(found) != 1:
+        print(f"** set_tariff(): {find} must identify one of the available tariffs:")
+        for x in tariff_list:
+            print(f"  {x['name']}")
+        return None
+    use = found[0]
+    if use == agile_octopus:
+        period = set_agile_period(d=None, product=product, region=region, duration=duration, time_shift=time_shift, weighting=weighting)
+        if period is None:
+            return None
+    if update == 1:
+        tariff = use
+        print(f"\nTariff set to {tariff['name']}")
     return None
+
