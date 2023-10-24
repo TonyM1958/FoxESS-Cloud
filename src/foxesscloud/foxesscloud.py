@@ -2957,7 +2957,8 @@ def set_agile_period(d=None, product=None, region=None, duration=None, update=1,
         s += "\n" if i % 6 == 2 else ""
         s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
     print(s)
-    print(f"\nWeighting: {weighting}")
+    if weighting is not None:
+        print(f"\nWeighting: {weighting}")
     start = period['start']
     end = period['end']
     price = period['price']
