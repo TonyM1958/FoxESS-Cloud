@@ -349,42 +349,33 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ f.octopus_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode change to Self Use at 7am and Feed In First at 4pm.
-+ f.intelligent_octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
-+ f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
-+ f.octopus_go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
-+ f.agile_octopus: off-peak from 02:30 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
-+ f.bg_driver: off-peak from 00:00 to 05:00, forecasts from 22:00 to 23:59
++ Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode change to Self Use at 7am and Feed In First at 4pm.
++ Intelligent Octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
++ Octopus Cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
++ Octopus Go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
++ Agile Octopus: off-peak from 02:30 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
++ British Gas Electric Driver: off-peak from 00:00 to 05:00, forecasts from 22:00 to 23:59
 
 Custom periods can be configured for specific times if required:
-+ f.custom_periods: charging from 02:00 to 05:00, no off-peak or peak times, forecasts from 22:00 to 23:59
++ Custom: charging from 02:00 to 05:00, no off-peak or peak times, forecasts from 22:00 to 23:59
 
-A list of the tariffs is held in f.tariff_list
-
-The active tariff in configured in 'f.tariff'. The default setting is:
+The active tariff is configured by calling 'f.set_tariff() with the name of the tariff to use:
 
 ```
-f.tariff = f.octopus_flux
+f.set_tariff('flux')
 ```
 
-Note: when TOU is applied, energy values uploaded to PV Output are estimated using the Riemann sum of the 5 minute power values over a day. This means the results vary by up to 10% from the daily totals reported without time of use.
-
-In addition to energy tariffs, the tariff can contain timed work mode changes using the start, end and min_soc to use when changing work mode.
-
-### Dynamic charging for Agile Octopus
-
-A price based charging period can be configured when using Agile Octopus:
+When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_agile_period(d, product, region, duration, update, weighting, time_shift)
+f.set_tariff('agile', product, region, duration, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
-+ d: optional historic date / time to check prices for. Default is current date / time
 + product: optional Agile Octopus product code (see below). The default is "AGILE-FLEX-22-11-25"
 + region: optional region to use for prices (se below). The default is 'H' (Southern England)
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
-+ update: optional, 1 (the default) will update 'f.agile_octopus' AM charging periods, 2 will also change 'f.tariff' to use 'f.agile_octopus', 0 will not make any updates
++ update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
 
