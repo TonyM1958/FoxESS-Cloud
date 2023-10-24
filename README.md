@@ -277,7 +277,7 @@ Given the data available, the modelling works as follows:
 ### Configuration Parameters
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
-+ contingency: 15               # % of consumption to allow as contingency
++ contingency: 20               # % of consumption to allow as contingency
 + charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 + discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 + export_limit: None            # maximum export power. None uses the inverter power rating
@@ -295,14 +295,15 @@ The following parameters and default values are used to configure charge_needed 
 + consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
 + use_today: 21.0               # hour when today's generation and consumption data will be used
 + min_hours: 0.25               # minimum charge time to set (in decimal hours)
-+ min_kwh: 1.0                  # minimum charge to add in kwh
++ min_kwh: 0.5                  # minimum charge to add in kwh
 + solcast_adjust: 100           # % adjustment to make to Solcast forecast
 + solar_adjust:  100            # % adjustment to make to Solar forecast
 + forecast_selection: 0         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 0.
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
 + time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
 + force_charge: 0               # 1 = apply force charge for any remaining charge time
-+ special_contingency: 25       # contingency for special days when consumption might be higher
++ timed_mode: 0                 # 1 = use timed changes in work mode if configured for tariff, 0 = None
++ special_contingency: 30       # contingency for special days when consumption might be higher
 + special_days: ['12-25', '12-26', '01-01']
 + full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
 
@@ -348,7 +349,7 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ f.octopus_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
++ f.octopus_flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode change to Self Use at 7am and Feed In First at 4pm.
 + f.intelligent_octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
 + f.octopus_cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + f.octopus_go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
@@ -375,25 +376,47 @@ In addition to energy tariffs, the tariff can contain timed work mode changes us
 A price based charging period can be configured when using Agile Octopus:
 
 ```
-f.set_agile_period(d, product, region, duration, span, time_shift, update)
+f.set_agile_period(d, product, region, duration, update, weighting, time_shift)
 ```
 
-This gets the latest 30 minute pricing and uses this to work out the lowest price off peak charging period.
+This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
 + d: optional historic date / time to check prices for. Default is current date / time
-+ product: optional Agile Octopus product code, the default is "AGILE-FLEX-22-11-25"
-+ region: optional region to use for prices. Available regions are listed in 'f.regions', the default is 'H' (Southern England)
++ product: optional Agile Octopus product code (see below). The default is "AGILE-FLEX-22-11-25"
++ region: optional region to use for prices (se below). The default is 'H' (Southern England)
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
-+ time_shift: optional shift from local time. The default assumes BST and local time is UTC
-+ update: optional, default is 0. Setting to 1 will change f.tariff to use f.agile_octopus and update the off peak AM charge time period
++ update: optional, 1 (the default) will update 'f.agile_octopus' AM charging periods, 2 will also change 'f.tariff' to use 'f.agile_octopus', 0 will not make any updates
++ weighting: optional, default is None (see below)
++ time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
 
-Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from yesterday are used. By default, prices for tomorrow are fetched after 5pm:
+Product codes include: 
++ 'AGILE-18-02-21' = The original version capped at 35p per unit
++ 'AGILE-22-07-22' = The cap rose to 55p
++ 'AGILE-22-08-31' = The cap was increased to 78p
++ 'AGILE-VAR-22-10-19' = This version raised the cap to £1 per unit and also introduced a new formula.
++ 'AGILE-FLEX-22-11-25' = Cap stays at £1 per unit but new formula only deducts 17.9p from higher unit prices (default)
+
+Region codes include:
++ 'A' = Eastern England
++ 'B' = East Midlands
++ 'C' = London
++ 'D' = Merseyside and Northern Wales
++ 'E' = West Midlands
++ 'F' = North Eastern England
++ 'G' = North Western England
++ 'H' = Southern England (default)
++ 'J' = South Eastern England
++ 'K' = Southern Wales
++ 'L' = South Western England
++ 'M' = Yorkshire
++ 'N' = Southern Scotland
++ 'P' = Northern Scotland
+
+Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from yesterday are used. By default, prices for tomorrow are fetched after 5pm. The setting for this is:
 + f.agile_update_time = 17
 
-Charging occurs at the start of the time period with a variable duration. You can bias the weighted average price towards a specific time by setting f.agile_weighting. A number of default weightings are provided:
-+ f.front_weighted: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally). You can change the weighting by providing 'weighting'. The following preset weightings are provided:
++ f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
-
-By default, f.agile_weighting = None, which applies a flat weighting to all the prices over the charge period duration/
 
 
 # PV Output
@@ -444,8 +467,6 @@ Get and display solar data from your solcast.com account using your API key:
 f.solcast_api_key = "my.solcast_api_key"
 fcast = f.Solcast()
 print(fcast)
-fcast.plot_daily()
-fcast.plot_hourly()
 ```
 
 Returns a 7 day forecast. Optional parameters are:
@@ -456,23 +477,21 @@ Returns a 7 day forecast. Optional parameters are:
 
 Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
 
+```
+fcast.plot_daily()
+fcast.plot_hourly(day)
+```
+
+Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately.
++ day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
+
 # Forecast.solar
 
-Get and display solar data from forecast.solar:
+Get and display solar data from forecast.solar for today and tomorrow:
 
 ```
 f.solar_array('South', lat=51.1789, lon=-1.8262, kwp=6.4)
-fcast = f.Solar()
-print(fcast)
-fcast.plot_daily()
-fcast.plot_hourly()
 ```
-
-Returns a forecast for today and tomorrow. Optional parameters are:
-+ reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
-+ quiet: set to True to stop Solar producing progress messages
-
-Forecast data is saved to f.solar_save. The default is 'solar.txt'.
 
 You need to configure your solar arrays by calling f.solar_array(). This takes the following parameters:
 + name: the name of each of your arrays
@@ -485,9 +504,28 @@ You need to configure your solar arrays by calling f.solar_array(). This takes t
 + inv: inverter power limit (when the array will clip). The default is None
 + hor: a list of values describing obstructions on the horizon
 
-Add one array for each string attached to your inverter. If your solar production is limited by clipping, set the inverter power so the forecast better matches your generation..
+Add one array for each string attached to your inverter. If your solar production is limited by clipping, set the inverter power so the forecast better matches your generation.
 
 See the [API documentation](https://doc.forecast.solar/api) for more information on parameter values.
+
+```
+fcast = f.Solar()
+print(fcast)
+```
+
+Returns a forecast for today and tomorrow. Optional parameters are:
++ reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
++ quiet: set to True to stop Solar producing progress messages
+
+Forecast data is saved to f.solar_save. The default is 'solar.txt'.
+
+```
+fcast.plot_daily()
+fcast.plot_hourly(day)
+```
+
+Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately.
++ day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
 
 ## Troubleshooting
@@ -506,7 +544,11 @@ This setting can be:
 
 ## Version Info
 
-0.8.3<br>
+0.8.4<br>
+Updated set_schedule to accept template name as well as id.
+Updated get / set_agile_period so weighting is a parameter
+Updated get / set_agile_period to display price data and allow tiered updating of period and tariff.
+Updated plot_hourly for Solcast and Solar to default to today and tomorrow.
 Added support for templates to set_schedule().
 Cleaned up messages for inverter settings in debug more.
 Changes 'min_kwh' setting in charge_needed() to 0.5 from 1.0.

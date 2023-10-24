@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  23 October 2023
+Updated:  24 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.3"
+version = "0.8.4"
 debug_setting = 1
 
 # constants
@@ -831,12 +831,20 @@ def get_templates(template_type=[1,2]):
 
 # search templates for a specific name and return the ID
 def find_template(name):
-    global templates
+    global templates, debug_setting
     if templates is None:
         get_templates()
-    for k in templates.keys():
-        if templates[k]['templateName'][:len(name)].lower() == name.lower():
-            return k
+    find = '' if name is None else name.replace(' ','').lower()
+    found = [k for k in templates.keys() if templates[k]['templateName'][:len(find)].lower() == find]
+    if len(found) == 0:
+        print(f"** find_template(): no templates found with {name}")
+        return None
+    if len(found) == 1:
+        return found[0]
+    if debug_setting > 0:
+        print(f"** find_template(): found multiple templates with {name}")
+        for k in found:
+            print(f"  {templates[k]['templateName']}")
     return None
 
 
@@ -873,8 +881,8 @@ def set_period(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
     return period
 
 # set a schedule from a period or list of periods
-def set_schedule(enable=1, periods = None, template=None):
-    global token, device_sn, debug_setting, messages, schedule
+def set_schedule(enable=1, periods=None, template=None):
+    global token, device_sn, debug_setting, messages, schedule, templates
     if schedule is None:
         schedule = get_schedule()
     if debug_setting > 1:
@@ -884,7 +892,7 @@ def set_schedule(enable=1, periods = None, template=None):
     params = {'deviceSN': device_sn}
     if enable == 0:
         if debug_setting > 0:
-            print(f"\nDisabling schedule periods")
+            print(f"\nDisabling schedule")
         response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
         if response.status_code != 200:
             print(f"** set_schedule() got disable response code: {response.status_code}")
@@ -895,17 +903,23 @@ def set_schedule(enable=1, periods = None, template=None):
             return None
         schedule['enable'] = False
     else:
+        template_id = None
         if periods is not None:
             if type(periods) is not list:
                 periods = [periods]
             data = {'pollcy': periods, 'deviceSN': device_sn}
         elif template is not None:
-            data = {'templateID': template, 'deviceSN': device_sn}
+            if templates is None and get_templates() is None:
+                return None
+            template_id = template if template in templates.keys() else find_template(template)
+            if template_id is None:
+                return None
+            data = {'templateID': template_id, 'deviceSN': device_sn}
         else:
-            print(f"** set_schedule() requires strategy periods or a template")
+            print(f"** set_schedule() requires periods or template parameter")
             return None
         if debug_setting > 0:
-            print(f"\nEnabling schedule periods")
+            print(f"\nEnabling schedule")
         response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
         if response.status_code != 200:
             print(f"** set_schedule() got enable response code: {response.status_code}")
@@ -916,7 +930,7 @@ def set_schedule(enable=1, periods = None, template=None):
             return None
         schedule['enable'] = True
         schedule['pollcy'] = periods
-        schedule['templateID'] = template
+        schedule['templateID'] = template_id
     return schedule
 
 
@@ -2606,8 +2620,10 @@ class Solcast :
             day = self.today
         elif day == 'tomorrow':
             day = self.tomorrow
-        elif day is None:
+        elif day == 'all':
             day = self.keys
+        elif day is None:
+            day = [self.today, self.tomorrow]
         if type(day) is list:
             for d in day:
                 self.plot_hourly(d)
@@ -2794,8 +2810,10 @@ class Solar :
             day = self.today
         elif day == 'tomorrow':
             day = self.tomorrow
-        elif day is None:
+        elif day == 'all':
             day = self.keys
+        elif day is None:
+            day = [self.today, self.tomorrow]
         if type(day) is list:
             for d in day:
                 self.plot_hourly(d)
@@ -2840,13 +2858,12 @@ product_code = "AGILE-FLEX-22-11-25"
 region_code = "H"
 agile_update_time = 17      # time in hours when tomorrow's data can be fetched
 
-# weightings for average pricing over period:
-front_weighted = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-first_hour =     [1.0, 1.0]
-agile_weighting = None
+# different weightings for average pricing over charging duration:
+front_loaded = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]           # 3 hour average, front loaded
+first_hour =   [1.0, 1.0]                               # lowest average price for first hour
 
 # get prices and work out lowest weighted average price time period
-def get_agile_period(d=None, product=None, region=None, duration=None, time_shift=None):
+def get_agile_period(d=None, product=None, region=None, duration=None, time_shift=None, weighting=None):
     global product_code, region_code, debug_setting, agile_update_time, octopus_api_url
     # get time, dates and duration
     duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
@@ -2871,7 +2888,7 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
         return None
     # get prices from 11pm today to 11pm tomorrow
     print(f"Tariff: {product} {regions[region]}")
-    print(f"Target: {tomorrow}")
+    print(f"Target: {tomorrow} AM charging period")
     zulu_hour = "T" + hours_time(23 - time_offset, ss=True) + "Z"
     url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
     period_from = today + zulu_hour
@@ -2900,12 +2917,12 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
     period = {}
     min_t = None
     min_v = None
-    weights = [1.0] * span if agile_weighting is None else (agile_weighting + [0.0] * span)[:span]
+    weights = [1.0] * span if weighting is None else (weighting + [0.0] * span)[:span]
     for i in range(0, cover):
         start = times[i]
         p_span = prices[i: i + span]
         wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
-        period[start] = {'wavg': wavg, 'prices':p_span, 'times': times[i: i + span]}
+#        period[start] = {'wavg': wavg, 'prices':p_span, 'times': times[i: i + span]}
         if min_v is None or wavg < min_v:
             min_v = wavg
             min_t = start
@@ -2915,38 +2932,45 @@ def get_agile_period(d=None, product=None, region=None, duration=None, time_shif
     price = min_v
     period['product'] = product
     period['region'] = region
+    period['times'] = times
+    period['prices'] = prices
     period['span'] = span
     period['start'] = start
     period['end'] = end
     period['duration'] = duration
     period['price'] = price
-    print(f"Charge: {start} to {end}")
-    print(f"Price:  {price:.2f} p/kWh inc VAT")
     return period
 
 
 agile_period = None
 
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(d=None, product=None, region=None, duration=None, time_shift=None, update=0, show_data=0):
+def set_agile_period(d=None, product=None, region=None, duration=None, update=1, weighting=None, time_shift=None):
     global debug_setting, agile_octopus, tariff, regions, agile_period_data
     print(f"\n------------- set_agile_period ---------------")
     agile_period = None
-    period = get_agile_period(d=d, product=product, region=region, duration=duration, time_shift=time_shift)
+    period = get_agile_period(d=d, product=product, region=region, duration=duration, time_shift=time_shift, weighting=weighting)
     if period is None:
         return None
+    s = "\nPrices (p/kWh inc VAT):\n" + " " * 4 * 15
+    for i in range(0, len(period['times'])):
+        s += "\n" if i % 6 == 2 else ""
+        s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
+    print(s)
+    print(f"\nWeighting: {weighting}")
     start = period['start']
     end = period['end']
-    if show_data > 0:
-        s = ""
-        for i in range(0, period['span']):
-            s += "\n" if i % 6 == 0 else ""
-            s += f"  {period[start]['times'][i]} = {period[start]['prices'][i]:.2f}"
-        print(s)
+    price = period['price']
+    duration = period['duration']
+    print(f"\nBest {duration} hour AM charging period:")
+    print(f"  Time:  {start} to {end}")
+    print(f"  Price: {price:.2f} p/kWh inc VAT")
     if update > 0:
-        tariff = agile_octopus
-        tariff['off_peak1']['start'] = time_hours(start)
-        tariff['off_peak1']['end'] = time_hours(end)
-        print(f"\nTariff has been updated")
+        agile_octopus['off_peak1']['start'] = time_hours(start)
+        agile_octopus['off_peak1']['end'] = time_hours(end)
+        print(f"\nAM charging period set for 'agile_octopus'")
+        if update > 1:
+            tariff = agile_octopus
+            print(f"Tariff set to 'agile_octopus'")
     agile_period = period
     return None
