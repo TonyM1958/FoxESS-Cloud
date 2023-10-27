@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  24 October 2023
+Updated:  25 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.4"
+version = "0.8.5"
 debug_setting = 1
 
 # constants
@@ -1448,6 +1448,9 @@ def get_remote_setting():
 # times are held either as text HH:MM or HH:MM:SS or as decimal hours e.g. 01.:30 = 1.5
 # deimal hours allows maths operations to be performed simply
 
+# time shift from UTC (before any DST adjustment)
+time_shift = 0
+
 # roll over decimal times after maths and round to 1 minute
 def round_time(h):
     if h is None:
@@ -1538,8 +1541,9 @@ def british_summer_time(d=None):
         dat = datetime.strptime(d[:10], '%Y-%m-%d')
         hour = int(d[11:13]) if len(d) >= 16 else 3
     else:
-        dat =  d.date() if d is not None else datetime.now().date()
-        hour = d.hour if d is not None else datetime.now().hour 
+        now = datetime.utcnow()
+        dat =  d.date() if d is not None else now().date()
+        hour = d.hour if d is not None else now().hour 
     start_date = dat.replace(month=3, day=31)
     days = (start_date.weekday() + 1) % 7
     start_date = start_date - timedelta(days=days)
@@ -1561,8 +1565,280 @@ daylight_saving = british_summer_time
 def daylight_changes(a,b):
     return daylight_saving(a) - daylight_saving(b)
 
+
 ##################################################################################################
-# calculate charge needed from current battery charge, forecast yield and expected load
+# TARIFFS - charge periods and time of user (TOU)
+# time values are decimal hours
+##################################################################################################
+
+# time periods for Octopus Flux
+octopus_flux = {
+    'name': 'Octopus Flux',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},        # off-peak period 1 / am charging period
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
+    'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
+    'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
+    'default_mode': 'SelfUse',                                  # default work mode
+    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
+    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
+    }
+
+# time periods for Intelligent Octopus
+intelligent_octopus = {
+    'name': 'Intelligent Octopus',
+    'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for Octopus Cosy
+octopus_cosy = {
+    'name': 'Octopus Cosy',
+    'off_peak1': {'start': 4.0, 'end': 7.0, 'force': 1},
+    'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [2, 3, 12]
+    }
+
+# time periods for Octopus Go
+octopus_go = {
+    'name': 'Octopus Go',
+    'off_peak1': {'start': 0.5, 'end': 4.5, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for Agile Octopus
+agile_octopus = {
+    'name': 'Agile Octopus',
+    'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# time periods for British Gas Electric Driver
+bg_driver = {
+    'name': 'British Gas Electric Driver',
+    'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+# custom time periods / template
+custom_periods = {'name': 'Custom',
+    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 16.0, 'end': 19.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
+
+##################################################################################################
+# Octopus Energy Agile Price
+##################################################################################################
+
+# base settings
+octopus_api_url = "https://api.octopus.energy/v1/products/%PRODUCT%/electricity-tariffs/E-1R-%PRODUCT%-%REGION%/standard-unit-rates/"
+regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Merseyside and Northern Wales', 'E':'West Midlands', 'F':'North Eastern England', 'G':'North Western England', 'H':'Southern England',
+    'J':'South Eastern England', 'K':'Southern Wales', 'L':'South Western England', 'M':'Yorkshire', 'N':'Southern Scotland', 'P':'Northern Scotland'}
+
+
+# preset weightings for average pricing over charging duration:
+front_loaded = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]           # 3 hour average, front loaded
+first_hour =   [1.0, 1.0]                               # lowest average price for first hour
+
+tariff_config = {
+    'product': "AGILE-FLEX-22-11-25",     # product code to use for Octopus API
+    'region': "H",                        # region code to use for Octopus API
+    'duration': 3,                        # decimal hours for charge period
+    'start_at': 23,                       # earliest start time for charge period
+    'end_by': 8,                          # latest end time for charge period
+    'update_time': 17,                    # time in hours when tomrow's data can be fetched
+    'weighting': None                     # weights for weighted average
+}
+
+# get prices and work out lowest weighted average price time period
+def get_agile_period(d=None):
+    global debug_setting, octopus_api_url, time_shift
+    # get time, dates and duration
+    duration = tariff_config['duration']
+    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
+    # round up to 30 minutes so charge periods covers complete end pricing period
+    duration = round(duration * 2 + 0.49, 0) / 2
+    # number of 30 minute pricing periods
+    span = int(duration * 2)
+    # work out dates for price forecast
+    if d is not None and len(d) < 11:
+        d += " 18:00"
+    # get dates and times
+    system_time = (datetime.utcnow() + timedelta(hours=time_shift)) if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+    time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
+    # adjust system to get local time now
+    now = system_time + timedelta(hours=time_offset)
+    hour_now = now.hour + now.minute / 60
+    update_time = tariff_config['update_time']
+    update_time = time_hours(update_time) if type(update_time) is str else 17 if update_time is None else update_time
+    today = datetime.strftime(now + timedelta(days=0 if hour_now >= update_time else -1), '%Y-%m-%d')
+    tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= update_time else 0), '%Y-%m-%d')
+    if debug_setting > 0:
+        print(f"  datetime = {today} {hours_time(hour_now)}")
+    # get product and region
+    product = tariff_config['product'].upper()
+    region = tariff_config['region'].upper()
+    if region not in regions:
+        print(f"** region {region} not recognised, valid regions are {regions}")
+        return None
+    # get prices from 11pm today to 11pm tomorrow
+    print(f"\nProduct: {product}")
+    print(f"Region:  {regions[region]}")
+    zulu_hour = "T" + hours_time(23 - time_offset - time_shift, ss=True) + "Z"
+    url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
+    period_from = today + zulu_hour
+    period_to = tomorrow + zulu_hour
+    params = {'period_from': period_from, 'period_to': period_to }
+    if debug_setting > 1:
+        print(f"time_offset = {time_offset}, time_shift = {time_shift}")
+        print(f"period_from = {period_from}, period_to = {period_to}")
+    response = requests.get(url, params=params)
+    if response.status_code != 200:
+        print(f"** get_agile_period() response code from Octopus API: {response.status_code}")
+        return None
+    # results are in reverse chronological order...
+    results = response.json().get('results')[::-1]
+    # extract times and prices
+    times = []          # ordered list of times
+    prices = []         # ordered list of prices inc VAT
+    for r in results:
+        time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
+        times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift))
+        prices.append(r['value_inc_vat'])
+    # work out start and end times for charging
+    start_at = tariff_config['start_at']
+    start_at = time_hours(start_at) if type(start_at) is str else 23.0 if start_at is None else start_at
+    end_by = tariff_config['end_by']
+    end_by = time_hours(end_by) if type(end_by) is str else 8.0 if end_by is None else end_by
+    start_i = int(round_time(start_at - 23) * 2)
+    end_i = int(round_time(end_by - 23 - duration) * 2)
+    end_i = start_i if end_i < start_i else end_i
+    if debug_setting > 1:
+        print(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}")
+    if len(results) < (end_i + span):
+        print(f"** get_agile_period(): prices not available for {tomorrow}")
+        return None
+    # work out weighted average for each period and track lowest price
+    period = {}
+    min_i = None
+    min_v = None
+    weighting = tariff_config['weighting']
+    weights = [1.0] * span if weighting is None else (weighting + [0.0] * span)[:span]
+    for i in range(start_i, end_i + 1):
+        start = times[i]
+        p_span = prices[i: i + span]
+        wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
+        if debug_setting > 1:
+            print(f"  {start}: {wavg:.2f}")
+        if min_v is None or wavg < min_v:
+            min_v = wavg
+            min_i = i
+    # save results
+    start = times[min_i]
+    end = times[min_i + span]
+    price = min_v
+    period['date'] = tomorrow
+    period['times'] = times
+    period['prices'] = prices
+    period['span'] = span
+    period['start'] = start
+    period['end'] = end
+    period['price'] = price
+    return period
+
+
+# set tariff and charge time period based on pricing for Agile Octopus
+def set_agile_period(d=None):
+    global debug_setting, agile_octopus
+    period = get_agile_period(d=d)
+    if period is None:
+        return None
+    tomorrow = period['date']
+    s = f"\nPrices for {tomorrow} AM charging period (p/kWh inc VAT):\n" + " " * 4 * 15
+    for i in range(0, len(period['times'])):
+        s += "\n" if i % 6 == 2 else ""
+        s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
+    print(s)
+    weighting = tariff_config['weighting']
+    if weighting is not None:
+        print(f"\nWeighting: {weighting}")
+    start = period['start']
+    end = period['end']
+    price = period['price']
+    duration = tariff_config['duration']
+    print(f"\nBest {duration} hour AM charging period:")
+    print(f"  Time:  {start} to {end}")
+    print(f"  Price: {price:.2f} p/kWh inc VAT")
+    agile_octopus['off_peak1']['start'] = time_hours(start)
+    agile_octopus['off_peak1']['end'] = time_hours(end)
+    print(f"\nAM charging period set for {agile_octopus['name']}")
+    return period
+
+tariff = octopus_flux
+
+# set tariff and charge time period based on pricing for Agile Octopus
+def set_tariff(find, update=1, **settings):
+    global debug_setting, agile_octopus, tariff, tariff_list
+    print(f"\n---------------- set_tariff -----------------")
+    # validate parameters
+    args = locals()
+    s = ""
+    for k in [k for k in args.keys() if args[k] is not None and k != 'settings']:
+        s += f"\n  {k} = {args[k]}"
+    # store settings:
+    for key, value in settings.items():
+        if key not in tariff_config:
+            print(f"** unknown configuration parameter: {key}")
+        else:
+            tariff_config[key] = value
+            s += f"\n  {key} = {value}"
+    if len(s) > 0:
+        print(f"Parameters: {s}")
+    found = []
+    if find in tariff_list:
+        found = [find]
+    elif type(find) is str:
+        for dict in tariff_list:
+            if find.lower() in dict['name'].lower():
+                found.append(dict)
+    if len(found) != 1:
+        print(f"** set_tariff(): {find} must identify one of the available tariffs:")
+        for x in tariff_list:
+            print(f"  {x['name']}")
+        return None
+    use = found[0]
+    if use == agile_octopus:
+        period = set_agile_period()
+        if period is None:
+            return None
+    if update == 1:
+        tariff = use
+        print(f"\nTariff set to {tariff['name']}")
+    elif debug_setting > 0:
+        print(f"\nNo changes made to current tariff")
+    return None
+
+
+##################################################################################################
+# CHARGE_NEEDED - calculate charge from current battery charge, forecast yield and expected load
 ##################################################################################################
 
 # how consumption varies by month across a year. 12 values.
@@ -1632,14 +1908,14 @@ def report_value_profile(result):
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
 # take forecast and return (value and timed profile)
-def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time):
+def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
     value = forecast.daily[tomorrow]['kwh']
     profile = []
     for h in range(0, 24):
-        profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(h)))
+        profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
     timed = []
     for h in range(int(hour_now), 24):
-        timed.append(c_float(forecast.daily[today]['hourly'].get(h)))
+        timed.append(c_float(forecast.daily[today]['hourly'].get(int(round_time(h - time_offset)))))
     return (value, (timed + profile + profile)[:run_time])
 
 # charge_needed settings
@@ -1652,8 +1928,8 @@ charge_config = {
     'pv_loss': 0.95,                  # loss converting PV power to battery charge power
     'grid_loss': 0.97,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
-    'inverter_power': 120,            # Inverter power consumption W
-    'bms_power': 50,                  # BMS power consumption W
+    'inverter_power': None,           # Inverter power consumption W
+    'bms_power': 20,                  # BMS power consumption W
     'bat_resistance': 0.075,          # internal resistance of a battery
     'bat_volt': 53,                   # nominal voltage of a battery
     'volt_swing': 3.0,                # battery OCV % change from 10% to 100% SoC
@@ -1667,7 +1943,6 @@ charge_config = {
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 0,          # 1 = use average of available forecast / generation, 2 only run with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
-    'time_shift': None,               # offset local time by x hours
     'force_charge': 0,                # 1 = apply force charge for any remaining charge time
     'timed_mode': 0,                  # 1 = timed changes in work mode, 0 = None
     'special_contingency': 30,        # contingency for special days when consumption might be higher
@@ -1685,7 +1960,7 @@ charge_config = {
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -1713,9 +1988,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
-    time_shift = charge_config['time_shift'] if charge_config['time_shift'] is not None else daylight_saving(test_time) if daylight_saving is not None else 0
-    system_time = (datetime.now() if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M'))
-    now = system_time + timedelta(hours=time_shift)
+    system_time = (datetime.utcnow() + timedelta(hours=time_shift)) if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')
+    time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
+    now = system_time + timedelta(hours=time_offset)
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
     hour_now = now.hour + now.minute / 60
@@ -1829,7 +2104,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif charge_power < charge_limit:
         charge_limit = charge_power
     # work out losses when charging / force discharging
-    inverter_power = charge_config['inverter_power']
+    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     bms_power = charge_config['bms_power']
     charge_loss = charge_config.get('charge_loss')
     if charge_loss is None:
@@ -1885,9 +2160,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_value = None
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
-        fsolcast = Solcast(quiet=True, estimated=0, time_shift=time_shift)
+        fsolcast = Solcast(quiet=True, estimated=0)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(tomorrow) is not None:
-            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time)
+            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
             print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
@@ -2061,7 +2336,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         end_part_hour = end_timed - int(end_timed)
         old_residual = bat_timed_old[time_to_end - 1] * (1 - end_part_hour) + bat_timed_old[time_to_end] * end_part_hour
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
-        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh")
+        net_added = new_residual - start_residual
+        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh ({net_added:.2f}kWh net)")
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
         print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
         print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
@@ -2401,7 +2677,7 @@ class Solcast :
     Load Solcast Estimate / Actuals / Forecast daily yield
     """ 
 
-    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0, time_shift=None) :
+    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0) :
         # days sets the number of days to get for forecasts (and estimated if enabled)
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
@@ -2471,7 +2747,7 @@ class Solcast :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
-                        hour = (int(period_end[11:13]) + (time_shift if time_shift is not None else daylight_saving(date))) % 24
+                        hour = int(period_end[11:13])
                         if date not in self.daily.keys() :
                             self.daily[date] = {'hourly': {}, 'kwh': 0.0}
                         if hour not in self.daily[date]['hourly'].keys():
@@ -2761,237 +3037,4 @@ class Solar :
         plt.xticks(rotation=45, ha='right')
         plt.show()
         return
-
-
-##################################################################################################
-##################################################################################################
-# Tariffs / time of user (TOU)
-# time values are decimal hours
-##################################################################################################
-##################################################################################################
-
-# time periods for Octopus Flux
-octopus_flux = {
-    'name': 'Octopus Flux',
-    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},        # off-peak period 1 / am charging period
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
-    'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
-    'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
-    'default_mode': 'SelfUse',                                  # default work mode
-    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
-    }
-
-# time periods for Intelligent Octopus
-intelligent_octopus = {
-    'name': 'Intelligent Octopus',
-    'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for Octopus Cosy
-octopus_cosy = {
-    'name': 'Octopus Cosy',
-    'off_peak1': {'start': 4.0, 'end': 7.0, 'force': 1},
-    'off_peak2': {'start': 13.0, 'end': 16.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [2, 3, 12]
-    }
-
-# time periods for Octopus Go
-octopus_go = {
-    'name': 'Octopus Go',
-    'off_peak1': {'start': 0.5, 'end': 4.5, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for Agile Octopus
-agile_octopus = {
-    'name': 'Agile Octopus',
-    'off_peak1': {'start': 2.5, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# time periods for British Gas Electric Driver
-bg_driver = {
-    'name': 'British Gas Electric Driver',
-    'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 0.0, 'end': 0.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-# custom time periods / template
-custom_periods = {'name': 'Custom',
-    'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
-    'peak': {'start': 16.0, 'end': 19.0 },
-    'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
-    }
-
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
-
-##################################################################################################
-# Octopus Energy Agile Price
-##################################################################################################
-
-regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Merseyside and Northern Wales', 'E':'West Midlands', 'F':'North Eastern England', 'G':'North Western England', 'H':'Southern England',
-    'J':'South Eastern England', 'K':'Southern Wales', 'L':'South Western England', 'M':'Yorkshire', 'N':'Southern Scotland', 'P':'Northern Scotland'}
-
-# default settings
-octopus_api_url = "https://api.octopus.energy/v1/products/%PRODUCT%/electricity-tariffs/E-1R-%PRODUCT%-%REGION%/standard-unit-rates/"
-product_code = "AGILE-FLEX-22-11-25"
-region_code = "H"
-agile_update_time = 17      # time in hours when tomorrow's data can be fetched
-
-# different weightings for average pricing over charging duration:
-front_loaded = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]           # 3 hour average, front loaded
-first_hour =   [1.0, 1.0]                               # lowest average price for first hour
-
-# get prices and work out lowest weighted average price time period
-def get_agile_period(d=None, product=None, region=None, duration=None, time_shift=None, weighting=None):
-    global product_code, region_code, debug_setting, agile_update_time, octopus_api_url
-    # get time, dates and duration
-    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
-    span = int(duration * 2 + 0.5)
-    if d is not None and len(d) < 11:
-        d += " 18:00"
-    time_offset = daylight_saving(d) if daylight_saving is not None else 0
-    if time_shift is None:
-        time_shift = time_offset
-    elif time_shift != 0:
-        time_offset = time_shift
-    system_time = (datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M'))
-    now = system_time + timedelta(hours=time_shift)
-    hour_now = now.hour + now.minute / 60
-    today = datetime.strftime(now + timedelta(days=0 if hour_now >= agile_update_time else -1), '%Y-%m-%d')
-    tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= agile_update_time else 0), '%Y-%m-%d')
-    # get product and region
-    product = (product_code if product is None else product).upper()
-    region = (region_code if region is None else region).upper()
-    if region not in regions:
-        print(f"** region {region} not recognised, valid regions are {regions}")
-        return None
-    # get prices from 11pm today to 11pm tomorrow
-    print(f"Product: {product}")
-    print(f"Region:  {regions[region]}")
-    print(f"Target:  {tomorrow} AM charging period")
-    zulu_hour = "T" + hours_time(23 - time_offset, ss=True) + "Z"
-    url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
-    period_from = today + zulu_hour
-    period_to = tomorrow + zulu_hour
-    params = {'period_from': period_from, 'period_to': period_to }
-    if debug_setting > 1:
-        print(f"time_offset = {time_offset}, time_shift = {time_shift}")
-        print(f"period_from = {period_from}, period_to = {period_to}")
-    response = requests.get(url, params=params)
-    if response.status_code != 200:
-        print(f"** get_agile_period() response code from Octopus API: {response.status_code}")
-        return None
-    # results are in reverse chronological order...
-    results = response.json().get('results')[::-1]
-    times = []          # ordered list of times
-    prices = []         # ordered list of prices inc VAT
-    cover = 16          # 8 hours cover from 23:00 to 07:00 +/- 1 hour when clocks change
-    if len(results) < (cover + span):
-        print(f"** get_agile_period(): prices are not available for {tomorrow}")
-        return None
-    # extract times and prices
-    for r in results[:cover + span]:
-        times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset))
-        prices.append(r['value_inc_vat'])
-    # work out weighted average for each period and track lowest price
-    period = {}
-    min_t = None
-    min_v = None
-    weights = [1.0] * span if weighting is None else (weighting + [0.0] * span)[:span]
-    for i in range(0, cover):
-        start = times[i]
-        p_span = prices[i: i + span]
-        wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
-#        period[start] = {'wavg': wavg, 'prices':p_span, 'times': times[i: i + span]}
-        if min_v is None or wavg < min_v:
-            min_v = wavg
-            min_t = start
-    # save results
-    start = min_t
-    end = hours_time(time_hours(min_t) + duration)
-    price = min_v
-    period['product'] = product
-    period['region'] = region
-    period['times'] = times
-    period['prices'] = prices
-    period['span'] = span
-    period['start'] = start
-    period['end'] = end
-    period['duration'] = duration
-    period['price'] = price
-    return period
-
-
-# set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(d=None, product=None, region=None, duration=None, weighting=None, time_shift=None):
-    global debug_setting, agile_octopus, tariff, regions, agile_period
-    agile_period = None
-    period = get_agile_period(d=d, product=product, region=region, duration=duration, time_shift=time_shift, weighting=weighting)
-    if period is None:
-        return None
-    s = "\nPrices (p/kWh inc VAT):\n" + " " * 4 * 15
-    for i in range(0, len(period['times'])):
-        s += "\n" if i % 6 == 2 else ""
-        s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
-    print(s)
-    if weighting is not None:
-        print(f"\nWeighting: {weighting}")
-    start = period['start']
-    end = period['end']
-    price = period['price']
-    duration = period['duration']
-    print(f"\nBest {duration} hour AM charging period:")
-    print(f"  Time:  {start} to {end}")
-    print(f"  Price: {price:.2f} p/kWh inc VAT")
-    agile_octopus['off_peak1']['start'] = time_hours(start)
-    agile_octopus['off_peak1']['end'] = time_hours(end)
-    print(f"\nAM charging period set for {agile_octopus['name']}")
-    return period
-
-tariff = octopus_flux
-
-# set tariff and charge time period based on pricing for Agile Octopus
-def set_tariff(find, product=None, region=None, duration=None, update=1, weighting=None, time_shift=None):
-    global debug_setting, agile_octopus, tariff, tariff_list
-    print(f"\n---------------- set_tariff -----------------")
-    found = []
-    if find in tariff_list:
-        found = [find]
-    elif type(find) is str:
-        for dict in tariff_list:
-            if find.lower() in dict['name'].lower():
-                found.append(dict)
-    if len(found) != 1:
-        print(f"** set_tariff(): {find} must identify one of the available tariffs:")
-        for x in tariff_list:
-            print(f"  {x['name']}")
-        return None
-    use = found[0]
-    if use == agile_octopus:
-        period = set_agile_period(d=None, product=product, region=region, duration=duration, time_shift=time_shift, weighting=weighting)
-        if period is None:
-            return None
-    if update == 1:
-        tariff = use
-        print(f"\nTariff set to {tariff['name']}")
-    return None
 

@@ -535,7 +535,9 @@ This setting can be:
 
 ## Version Info
 
-0.8.4<br>
+0.8.5<br>
+Move time_shift to global setting
+Change inverter power to dynamic setting based on device power and reduce bms_power to 20w
 Updated set_schedule to accept template name as well as id.
 Updated get / set_agile_period so weighting is a parameter
 Updated get / set_agile_period to display price data and allow tiered updating of period and tariff.
