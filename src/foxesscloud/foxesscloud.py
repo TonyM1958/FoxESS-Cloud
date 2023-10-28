@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.6"
+version = "0.8.7"
 debug_setting = 1
 
 # constants
@@ -1661,7 +1661,7 @@ tariff_config = {
     'duration': 3,                        # decimal hours for charge period
     'start_at': 23,                       # earliest start time for charge period
     'end_by': 8,                          # latest end time for charge period
-    'update_time': 17,                    # time in hours when tomrow's data can be fetched
+    'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None                     # weights for weighted average
 }
 
@@ -1998,10 +1998,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     day_after_tomorrow = datetime.strftime(now + timedelta(days=2), '%Y-%m-%d')
     # work out if we lose 1 hour if clocks go forward or gain 1 hour if clocks go back
     change_hour = 0
+    change_timed = 0
     hour_adjustment = 0 if daylight_saving is None else daylight_changes(system_time, system_time + timedelta(days=2))
     if hour_adjustment != 0:    # change happens in the next 2 days - work out if today, tomorrow or day after tomorrow
         change_hour = 1 if daylight_changes(system_time, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
         change_hour += 1 if hour_adjustment > 0 else 0
+        change_timed = change_hour - base_hour - (1 if hour_adjustment > 0 else 0)
     # get next charge times from am/pm charge times
     force_charge = charge_config['force_charge']
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
@@ -2038,7 +2040,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
-        print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
+        print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}, change_timed = {change_timed}")
         print(f"time_to_next = {time_to_next}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"full_charge = {full_charge}")
 #        return None
@@ -2305,13 +2307,29 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # rework charge and discharge and work out grid consumption
         start_timed = time_to_next + start_part_hour      # relative start and end time 
         end_timed = start_timed + hours
+        if hour_adjustment != 0 and time_to_next <= change_timed and end_timed > change_timed:
+            hours += 1 if hour_adjustment > 0 else 0
+            end1 += 1 if hour_adjustment < 0 else 0
+        if debug_setting > 1:
+            print(f"start_timed = {start_timed}, end_timed = {end_timed}, hours = {hours}, change_time = {change_timed}")
         grid_timed = [0.0 for x in range(0, run_time)]
         charge_timed_old = [x for x in charge_timed]
         discharge_timed_old = [x for x in discharge_timed]
         for i in range(time_to_next, int(time_to_next + hours + 2)):
-            h = i + 1
-            t = h - start_timed if h < end_timed else end_timed - h + 1         # t = fraction of hour when charging
-            t = 1.0 if t > 1.0 else 0 if t < 0 else hours if t > hours else t
+            h = i + 1 - (1 if hour_adjustment > 0 and time_to_next <= change_timed and end_timed > change_timed and i > change_timed else 0)
+            # work out time (fraction of hour) when charging from h-1 to h
+            if start_timed >= (h-1) and end_timed < h:
+                t = end_timed - start_timed
+            elif start_timed >= (h-1) and start_timed < h and end_timed >= h:
+                t = h - start_timed
+            elif end_timed > (h-1) and end_timed <= h and start_timed <= (h-1):
+                t = end_timed - h + 1
+            elif start_timed <= (h-1) and end_timed > h:
+                t = 1.0
+            else:
+                t = 0.0
+            if debug_setting > 1:
+                print(f"i = {i}, h = {h}, t = {t}")
             charge_added = charge_limit * t
             charge_added = charge_limit - charge_timed[i] if charge_timed[i] + charge_added > charge_limit - charge_timed[i] else charge_added
             charge_timed[i] += charge_added
@@ -2329,7 +2347,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             bat_timed.append(kwh_current)
             kwh_current += kwh_timed[i]
             h += 1
-        time_to_end = int(end_timed) + 1
+        time_to_end = int(start_timed + hours) + 1
         kwh_added = bat_timed[time_to_end] - bat_timed_old[time_to_end]
         end_part_hour = end_timed - int(end_timed)
         old_residual = bat_timed_old[time_to_end - 1] * (1 - end_part_hour) + bat_timed_old[time_to_end] * end_part_hour
