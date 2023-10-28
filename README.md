@@ -535,11 +535,13 @@ This setting can be:
 
 ## Version Info
 
-0.8.5<br>
-Move time_shift to global setting
-Change inverter power to dynamic setting based on device power and reduce bms_power to 20w
+0.8.6<br>
+Tweak to display the time correctly when battery charge is lowest and clocks go forwards / backwards.
+Update periods and schedules to include fdSoc and fdPwr.
+Move time_shift to global setting.
+Change inverter power to dynamic setting based on device power and reduce bms_power to 20w.
 Updated set_schedule to accept template name as well as id.
-Updated get / set_agile_period so weighting is a parameter
+Updated get / set_agile_period so weighting is a parameter.
 Updated get / set_agile_period to display price data and allow tiered updating of period and tariff.
 Updated plot_hourly for Solcast and Solar to default to today and tomorrow.
 Added support for templates to set_schedule().

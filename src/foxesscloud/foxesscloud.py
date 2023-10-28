@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  25 October 2023
+Updated:  27 October 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.5"
+version = "0.8.6"
 debug_setting = 1
 
 # constants
@@ -863,21 +863,18 @@ def set_period(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
     if mode not in work_modes:
         print(f"** mode must be one of {work_modes}")
         return None
+    device_power = device.get('power')
+    if device_power is None:
+        device_power = 12000
+    if fdpwr < 0 or fdpwr > 12000:
+        print(f"** fdpwr must be between 0 and {device_power}")
+        return None
+    if fdsoc < 10 or fdsoc > 100:
+        print(f"** fdsoc must between 10 and 100")
+        return None
     start_h, start_m = split_hours(start)
     end_h, end_m = split_hours(end)
-    period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minSocOnGrid': min_soc}
-    if mode in ['ForceDischarge']:
-        device_power = device.get('power')
-        if device_power is None:
-            device_power = 12000
-        if fdpwr < 0 or fdpwer > 12000:
-            print(f"** fdpwr must be between 0 and {device_power}")
-            return None
-        if fdsoc < 10 or fdsoc > 100:
-            print(f"** fdsoc must between 10 and 100")
-            return None
-        period['fdSoc'] = fdsoc
-        period['fdPwr'] = fdpwr
+    period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
     return period
 
 # set a schedule from a period or list of periods
@@ -886,7 +883,7 @@ def set_schedule(enable=1, periods=None, template=None):
     if schedule is None:
         schedule = get_schedule()
     if debug_setting > 1:
-        print(f"set_schedule(): enable = {enable}, periods = {periods}")
+        print(f"set_schedule(): enable = {enable}, periods = {periods}, template={template}")
         return None
     headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
@@ -1539,11 +1536,11 @@ def british_summer_time(d=None):
         return l
     elif type(d) is str:
         dat = datetime.strptime(d[:10], '%Y-%m-%d')
-        hour = int(d[11:13]) if len(d) >= 16 else 3
+        hour = int(d[11:13]) if len(d) >= 16 else 12
     else:
         now = datetime.utcnow()
-        dat =  d.date() if d is not None else now().date()
-        hour = d.hour if d is not None else now().hour 
+        dat =  d.date() if d is not None else now.date()
+        hour = d.hour if d is not None else now.hour 
     start_date = dat.replace(month=3, day=31)
     days = (start_date.weekday() + 1) % 7
     start_date = start_date - timedelta(days=days)
@@ -2286,7 +2283,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             kwh_needed = capacity - start_residual
             print(f"\nFull charge set for {full_charge}, adding {kwh_needed:.2f} kWh")
         elif test_charge is None:
-            print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour)} {day_when}")
+            min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
+            print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
         else:
             print(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
