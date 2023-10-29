@@ -535,7 +535,9 @@ This setting can be:
 
 ## Version Info
 
-0.8.7<br>
+0.8.8<br>
+Update plots to work with DST data.
+Update charge_needed() to dynamically correct charge times for DST.
 Update handling of day light saving changes to correctly predict charge levels.
 Tweak to display the time correctly when battery charge is lowest and clocks go forwards / backwards.
 Update periods and schedules to include fdSoc and fdPwr.
