@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  29 October 2023
+Updated:  01 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -111,8 +111,8 @@ def get_token():
         file.close()
     time_now = datetime.now()
     if token['value'] is not None and token['valid_from'] is not None:
-        if (time_now - datetime.fromisoformat(token['valid_from'])).seconds <= token['valid_for']:
-            if debug_setting > 2:
+        if time_now < datetime.fromisoformat(token['valid_from']) + timedelta(seconds=token['valid_for']):
+            if debug_setting > 1:
                 print(f"token is still valid")
             return token['value']
     if debug_setting > 1:
@@ -1590,7 +1590,7 @@ octopus_flux = {
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
+    'forecast_times': [21, 22, 23]                              # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1600,7 +1600,7 @@ intelligent_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22, 23]
     }
 
 # time periods for Octopus Cosy
@@ -1620,7 +1620,7 @@ octopus_go = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22, 23]
     }
 
 # time periods for Agile Octopus
@@ -1630,7 +1630,7 @@ agile_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22, 23]
     }
 
 # time periods for British Gas Electric Driver
@@ -1640,7 +1640,7 @@ bg_driver = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22, 23]
     }
 
 # custom time periods / template
@@ -1649,7 +1649,7 @@ custom_periods = {'name': 'Custom',
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22, 23]
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
@@ -1939,7 +1939,7 @@ charge_config = {
     'grid_loss': 0.97,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
-    'bms_power': 20,                  # BMS power consumption W
+    'bms_power': 50,                  # BMS power consumption W
     'bat_resistance': 0.075,          # internal resistance of a battery
     'bat_volt': 53,                   # nominal voltage of a battery
     'volt_swing': 3.0,                # battery OCV % change from 10% to 100% SoC
@@ -2119,12 +2119,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif charge_power < charge_limit:
         charge_limit = charge_power
     # work out losses when charging / force discharging
-    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
+    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 20
     bms_power = charge_config['bms_power']
     charge_loss = charge_config.get('charge_loss')
     if charge_loss is None:
         charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_nominal ** 2 - bms_power / charge_limit / 1000
-    operating_loss = (inverter_power + bms_power) / 1000
+    operating_loss = inverter_power / 1000
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_loss = charge_config['discharge_loss']
     discharge_limit = device_power
@@ -2273,8 +2273,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_timed = []
     kwh_min = kwh_current
     min_hour = h
+    reserve_drain = reserve
     for i in range(0, run_time):
-        kwh_current = reserve if i <= time_to_next and kwh_current < reserve else capacity if kwh_current > capacity else kwh_current
+        if kwh_current < reserve and i <= time_to_next:
+            # battery is empty
+            if reserve_drain < (capacity * 6 / 100):
+                reserve_drain = reserve           # force charge to restore reserve
+            kwh_current = reserve_drain           # stop discharge below reserve
+            reserve_drain -= bms_power / 1000     # allow for BMS drain
+        else:
+            reserve_drain = reserve                # reset drain
+        if kwh_current > capacity:
+            # battery is full
+            kwh_current = capacity
         bat_timed.append(kwh_current)
         if kwh_current < kwh_min:       # track minimum and time
             kwh_min = kwh_current
@@ -2352,8 +2363,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_current = residual - kwh_timed[0] * (hour_now - h)
         bat_timed_old = [x for x in bat_timed]     # save for before / after comparison
         bat_timed = []
+        reserve_drain = reserve
         for i in range(0, run_time):
-            kwh_current = reserve if i <= time_to_next and kwh_current < reserve else capacity if kwh_current > capacity else kwh_current
+            if kwh_current < reserve and i <= time_to_next:
+                # battery is empty
+                if reserve_drain < (capacity * 6 / 100):
+                    reserve_drain = reserve           # force charge by BMS
+                kwh_current = reserve_drain           # stop discharge below reserve
+                reserve_drain -= bms_power / 1000     # BMS drain
+            else:
+                reserve_drain = reserve                # reset drain
+            if kwh_current > capacity:
+                # battery is full
+                kwh_current = capacity
             bat_timed.append(kwh_current)
             kwh_current += kwh_timed[i]
             h += 1

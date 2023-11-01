@@ -536,6 +536,8 @@ This setting can be:
 ## Version Info
 
 0.8.8<br>
+Improved SoC prediction when at min_soc or force charging.
+Add 21:00 to forecast_times.
 Update plots to work with DST data.
 Update charge_needed() to dynamically correct charge times for DST.
 Update handling of day light saving changes to correctly predict charge levels.
