@@ -238,7 +238,7 @@ f.charge_needed(forecast, force_charge, forecast_selection, forecast_times, upda
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
-+ force_charge: if set to 1, any remaining time in a charge time period has force charge set to preserve the battery. If 0, force charge is not set
++ force_charge: 1 any remaining time in a charge period has force charge set, 2 charging uses the entire charge period, 0 None (default)
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
 + forecast_times: a list of hours when forecasts can be obtained
 + update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
@@ -301,11 +301,13 @@ The following parameters and default values are used to configure charge_needed 
 + forecast_selection: 0         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 0.
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
 + time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
-+ force_charge: 0               # 1 = apply force charge for any remaining charge time
 + timed_mode: 0                 # 1 = use timed changes in work mode if configured for tariff, 0 = None
 + special_contingency: 30       # contingency for special days when consumption might be higher
 + special_days: ['12-25', '12-26', '01-01']
 + full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
++ derate_temp: 21               # battery temperature in C when derating charge current is applied
++ derate_step: 5                # step size for derating e.g. 21, 16, 11
++ derating: [0.7, 0.5, 0.3]     # derating to apply to each temperature step 
 
 These values are stored / available in f.charge_config.
 
@@ -535,9 +537,11 @@ This setting can be:
 
 ## Version Info
 
-0.8.8<br>
+0.8.9<br>
+Removed estimated grid consumption when charging as it was not accurate.
+Added derating of charge current when temperature is low.
+Added force_charge=2 to charge the full period.
 Improved SoC prediction when at min_soc or force charging.
-Add 21:00 to forecast_times.
 Update plots to work with DST data.
 Update charge_needed() to dynamically correct charge times for DST.
 Update handling of day light saving changes to correctly predict charge levels.

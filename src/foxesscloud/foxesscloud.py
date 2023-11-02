@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 November 2023
+Updated:  02 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.8.8"
+version = "0.8.9"
 debug_setting = 1
 
 # constants
@@ -1600,7 +1600,7 @@ intelligent_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [21, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # time periods for Octopus Cosy
@@ -1620,7 +1620,7 @@ octopus_go = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [21, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # time periods for Agile Octopus
@@ -1630,7 +1630,7 @@ agile_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [21, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # time periods for British Gas Electric Driver
@@ -1640,7 +1640,7 @@ bg_driver = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 0.0, 'end': 0.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [21, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # custom time periods / template
@@ -1649,7 +1649,7 @@ custom_periods = {'name': 'Custom',
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [21, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
@@ -1953,11 +1953,13 @@ charge_config = {
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 0,          # 1 = use average of available forecast / generation, 2 only run with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
-    'force_charge': 0,                # 1 = apply force charge for any remaining charge time
     'timed_mode': 0,                  # 1 = timed changes in work mode, 0 = None
     'special_contingency': 30,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
-    'full_charge': None               # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
+    'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
+    'derate_temp': 21,                # temperature where derating is applied
+    'derate_step': 5,                 # scale factor for temperature derating
+    'derating': [0.7, 0.5, 0.3]       # derating of default charge current for every 5C below
 }
 
 # work out the charge times to set using the parameters:
@@ -1967,9 +1969,10 @@ charge_config = {
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 #  run_after: 0 over-rides 'forecast_times'. The default is 1.
 #  forecast_times: list of hours when forecast can be fetched
+#  force_charge: 1 = set force charge, 2 = charge for whole period
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
-        forecast_times=None, test_time=None, test_soc=None, test_charge=None, **settings):
+        forecast_times=None, force_charge=None, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -2016,10 +2019,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         change_hour = 1 if daylight_changes(system_time, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
         change_hour += 1 if hour_adjustment > 0 else 0
     # get next charge times from am/pm charge times
-    force_charge = charge_config['force_charge']
+    force_charge = 0 if force_charge is None else force_charge
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
     end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
-    force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else 1
+    force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else force_charge
     time_to_am = round_time(start_am - base_hour)
     start_pm = time_hours(tariff['off_peak2']['start'] if tariff is not None else 0.0)
     end_pm = time_hours(tariff['off_peak2']['end'] if tariff is not None else 0.0)
@@ -2078,9 +2081,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         current_soc = test_soc
         residual = test_soc * 8.2 / 100
         min_soc = 10
-        bat_volt = 2 * 53
+        bat_volt = 122 / (1 + 0.03 * (100 - test_soc) / 90)
         bat_power = 0
-        temperature = 30
+        temperature = 20
         bat_current = 0.0
     bat_count = int(bat_volt / charge_config['bat_volt'] + 0.5)
     bat_resistance = charge_config['bat_resistance'] * bat_count
@@ -2099,9 +2102,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     print(f"  Resistance:  {bat_resistance:.2f} ohms")
-    # charge times are not reliable if BMS dynamically limits charge current
-    if temperature < 21 or temperature > 36:
-        print(f"  Temperature may affect the battery charge rate and time")
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
@@ -2110,9 +2110,20 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"** could not get parameters for {model}")
         device_power = 3.68
         device_current = 26
+    # charge times are derated based on temperature
+    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
+    derate_temp = charge_config['derate_temp']
+    if temperature > 36:
+        print(f"  High temperature may affect the battery charge rate and time")
+    elif temperature <= derate_temp:
+        derating = charge_config['derating']
+        i = (derate_temp - temperature) // charge_config['derate_step']
+        derated_current = round(device_current * derating[i if i < len(derating) else -1], 0)
+        if derated_current < charge_current:
+            print(f"\nBattery temperature is {temperature}C\n  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
+            charge_current = derated_current
     # work out charge limit = max power going into the battery after ac conversion losses
     charge_limit = device_power * charge_config['grid_loss']
-    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
     charge_power = charge_current * (bat_nominal + charge_current * bat_resistance) / 1000
     if charge_power < 0.1:
         print(f"** charge_current is too low ({charge_current:.1f}A)")
@@ -2275,7 +2286,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     min_hour = h
     reserve_drain = reserve
     for i in range(0, run_time):
-        if kwh_current < reserve and i <= time_to_next:
+        if kwh_current <= reserve and i <= time_to_next:
             # battery is empty
             if reserve_drain < (capacity * 6 / 100):
                 reserve_drain = reserve           # force charge to restore reserve
@@ -2307,9 +2318,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         end1 = start_at
     else:
         charge_message = "with charge added"
-        if full_charge is not None:
+        if full_charge is not None or force_charge == 2:
             kwh_needed = capacity - start_residual
-            print(f"\nFull charge set for {full_charge}, adding {kwh_needed:.2f} kWh")
+            print(f"\nFull charge requires {kwh_needed:.2f} kWh")
         elif test_charge is None:
             min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
             print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
@@ -2323,17 +2334,18 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             kwh_needed = capacity - start_residual
             taper_time = 10/60
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
-        if hours < charge_config['min_hours']:
-            hours = charge_config['min_hours']
-            print(f"  Minimum charge time used")
+        if force_charge == 2:
+            hours = charge_time
         elif hours > charge_time:
             hours = charge_time
             print(f"  Maximum charge time used")
+        elif hours < charge_config['min_hours']:
+            hours = charge_config['min_hours']
+            print(f"  Minimum charge time used")
         end1 = round_time(start_at + hours)
         # rework charge and discharge and work out grid consumption
         start_timed = time_to_next + start_part_hour      # relative start and end time 
         end_timed = start_timed + hours
-        grid_timed = [0.0 for x in range(0, run_time)]
         charge_timed_old = [x for x in charge_timed]
         discharge_timed_old = [x for x in discharge_timed]
         for i in range(time_to_next, int(time_to_next + hours + 2)):
@@ -2354,7 +2366,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             charge_added = charge_limit * t
             charge_added = charge_limit - charge_timed[i] if charge_timed[i] + charge_added > charge_limit - charge_timed[i] else charge_added
             charge_timed[i] += charge_added
-            grid_timed[i] = charge_added / charge_config['grid_loss'] + consumption_timed[i] * t
             discharge_timed[i] *= (1-t)
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
@@ -2365,7 +2376,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_timed = []
         reserve_drain = reserve
         for i in range(0, run_time):
-            if kwh_current < reserve and i <= time_to_next:
+            if kwh_current <= reserve and i <= time_to_next:
                 # battery is empty
                 if reserve_drain < (capacity * 6 / 100):
                     reserve_drain = reserve           # force charge by BMS
@@ -2389,7 +2400,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
         print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
         print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
-        print(f"\nEstimated Grid Consumption: {sum(grid_timed):.1f} kWh (including house consumption while charging)")
     if show_data > 2:
         print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
         for i in range(0, run_time):
@@ -2425,7 +2435,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             plt.plot(x_timed, consumption_timed, label='Consumption', color='red')
             if kwh_needed > 0:
                 plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='blue', linestyle='dotted')
-                plt.plot(x_timed, grid_timed, label='Grid Consumption', color='grey')
             if show_plot == 3:
                 plt.plot(x_timed, charge_timed, label='Charge', color='orange', linestyle='dotted')
                 plt.plot(x_timed, discharge_timed, label='Discharge', color='brown', linestyle='dotted')
