@@ -2117,7 +2117,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"  High temperature may affect the battery charge rate and time")
     elif temperature <= derate_temp:
         derating = charge_config['derating']
-        i = (derate_temp - temperature) // charge_config['derate_step']
+        i = int((derate_temp - temperature) / charge_config['derate_step'])
         derated_current = round(device_current * derating[i if i < len(derating) else -1], 0)
         if derated_current < charge_current:
             print(f"\nBattery temperature is {temperature}C\n  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )

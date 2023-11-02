@@ -537,6 +537,9 @@ This setting can be:
 
 ## Version Info
 
+0.9.0<br>
+Fix float return by integer division.
+
 0.8.9<br>
 Removed estimated grid consumption when charging as it was not accurate.
 Added derating of charge current when temperature is low.
