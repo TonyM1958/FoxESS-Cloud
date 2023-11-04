@@ -298,7 +298,7 @@ The following parameters and default values are used to configure charge_needed 
 + min_kwh: 0.5                  # minimum charge to add in kwh
 + solcast_adjust: 100           # % adjustment to make to Solcast forecast
 + solar_adjust:  100            # % adjustment to make to Solar forecast
-+ forecast_selection: 0         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 0.
++ forecast_selection: 1         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
 + annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
 + time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
 + timed_mode: 0                 # 1 = use timed changes in work mode if configured for tariff, 0 = None
@@ -538,9 +538,10 @@ This setting can be:
 ## Version Info
 
 0.9.1<br>
-Fix problem plotting raw data when there are missing samples
-Allow charge_needed() to run during charge times but not update settings
-Force full charge if there is no derating setting available
+Fix problem plotting raw data when there are missing samples.
+Allow charge_needed() to run during charge times but not update settings.
+Force full charge if there is no derating setting available.
+Make forecast_selection=1 the default.
 Fix float return by integer division.
 
 0.8.9<br>
