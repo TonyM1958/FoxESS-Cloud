@@ -537,7 +537,10 @@ This setting can be:
 
 ## Version Info
 
-0.9.0<br>
+0.9.1<br>
+Fix problem plotting raw data when there are missing samples
+Allow charge_needed() to run during charge times but not update settings
+Force full charge if there is no derating setting available
 Fix float return by integer division.
 
 0.8.9<br>

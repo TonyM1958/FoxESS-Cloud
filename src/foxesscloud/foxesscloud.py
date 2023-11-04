@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  02 November 2023
+Updated:  04 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -9,7 +9,7 @@ By:       Tony Matthews
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
 ##################################################################################################
 
-version = "0.9.0"
+version = "0.9.1"
 debug_setting = 1
 
 # constants
@@ -1130,7 +1130,14 @@ def plot_raw(result, plot=1, station=0):
                 plt.xlim(-1, len(labels))
             for v in [v for v in result if v['unit'] == unit and v['date'] == d]:
                 n = len(v['data'])
-                x = [i // 12 + int(v['data'][i]['time'][14:16]) / 60 for i in range(0, n)]
+                x =[]
+                h = 0
+                old_minute = 0
+                for i in range(0,n):
+                    new_minute = int(v['data'][i]['time'][14:16])
+                    h += 1 if new_minute < old_minute else 0
+                    x.append(h + new_minute / 60)
+                    old_minute = new_minute
                 y = [v['data'][i]['value'] for i in range(0, n)]
                 name = v['name']
                 label = f"{name} / {d}" if plot == 2 and len(dates) > 1 else name
@@ -1939,7 +1946,7 @@ charge_config = {
     'grid_loss': 0.97,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
-    'bms_power': 50,                  # BMS power consumption W
+    'bms_power': 35,                  # BMS power consumption W
     'bat_resistance': 0.075,          # internal resistance of a battery
     'bat_volt': 53,                   # nominal voltage of a battery
     'volt_swing': 3.0,                # battery OCV % change from 10% to 100% SoC
@@ -1951,15 +1958,15 @@ charge_config = {
     'min_kwh': 0.5,                   # minimum to add in kwh
     'solcast_adjust': 100,            # % adjustment to make to Solcast forecast
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
-    'forecast_selection': 0,          # 1 = use average of available forecast / generation, 2 only run with forecast
+    'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
-    'timed_mode': 0,                  # 1 = timed changes in work mode, 0 = None
+    'timed_mode': 0,                  # 1 = apply timed work mode, 0 = None
     'special_contingency': 30,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
-    'derate_temp': 21,                # temperature where derating is applied
-    'derate_step': 5,                 # scale factor for temperature derating
-    'derating': [0.7, 0.5, 0.3]       # derating of default charge current for every 5C below
+    'derate_temp': 21,                # battery temperature where cold derating starts to be applied
+    'derate_step': 5,                 # scale for derating factors in C
+    'derating': [0.7, 0.5, 0.3]       # derating factors for charge current e.g. 5C step = 21C, 16C, 11C
 }
 
 # work out the charge times to set using the parameters:
@@ -2028,12 +2035,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     end_pm = time_hours(tariff['off_peak2']['end'] if tariff is not None else 0.0)
     force_charge_pm = 0 if tariff is not None and tariff['off_peak2']['force'] == 0 or force_charge == 0 else 1
     time_to_pm = round_time(start_pm - base_hour) if start_pm > 0 else None
-    no_go1 = time_to_am is not None and hour_in(hour_now, {'start': round_time(start_am - 0.25), 'end': round_time(end_am + 1)})
-    no_go2 = time_to_pm is not None and hour_in(hour_now, {'start': round_time(start_pm - 0.25), 'end': round_time(end_pm + 1)})
-    if no_go1 or no_go2:
-        print(f"\nCannot configure next charge when current time is less than 15 minutes before or 60 minutes after a charging period")
-        if run_after != 0:
-            return None
+    no_go1 = time_to_am is not None and hour_in(hour_now, {'start': round_time(start_am - 0.25), 'end': round_time(end_am + 0.25)})
+    no_go2 = time_to_pm is not None and hour_in(hour_now, {'start': round_time(start_pm - 0.25), 'end': round_time(end_pm + 0.25)})
+    if (no_go1 or no_go2) and update_settings > 0:
+        print(f"\nInverter settings will not be changed less than 15 minutes before or after a charging period")
         update_settings = 0
     # choose and configure parameters for next charge time period
     charge_pm = time_to_pm is not None and time_to_pm < time_to_am
@@ -2082,8 +2087,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         residual = test_soc * 8.2 / 100
         min_soc = 10
         bat_volt = 122 / (1 + 0.03 * (100 - test_soc) / 90)
-        bat_power = 0
-        temperature = 20
+        bat_power = 0.0
+        temperature = 19.5
         bat_current = 0.0
     bat_count = int(bat_volt / charge_config['bat_volt'] + 0.5)
     bat_resistance = charge_config['bat_resistance'] * bat_count
@@ -2114,14 +2119,20 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
     derate_temp = charge_config['derate_temp']
     if temperature > 36:
-        print(f"  High temperature may affect the battery charge rate and time")
+        print(f"\nHigh battery temperature may affect the charge rate")
     elif temperature <= derate_temp:
+        print(f"\nLow battery temperature may affect the charge rate")
         derating = charge_config['derating']
-        i = int((derate_temp - temperature) / charge_config['derate_step'])
-        derated_current = round(device_current * derating[i if i < len(derating) else -1], 0)
-        if derated_current < charge_current:
-            print(f"\nBattery temperature is {temperature}C\n  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
-            charge_current = derated_current
+        derate_step = charge_config['derate_step']
+        i = int((derate_temp - temperature) / (derate_step if derate_step is not None and derate_step > 0 else 1))
+        if derating is not None and type(derating) is list and i < len(derating):
+            derated_current = round(device_current * derating[i], 0)
+            if derated_current < charge_current:
+                print(f"  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
+                charge_current = derated_current
+        else:
+            force_charge = 2
+            print(f"  Full charge set")
     # work out charge limit = max power going into the battery after ac conversion losses
     charge_limit = device_power * charge_config['grid_loss']
     charge_power = charge_current * (bat_nominal + charge_current * bat_resistance) / 1000
