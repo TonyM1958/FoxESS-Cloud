@@ -537,7 +537,8 @@ This setting can be:
 
 ## Version Info
 
-0.9.1<br>
+0.9.2<br>
+Change to stop battery discharge at min soc when recalculating residual after charging period
 Fix problem plotting raw data when there are missing samples.
 Allow charge_needed() to run during charge times but not update settings.
 Force full charge if there is no derating setting available.

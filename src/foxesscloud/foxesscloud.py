@@ -1,15 +1,16 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  04 November 2023
+Updated:  05 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
 # Code for getting and setting inverter data via the Fox ESS cloud web site, including
 # getting forecast data from solcast.com.au and sending inverter data to pvoutput.org
+# ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.1"
+version = "0.9.2"
 debug_setting = 1
 
 # constants
@@ -1947,7 +1948,7 @@ charge_config = {
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
     'bms_power': 35,                  # BMS power consumption W
-    'bat_resistance': 0.075,          # internal resistance of a battery
+    'bat_resistance': 0.074,          # internal resistance of a battery
     'bat_volt': 53,                   # nominal voltage of a battery
     'volt_swing': 3.0,                # battery OCV % change from 10% to 100% SoC
     'generation_days': 3,             # number of days to use for average generation (1-7)
@@ -2343,7 +2344,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         taper_time = 0
         if (start_residual + kwh_needed) >= (capacity * 0.95):
             kwh_needed = capacity - start_residual
-            taper_time = 10/60
+            taper_time = 5/60
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
         if force_charge == 2:
             hours = charge_time
@@ -2375,8 +2376,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             if debug_setting > 1:
                 print(f"i = {i}, j = {j}, t = {t}")
             charge_added = charge_limit * t
-            charge_added = charge_limit - charge_timed[i] if charge_timed[i] + charge_added > charge_limit - charge_timed[i] else charge_added
-            charge_timed[i] += charge_added
+            charge_timed[i] = charge_timed[i] + charge_added if charge_timed[i] + charge_added < charge_limit else charge_limit
             discharge_timed[i] *= (1-t)
         # rebuild the battery residual with the charge added
         # adjust residual from hour_now to what it was at the start of current hour
@@ -2387,7 +2387,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_timed = []
         reserve_drain = reserve
         for i in range(0, run_time):
-            if kwh_current <= reserve and i <= time_to_next:
+            if kwh_current <= reserve:
                 # battery is empty
                 if reserve_drain < (capacity * 6 / 100):
                     reserve_drain = reserve           # force charge by BMS
