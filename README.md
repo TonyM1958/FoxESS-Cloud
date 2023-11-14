@@ -288,8 +288,8 @@ The following parameters and default values are used to configure charge_needed 
 + inverter_power: 120           # inverter power consumption W
 + bms_power: 50                 # BMS power consumption W
 + bat_resistance: 0.075         # internal resistance of a battery in ohms
-+ bat_volt: 53                  # nominal voltage of a battery
-+ volt_swing: 3.0               # battery OCV % change from 10% to 100% SoC
++ volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
++ nominal_soc: 60               # SoC for nominal open circuit voltage
 + generation_days: 3            # number of days to use for average generation (1-7)
 + consumption_days: 3           # number of days to use for average consumption (1-7)
 + consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
@@ -307,9 +307,12 @@ The following parameters and default values are used to configure charge_needed 
 + full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
 + derate_temp: 21               # battery temperature in C when derating charge current is applied
 + derate_step: 5                # step size for derating e.g. 21, 16, 11
-+ derating: [0.7, 0.5, 0.3]     # derating to apply to each temperature step 
++ derating: [25, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C 
 
 These values are stored / available in f.charge_config.
+
+The default battery open circuit voltage curve versus SoC from 0% to 100% is:
++ lifepo4_curve = [51.00, 51.90, 52.11, 52.25, 52.39, 52.54, 52.68, 52.83, 52.97, 53.12, 53.30]
 
 ## Date Ranges
 
@@ -537,8 +540,10 @@ This setting can be:
 
 ## Version Info
 
-0.9.2<br>
-Change to stop battery discharge at min soc when recalculating residual after charging period
+0.9.3<br>
+OCV / SoC curve added for LiFePO4 battery, replacing simple volt_swing %
+Derating updated to reduce max charge current with low temperature, using Fox derating data.
+Change to stop battery discharge at min soc when recalculating residual after charging period.
 Fix problem plotting raw data when there are missing samples.
 Allow charge_needed() to run during charge times but not update settings.
 Force full charge if there is no derating setting available.

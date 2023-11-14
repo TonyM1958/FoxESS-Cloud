@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 November 2023
+Updated:  13 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.2"
+version = "0.9.3"
 debug_setting = 1
 
 # constants
@@ -53,6 +53,17 @@ def query_date(d, offset = None):
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+# interpolate a result from a list of values
+def interpolate(f, v):
+    if len(v) == 0:
+        return None
+    if f < 0.0:
+        return v[0]
+    elif f >= len(v) - 1:
+        return v[-1]
+    i = int(f)
+    x = f - i
+    return v[i] * (1-x) + v[i+1] * x
 
 ##################################################################################################
 # get error messages
@@ -1936,6 +1947,10 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
         timed.append(c_float(forecast.daily[today]['hourly'].get(int(round_time(h - time_offset)))))
     return (value, (timed + profile + profile)[:run_time])
 
+# Battery open circuit voltage (OCV) from 0% to 100% SoC
+#                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
+lifepo4_curve = [51.00, 51.90, 52.11, 52.25, 52.39, 52.54, 52.68, 52.83, 52.97, 53.12, 53.30]
+
 # charge_needed settings
 charge_config = {
     'contingency': 20,                # % of consumption to allow as contingency
@@ -1948,9 +1963,9 @@ charge_config = {
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
     'bms_power': 35,                  # BMS power consumption W
-    'bat_resistance': 0.074,          # internal resistance of a battery
-    'bat_volt': 53,                   # nominal voltage of a battery
-    'volt_swing': 3.0,                # battery OCV % change from 10% to 100% SoC
+    'bat_resistance': 0.075,          # internal resistance of a battery
+    'volt_curve': lifepo4_curve,      # battery OCV range from 0% to 100% SoC
+    'nominal_soc': 70,                # SoC for nominal open circuit battery voltage
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1967,8 +1982,9 @@ charge_config = {
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'derate_temp': 21,                # battery temperature where cold derating starts to be applied
     'derate_step': 5,                 # scale for derating factors in C
-    'derating': [0.7, 0.5, 0.3]       # derating factors for charge current e.g. 5C step = 21C, 16C, 11C
+    'derating': [25, 15, 10, 2]       # max charge current e.g. 5C step = 21C, 16C, 11C, 6C
 }
+
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
@@ -2067,7 +2083,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
         print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
         print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
-        print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, start_part_hour = {start_part_hour}, full_charge = {full_charge}")
+        print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
 #        return None
     # get battery info from inverter
     get_settings()      # also needed to fetch data on the inverter
@@ -2091,23 +2107,26 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = 0.0
         temperature = 19.5
         bat_current = 0.0
-    bat_count = int(bat_volt / charge_config['bat_volt'] + 0.5)
+    volt_curve = charge_config['volt_curve']
+    nominal_soc = charge_config['nominal_soc']
+    volt_nominal = interpolate(nominal_soc / 10, volt_curve)
+    bat_count = int(bat_volt / volt_nominal + 0.5)
     bat_resistance = charge_config['bat_resistance'] * bat_count
-    bat_ocv = (bat_volt + bat_current * bat_resistance) * (1 + charge_config['volt_swing'] / 100 * (100 - current_soc) / 90)
-    bat_nominal = bat_ocv * (1 - charge_config['volt_swing'] / 200)
+    bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
     print(f"\nBattery Info:")
     print(f"  Count:       {bat_count} batteries")
     print(f"  Capacity:    {capacity:.1f}kWh")
-    print(f"  Voltage:     {bat_volt:.1f}V ({bat_ocv:.1f} OCV)")
+    print(f"  Voltage:     {bat_volt:.1f}V")
     print(f"  Current:     {bat_current:.1f}A")
     print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
     print(f"  Current SoC: {current_soc}% ({residual:.1f}kWh)")
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     print(f"  Resistance:  {bat_resistance:.2f} ohms")
+    print(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
@@ -2127,7 +2146,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         derate_step = charge_config['derate_step']
         i = int((derate_temp - temperature) / (derate_step if derate_step is not None and derate_step > 0 else 1))
         if derating is not None and type(derating) is list and i < len(derating):
-            derated_current = round(device_current * derating[i], 0)
+            derated_current = derating[i]
             if derated_current < charge_current:
                 print(f"  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
                 charge_current = derated_current
@@ -2136,7 +2155,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             print(f"  Full charge set")
     # work out charge limit = max power going into the battery after ac conversion losses
     charge_limit = device_power * charge_config['grid_loss']
-    charge_power = charge_current * (bat_nominal + charge_current * bat_resistance) / 1000
+    charge_power = charge_current * (bat_ocv + charge_current * bat_resistance) / 1000
     if charge_power < 0.1:
         print(f"** charge_current is too low ({charge_current:.1f}A)")
     elif charge_power < charge_limit:
@@ -2146,13 +2165,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bms_power = charge_config['bms_power']
     charge_loss = charge_config.get('charge_loss')
     if charge_loss is None:
-        charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_nominal ** 2 - bms_power / charge_limit / 1000
+        charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2 - bms_power / charge_limit / 1000
     operating_loss = inverter_power / 1000
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_loss = charge_config['discharge_loss']
     discharge_limit = device_power
     discharge_current = device_current if charge_config['discharge_current'] is None else charge_config['discharge_current']
-    discharge_power = discharge_current * bat_nominal / 1000
+    discharge_power = discharge_current * bat_ocv / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
@@ -2320,7 +2339,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
-    start_residual = bat_timed[time_to_next] * (1 - start_part_hour) + bat_timed[time_to_next+1] * start_part_hour      # residual when charging starts
+    start_residual = interpolate(time_to_start, bat_timed)      # residual when charging starts
     if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
         print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
         print(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
@@ -2356,7 +2375,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             print(f"  Minimum charge time used")
         end1 = round_time(start_at + hours)
         # rework charge and discharge and work out grid consumption
-        start_timed = time_to_next + start_part_hour      # relative start and end time 
+        start_timed = time_to_start      # relative start and end time 
         end_timed = start_timed + hours
         charge_timed_old = [x for x in charge_timed]
         discharge_timed_old = [x for x in discharge_timed]
@@ -2404,7 +2423,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         time_to_end = int(start_timed + hours) + 1
         kwh_added = bat_timed[time_to_end] - bat_timed_old[time_to_end]
         end_part_hour = end_timed - int(end_timed)
-        old_residual = bat_timed_old[time_to_end - 1] * (1 - end_part_hour) + bat_timed_old[time_to_end] * end_part_hour
+        old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
         print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh ({net_added:.2f}kWh net)")
