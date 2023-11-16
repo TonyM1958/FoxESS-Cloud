@@ -277,42 +277,45 @@ Given the data available, the modelling works as follows:
 ### Configuration Parameters
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
-+ contingency: 20               # % of consumption to allow as contingency
-+ charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
-+ discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
-+ export_limit: None            # maximum export power. None uses the inverter power rating
-+ discharge_loss: 0.97          # loss converting battery discharge power to grid power
-+ pv_loss: 0.95                 # loss converting PV power to battery charge power
-+ grid_loss: 0.97               # loss converting grid power to battery charge power
-+ charge_loss: None             # loss converting charge power to residual
-+ inverter_power: 120           # inverter power consumption W
-+ bms_power: 50                 # BMS power consumption W
-+ bat_resistance: 0.075         # internal resistance of a battery in ohms
-+ volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
-+ nominal_soc: 60               # SoC for nominal open circuit voltage
-+ generation_days: 3            # number of days to use for average generation (1-7)
-+ consumption_days: 3           # number of days to use for average consumption (1-7)
-+ consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
-+ use_today: 21.0               # hour when today's generation and consumption data will be used
-+ min_hours: 0.25               # minimum charge time to set (in decimal hours)
-+ min_kwh: 0.5                  # minimum charge to add in kwh
-+ solcast_adjust: 100           # % adjustment to make to Solcast forecast
-+ solar_adjust:  100            # % adjustment to make to Solar forecast
-+ forecast_selection: 1         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
-+ annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
-+ time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
-+ timed_mode: 0                 # 1 = use timed changes in work mode if configured for tariff, 0 = None
-+ special_contingency: 30       # contingency for special days when consumption might be higher
-+ special_days: ['12-25', '12-26', '01-01']
-+ full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
-+ derate_temp: 21               # battery temperature in C when derating charge current is applied
-+ derate_step: 5                # step size for derating e.g. 21, 16, 11
-+ derating: [25, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C 
-
+```
+contingency: 20               # % of consumption to allow as contingency
+charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
+discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
+export_limit: None            # maximum export power. None uses the inverter power rating
+discharge_loss: 0.97          # loss converting battery discharge power to grid power
+pv_loss: 0.95                 # loss converting PV power to battery charge power
+grid_loss: 0.97               # loss converting grid power to battery charge power
+charge_loss: None             # loss converting charge power to residual
+inverter_power: 120           # inverter power consumption W
+bms_power: 50                 # BMS power consumption W
+bat_resistance: 0.075         # internal resistance of a battery in ohms
+volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
+nominal_soc: 60               # SoC for nominal open circuit voltage
+generation_days: 3            # number of days to use for average generation (1-7)
+consumption_days: 3           # number of days to use for average consumption (1-7)
+consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
+use_today: 21.0               # hour when today's generation and consumption data will be used
+min_hours: 0.25               # minimum charge time to set (in decimal hours)
+min_kwh: 0.5                  # minimum charge to add in kwh
+solcast_adjust: 100           # % adjustment to make to Solcast forecast
+solar_adjust:  100            # % adjustment to make to Solar forecast
+forecast_selection: 1         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
+annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
+time_shift: None              # offset local time by x hours. When None, 1 hour is added in British Summer Time, 0 otherwise
+timed_mode: 0                 # 1 = use timed changes in work mode if configured for tariff, 0 = None
+special_contingency: 30       # contingency for special days when consumption might be higher
+special_days: ['12-25', '12-26', '01-01']
+full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
+derate_temp: 21               # battery temperature in C when derating charge current is applied
+derate_step: 5                # step size for derating e.g. 21, 16, 11
+derating: [25, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C 
+```
 These values are stored / available in f.charge_config.
 
 The default battery open circuit voltage curve versus SoC from 0% to 100% is:
-+ lifepo4_curve = [51.00, 51.90, 52.11, 52.25, 52.39, 52.54, 52.68, 52.83, 52.97, 53.12, 53.30]
+```
+lifepo4_curve = [51.00, 51.90, 52.11, 52.25, 52.39, 52.54, 52.68, 52.83, 52.97, 53.12, 53.30]
+```
 
 ## Date Ranges
 
