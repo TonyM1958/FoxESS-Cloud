@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  13 November 2023
+Updated:  15 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.3"
+version = "0.9.4"
 debug_setting = 1
 
 # constants
@@ -1949,7 +1949,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
-lifepo4_curve = [51.00, 51.90, 52.11, 52.25, 52.39, 52.54, 52.68, 52.83, 52.97, 53.12, 53.30]
+lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 53.63, 55.00]
 
 # charge_needed settings
 charge_config = {
@@ -1962,10 +1962,10 @@ charge_config = {
     'grid_loss': 0.97,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
-    'bms_power': 35,                  # BMS power consumption W
-    'bat_resistance': 0.075,          # internal resistance of a battery
+    'bms_power': 25,                  # BMS power consumption W
+    'bat_resistance': 0.070,          # internal resistance of a battery
     'volt_curve': lifepo4_curve,      # battery OCV range from 0% to 100% SoC
-    'nominal_soc': 70,                # SoC for nominal open circuit battery voltage
+    'nominal_soc': 55,                # SoC for nominal open circuit battery voltage
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1982,7 +1982,7 @@ charge_config = {
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'derate_temp': 21,                # battery temperature where cold derating starts to be applied
     'derate_step': 5,                 # scale for derating factors in C
-    'derating': [25, 15, 10, 2]       # max charge current e.g. 5C step = 21C, 16C, 11C, 6C
+    'derating': [24, 15, 10, 2]       # max charge current e.g. 5C step = 21C, 16C, 11C, 6C
 }
 
 

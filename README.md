@@ -540,7 +540,8 @@ This setting can be:
 
 ## Version Info
 
-0.9.3<br>
+0.9.4<br>
+Update calibration of battery resistance and voltage curve to better match actual charge added.
 OCV / SoC curve added for LiFePO4 battery, replacing simple volt_swing %
 Derating updated to reduce max charge current with low temperature, using Fox derating data.
 Change to stop battery discharge at min soc when recalculating residual after charging period.
