@@ -542,8 +542,10 @@ This setting can be:
 
 ## Version Info
 
-0.9.4<br>
-Update calibration of battery resistance and voltage curve to better match actual charge added.
+0.9.5<br>
+Change derate_temp to 22 and round battery temperature.
+Adjust battery resistance and OCV to improve charge calibration.
+Increase time when target SoC > 95% from 5 to 10 minutes to allow for BMS tapering of battery current.
 OCV / SoC curve added for LiFePO4 battery, replacing simple volt_swing %
 Derating updated to reduce max charge current with low temperature, using Fox derating data.
 Change to stop battery discharge at min soc when recalculating residual after charging period.

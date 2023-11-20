@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  15 November 2023
+Updated:  17 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.4"
+version = "0.9.5"
 debug_setting = 1
 
 # constants
@@ -1963,9 +1963,9 @@ charge_config = {
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
     'bms_power': 25,                  # BMS power consumption W
-    'bat_resistance': 0.070,          # internal resistance of a battery
+    'bat_resistance': 0.0725,         # internal resistance of a battery
     'volt_curve': lifepo4_curve,      # battery OCV range from 0% to 100% SoC
-    'nominal_soc': 55,                # SoC for nominal open circuit battery voltage
+    'nominal_soc': 60,                # SoC for nominal open circuit battery voltage
     'generation_days': 3,             # number of days to use for average generation (1-7)
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
@@ -1980,9 +1980,9 @@ charge_config = {
     'special_contingency': 30,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
-    'derate_temp': 21,                # battery temperature where cold derating starts to be applied
+    'derate_temp': 22,                # battery temperature where cold derating starts to be applied
     'derate_step': 5,                 # scale for derating factors in C
-    'derating': [24, 15, 10, 2]       # max charge current e.g. 5C step = 21C, 16C, 11C, 6C
+    'derating': [24, 15, 10, 2]       # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
 }
 
 
@@ -2140,7 +2140,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     derate_temp = charge_config['derate_temp']
     if temperature > 36:
         print(f"\nHigh battery temperature may affect the charge rate")
-    elif temperature <= derate_temp:
+    elif round(temperature, 0) <= derate_temp:
         print(f"\nLow battery temperature may affect the charge rate")
         derating = charge_config['derating']
         derate_step = charge_config['derate_step']
@@ -2363,7 +2363,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         taper_time = 0
         if (start_residual + kwh_needed) >= (capacity * 0.95):
             kwh_needed = capacity - start_residual
-            taper_time = 5/60
+            taper_time = 10/60
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
         if force_charge == 2:
             hours = charge_time
