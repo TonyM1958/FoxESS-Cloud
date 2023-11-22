@@ -279,6 +279,7 @@ Given the data available, the modelling works as follows:
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
 ```
 contingency: 20               # % of consumption to allow as contingency
+capacity: None                # Battery capacity in kWh (over-rides generated value if set)
 charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 export_limit: None            # maximum export power. None uses the inverter power rating
@@ -542,7 +543,8 @@ This setting can be:
 
 ## Version Info
 
-0.9.5<br>
+0.9.6<br>
+Added battery capacity parameter to over-ride and stabilise BMS values when charge is low.
 Change derate_temp to 22 and round battery temperature.
 Adjust battery resistance and OCV to improve charge calibration.
 Increase time when target SoC > 95% from 5 to 10 minutes to allow for BMS tapering of battery current.

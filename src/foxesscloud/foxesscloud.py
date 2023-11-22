@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  17 November 2023
+Updated:  22 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.5"
+version = "0.9.6"
 debug_setting = 1
 
 # constants
@@ -1954,6 +1954,7 @@ lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 
 # charge_needed settings
 charge_config = {
     'contingency': 20,                # % of consumption to allow as contingency
+    'capacity': None,                 # Battery capacity (over-rides calculated value)
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
@@ -1963,7 +1964,7 @@ charge_config = {
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
     'bms_power': 25,                  # BMS power consumption W
-    'bat_resistance': 0.0725,         # internal resistance of a battery
+    'bat_resistance': 0.070,          # internal resistance of a battery
     'volt_curve': lifepo4_curve,      # battery OCV range from 0% to 100% SoC
     'nominal_soc': 60,                # SoC for nominal open circuit battery voltage
     'generation_days': 3,             # number of days to use for average generation (1-7)
@@ -2099,9 +2100,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']/1000
+        capacity = residual * 100 / current_soc if current_soc > 0 else residual
+        capacity = charge_config['capacity'] if charge_config.get('capacity') is not None else capacity
     else:
         current_soc = test_soc
-        residual = test_soc * 8.2 / 100
+        capacity = 8.2
+        residual = test_soc * capacity / 100
         min_soc = 10
         bat_volt = 122 / (1 + 0.03 * (100 - test_soc) / 90)
         bat_power = 0.0
@@ -2113,7 +2117,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_count = int(bat_volt / volt_nominal + 0.5)
     bat_resistance = charge_config['bat_resistance'] * bat_count
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
-    capacity = residual * 100 / current_soc if current_soc > 0 else residual
     reserve = capacity * min_soc / 100
     available = residual - reserve
     print(f"\nBattery Info:")
@@ -2363,7 +2366,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         taper_time = 0
         if (start_residual + kwh_needed) >= (capacity * 0.95):
             kwh_needed = capacity - start_residual
-            taper_time = 10/60
+            taper_time = 6/60
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
         if force_charge == 2:
             hours = charge_time
@@ -2842,8 +2845,8 @@ class Solcast :
                         if hour not in self.daily[date]['hourly'].keys():
                             self.daily[date]['hourly'][hour] = 0.0
                         value = c_float(f.get('pv_estimate')) / 2                   # 30 minute power kw, yield / 2 = kwh
-                        self.daily[date]['kwh'] = self.daily[date]['kwh'] + value
-                        self.daily[date]['hourly'][hour] = self.daily[date]['hourly'][hour] + value
+                        self.daily[date]['kwh'] += value
+                        self.daily[date]['hourly'][hour] += value
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -3025,7 +3028,7 @@ class Solar :
                 for d in whd.keys():
                     if d not in self.daily.keys():
                         self.daily[d] = {'hourly': {}, 'kwh': 0.0}
-                    self.daily[d]['kwh'] = self.daily[d]['kwh'] + whd[d] / 1000
+                    self.daily[d]['kwh'] += whd[d] / 1000
             if self.results[k].get('watt_hours_period') is not None:
                 whp = self.results[k]['watt_hours_period']
                 for dt in whp.keys():
@@ -3033,7 +3036,7 @@ class Solar :
                     hour = int(dt[11:13])
                     if hour not in self.daily[date]['hourly'].keys():
                         self.daily[date]['hourly'][hour] = 0.0
-                    self.daily[date]['hourly'][hour] = (self.daily[date]['hourly'][hour] + whp[dt]) / 1000
+                    self.daily[date]['hourly'][hour] += whp[dt] / 1000
         # fill out hourly forecast to cover 24 hours
         for d in self.daily.keys():
             for h in range(0,24):
