@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  22 November 2023
+Updated:  28 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.6"
+version = "0.9.7"
 debug_setting = 1
 
 # constants
@@ -1963,8 +1963,8 @@ charge_config = {
     'grid_loss': 0.97,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
-    'bms_power': 25,                  # BMS power consumption W
-    'bat_resistance': 0.070,          # internal resistance of a battery
+    'bms_power': 27,                  # BMS power consumption W
+    'bat_resistance': 0.072,          # internal resistance of a battery
     'volt_curve': lifepo4_curve,      # battery OCV range from 0% to 100% SoC
     'nominal_soc': 60,                # SoC for nominal open circuit battery voltage
     'generation_days': 3,             # number of days to use for average generation (1-7)
@@ -2429,10 +2429,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh ({net_added:.2f}kWh net)")
+        print(f"\nCharging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
+#        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh ({net_added:.2f}kWh net)")
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
-        print(f"  New SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
+#        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
+        print(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
         print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
         for i in range(0, run_time):
@@ -2466,8 +2467,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             plt.plot(x_timed, bat_timed, label='Battery', color='blue')
             plt.plot(x_timed, generation_timed, label='Generation', color='green')
             plt.plot(x_timed, consumption_timed, label='Consumption', color='red')
-            if kwh_needed > 0:
-                plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='blue', linestyle='dotted')
+#            if kwh_needed > 0:
+#                plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='blue', linestyle='dotted')
             if show_plot == 3:
                 plt.plot(x_timed, charge_timed, label='Charge', color='orange', linestyle='dotted')
                 plt.plot(x_timed, discharge_timed, label='Discharge', color='brown', linestyle='dotted')
@@ -3010,10 +3011,10 @@ class Solar :
                 response = requests.get(solar_url + self.api_key + 'estimate/' + path, params = params)
                 if response.status_code != 200:
                     if response.status_code == 429:
-                        print(f"\nForecast.solar API call limit reached for today")
+                        print(f"\nSolar: forecast.solar API call limit reached for today")
                     else:
                         print(f"** Solar() got response code: {response.status_code}")
-                        return
+                    return
                 self.results[name] = response.json().get('result')
             if self.save is not None :
                 if debug_setting > 0 and not quiet:
@@ -3116,6 +3117,9 @@ class Solar :
         elif day == 'tomorrow':
             day = self.tomorrow
         # plot forecasts
+        if self.daily.get(day) is None:
+            print(f"Solar: no data for {day}")
+            return
         hours = sorted([h for h in self.daily[day]['hourly'].keys()])
         x = [hours_time(h) for h in hours]
         y = [self.daily[day]['hourly'][h] for h in hours]

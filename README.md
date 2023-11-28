@@ -543,7 +543,9 @@ This setting can be:
 
 ## Version Info
 
-0.9.6<br>
+0.9.7<br>
+Tweaks to charging parameters.
+Simplify log and plots for charge_needed().
 Added battery capacity parameter to over-ride and stabilise BMS values when charge is low.
 Change derate_temp to 22 and round battery temperature.
 Adjust battery resistance and OCV to improve charge calibration.
