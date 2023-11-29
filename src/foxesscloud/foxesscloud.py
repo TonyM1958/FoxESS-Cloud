@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  28 November 2023
+Updated:  29 November 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.7"
+version = "0.9.8"
 debug_setting = 1
 
 # constants
@@ -133,7 +133,7 @@ def get_token():
     device = None
     token['user_agent'] = user_agent_rotator.get_random_user_agent()
     headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    if username is None or password is None or username == '<my.fox_username>' or password == 'my.fox_password':
+    if username is None or password is None or username == 'my.fox_username' or password == 'my.fox_password':
         print(f"** please configure your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
@@ -545,7 +545,7 @@ def time_period(t):
         result += f" Charge from grid" if t['enableGrid'] else f" Force Charge"
     return result
 
-def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None, adjust = 0):
+def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None, adjust = 0, force = 0):
     global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
@@ -553,6 +553,11 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         print(f"** set_charge(): invalid battery settings")
         print(battery_settings)
         return None
+    if get_schedule().get('enable'):
+        if force == 0:
+            print(f"** set_charge(): cannot set charge when a schedule is enabled")
+            return None
+        set_schedule(enable=0)
     # configure time period 1
     if st1 is not None:
         if st1 == en1:
@@ -639,10 +644,15 @@ def get_min():
 # set min soc from battery_settings or parameters
 ##################################################################################################
 
-def set_min(minGridSoc = None, minSoc = None):
+def set_min(minGridSoc = None, minSoc = None, force = 0):
     global token, device_sn, bat_settings, debug_setting, messages
     if get_device() is None:
         return None
+    if get_schedule().get('enable'):
+        if force == 0:
+            print(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
+            return None
+        set_schedule(enable=0)
     if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
         print(f"** no min soc settings")
         print(battery_settings)
@@ -723,13 +733,18 @@ def get_work_mode():
 work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
 settable_modes = work_modes[:3]
 
-def set_work_mode(mode):
+def set_work_mode(mode, force = 0):
     global token, device_id, work_modes, work_mode, debug_setting, messages
     if get_device() is None:
         return None
     if mode not in settable_modes:
         print(f"** work mode: must be one of {settable_modes}")
         return None
+    if get_schedule().get('enable'):
+        if force == 0:
+            print(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
+            return None
+        set_schedule(enable=0)
     if debug_setting > 1:
         print(f"set_work_mode(): {mode}")
         return None
@@ -1983,9 +1998,9 @@ charge_config = {
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'derate_temp': 22,                # battery temperature where cold derating starts to be applied
     'derate_step': 5,                 # scale for derating factors in C
-    'derating': [24, 15, 10, 2]       # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
+    'derating': [24, 15, 10, 2],      # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
+    'force': 1                        # 0 = don't over-ride schedule, 1 = disable schedule
 }
-
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
@@ -2489,7 +2504,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if update_settings in [1,3]:
         # adjust times for clock changes
         adjust = hour_adjustment if hour_adjustment != 0 and start_hour > change_hour else 0
-        set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust)
+
+        set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust, force = charge_config['force'])
     else:
         print(f"\nNo changes made to charge settings")
     # timed work mode change

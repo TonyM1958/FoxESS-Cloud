@@ -308,7 +308,8 @@ special_days: ['12-25', '12-26', '01-01']
 full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
 derate_temp: 21               # battery temperature in C when derating charge current is applied
 derate_step: 5                # step size for derating e.g. 21, 16, 11
-derating: [24, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C 
+derating: [24, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C
+force: 1                      # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
 ```
 These values are stored / available in f.charge_config.
 
@@ -543,7 +544,9 @@ This setting can be:
 
 ## Version Info
 
-0.9.7<br>
+0.9.8<br>
+Add force parameter to set_charge(), set_min(), set_work_mode() to disable strategy periods.
+Add force parameter to charge_needed() to disable strategy periods.
 Tweaks to charging parameters.
 Simplify log and plots for charge_needed().
 Added battery capacity parameter to over-ride and stabilise BMS values when charge is low.
