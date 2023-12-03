@@ -11,7 +11,7 @@ spec:
     PV1: '''East'',lat=51.1789,lon=-1.8262,dec=30,az=260,kwp=3.2,inv=3.6'
     PV2: '''West'',lat=51.1789,lon=-1.8262,dec=30,az=80,kwp=3.2,inv=3.6'
     TARIFF_PARAMS: '''flux'',region=''H'''
-    CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0
+    CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0,force_charge=0
   working_directory: /home/jovyan/workspace
   extra_packages:
     pip:
@@ -70,6 +70,6 @@ spec:
   shared_folders: []
   command: python script.py
   scale: 1
-  schedule: 1 11,12,21,22 * * *
+  schedule: 1 22,23 * * *
   concurrency_policy: Allow
   retries: 0
