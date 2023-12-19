@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  29 November 2023
+Updated:  18 December 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.8"
+version = "0.9.9"
 debug_setting = 1
 
 # constants
@@ -692,6 +692,79 @@ def get_settings():
     if battery_settings is None or battery_settings.get('minGridSoc') is None:
         get_min()
     return battery_settings
+
+##################################################################################################
+# get remote settings
+##################################################################################################
+
+# ui is locked by signed header from Fox app v2.0
+def get_ui():
+    global token, device_id, debug_setting, messages
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting ui settings")
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    params = {'deviceID': device_id}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/ui", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_ui() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        print(f"** get_ui(), no result data, {errno_message(errno)}")
+        return None
+    return result
+
+def get_remote_settings(key='h115__17'):
+    global token, device_id, debug_setting, messages
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        print(f"getting remote settings")
+    if type(key) is list:
+        values = {}
+        for k in key:
+            v = get_remote_settings(k)
+            if v is not None:
+                for x in v.keys():
+                    values[x] = v[x]
+        return values
+    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
+    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
+    if response.status_code != 200:
+        print(f"** get_remote_settings() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        print(f"** get_remote_settings(), no result data, {errno_message(errno)}")
+        return None
+    values = result.get('values')
+    if values is None:
+        print(f"** get_remote_settings(), no values data")
+        return None
+    return values
+
+def get_cell_temps():
+    values = get_remote_settings('h115__17')
+    cell_temps = []
+    for k in sorted(values.keys()):
+        t = c_float(values[k])
+        if t > -50:
+            cell_temps.append(t)
+    return cell_temps
+
+def get_cell_volts():
+    values = get_remote_settings(['h115__14', 'h115__15', 'h115__16'])
+    cell_volts = []
+    for k in sorted(values.keys()):
+        v = c_float(values[k])
+        if v != 0:
+            cell_volts.append(v)
+    return cell_volts
 
 ##################################################################################################
 # get work mode
@@ -1680,7 +1753,7 @@ bg_driver = {
 # custom time periods / template
 custom_periods = {'name': 'Custom',
     'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
-    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'off_peak2': {'start': 15.0, 'end': 16.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
     'forecast_times': [22, 23]
@@ -2367,10 +2440,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         end1 = start_at
     else:
         charge_message = "with charge added"
-        if full_charge is not None or force_charge == 2:
-            kwh_needed = capacity - start_residual
-            print(f"\nFull charge requires {kwh_needed:.2f} kWh")
-        elif test_charge is None:
+        if test_charge is None:
             min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
             print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
         else:
@@ -2378,16 +2448,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             charge_message = "** test charge **"
             kwh_needed = test_charge
         # work out time to add kwh_needed to battery
-        taper_time = 0
-        if (start_residual + kwh_needed) >= (capacity * 0.95):
-            kwh_needed = capacity - start_residual
-            taper_time = 6/60
+        taper_time = 10/60 if (start_residual + kwh_needed) >= (capacity * 0.95) else 0
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
-        if force_charge == 2:
+        if full_charge is not None or force_charge == 2 or hours > charge_time:
+            kwh_needed = capacity - start_residual
             hours = charge_time
-        elif hours > charge_time:
-            hours = charge_time
-            print(f"  Maximum charge time used")
+            print(f"  Full charge is expected to add {kwh_needed:.2f} kWh")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
             print(f"  Minimum charge time used")
