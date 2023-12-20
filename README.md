@@ -1,9 +1,18 @@
 # FoxESS-Cloud
+
+** AS OF 20th December 2023, FOX ADDED HTTP REQUEST SIGNING AND LOCKED OUT 3RD PARTY APPS.
+SORRY BUT THIS NOW MEANS THIS LIBRARY NO LONGER WORKS **
+
+
+-------------------------
+
+
 This site contains sample python code for accessing the Fox cloud data via the REST API used by the Fox ESS Cloud web site and app.
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
 **This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.**
 Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
+
 
 # Cloud API
 
@@ -68,19 +77,26 @@ f.get_battery()
 f.get_settings()
 f.get_charge()
 f.get_min()
+f.get_remote_settings()
+f.get_cell_temps()
+f.get_cell_volts
 f.get_work_mode()
 f.get_templates()
 f.get_schedule()
 f.get_earnings()
 
 ```
-Each of these calls will return a dictionary containing the relevant information.
+Each of these calls will return a dictionary or list containing the relevant information.
 
 get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
 
 get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
 
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
+
+get_remote_settings() will return a dictionary of settings given a query key
+
+get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings()
 
 get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
@@ -544,7 +560,8 @@ This setting can be:
 
 ## Version Info
 
-0.9.8<br>
+0.9.9<br>
+Add get_remote_settings(), get_cell_temps(), get_cell_volts()
 Add force parameter to set_charge(), set_min(), set_work_mode() to disable strategy periods.
 Add force parameter to charge_needed() to disable strategy periods.
 Tweaks to charging parameters.
