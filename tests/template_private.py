@@ -3,6 +3,7 @@
 fox_username = "<your username>"
 fox_password = "<your username>"
 fox_device_sn = ""
+time_zone = "Europe/London"
 
 # PV Output
 pv_api_key = "<your api key>"
