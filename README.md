@@ -1,12 +1,5 @@
 # FoxESS-Cloud
 
-**AS OF 20TH DECEMBER 2023, FOX ADDED HTTP REQUEST SIGNING AND LOCKED OUT 3RD PARTY APPS.
-SORRY BUT THIS NOW MEANS THIS LIBRARY NO LONGER WORKS**
-
-
--------------------------
-
-
 This site contains sample python code for accessing the Fox cloud data via the REST API used by the Fox ESS Cloud web site and app.
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
