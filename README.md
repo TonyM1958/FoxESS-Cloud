@@ -1,5 +1,6 @@
 # FoxESS-Cloud
 
+
 This site contains sample python code for accessing the Fox cloud data via the REST API used by the Fox ESS Cloud web site and app.
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
@@ -13,7 +14,6 @@ Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/mai
 To initialise a Jupyter Lab notebook to use the cloud API, copy the following text and edit the configuration variables needed to add your values:
 
 ```
-!pip install random-user-agent --root-user-action=ignore --quiet
 !pip install foxesscloud --root-user-action=ignore --quiet
 import foxesscloud.foxesscloud as f
 
@@ -21,6 +21,7 @@ import foxesscloud.foxesscloud as f
 f.username = "my.fox_username"
 f.password = "my.fox_password"
 f.device_sn = "my.fox_device_sn"
+f.time_zone = "Europe/London"
 
 f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
@@ -553,8 +554,13 @@ This setting can be:
 
 ## Version Info
 
+1.0.0<br>
+Change to force full charge if charge_needed exceeds battery capacity.
+
 0.9.9<br>
-Add get_remote_settings(), get_cell_temps(), get_cell_volts()
+Add signature to Fox http requests.
+Remove requirement to load random_user_agent.
+Add get_remote_settings(), get_cell_temps(), get_cell_volts().
 Add force parameter to set_charge(), set_min(), set_work_mode() to disable strategy periods.
 Add force parameter to charge_needed() to disable strategy periods.
 Tweaks to charging parameters.

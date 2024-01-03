@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 December 2023
+Updated:  24 December 2023
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "0.9.9"
+version = "1.0.0"
 debug_setting = 1
 
 # constants
@@ -25,19 +25,25 @@ print(f"FoxESS-Cloud version {version}")
 
 import os.path
 import json
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 import requests
 from requests.auth import HTTPBasicAuth
 import hashlib
-from random_user_agent.user_agent import UserAgent
-from random_user_agent.params import SoftwareName, OperatingSystem
+#from random_user_agent.user_agent import UserAgent
+#from random_user_agent.params import SoftwareName, OperatingSystem
 import math
 import matplotlib.pyplot as plt
 
-software_names = [SoftwareName.CHROME.value]
-operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
-user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
+#software_names = [SoftwareName.CHROME.value]
+#operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
+#user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
+
+fox_domain = "https://www.foxesscloud.com"
+fox_client_id = "5245784"
+fox_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+time_zone = 'Europe/London'
 
 ##################################################################################################
 ##################################################################################################
@@ -65,6 +71,35 @@ def interpolate(f, v):
     x = f - i
     return v[i] * (1-x) + v[i+1] * x
 
+# build request header with signing
+
+def signed_header(path, login = 0):
+    global token_store, debug_setting
+    headers = {}
+    token = token_store['token'] if login == 0 else ""
+    lang = token_store['lang']
+    timestamp = str(round(time.time() * 1000))
+    headers['Token'] = token
+    headers['Lang'] = lang
+    headers['User-Agent'] = token_store['user_agent']
+    headers['Timezone'] = token_store['time_zone']
+    headers['Timestamp'] = timestamp
+    headers['Content-Type'] = 'application/json;charset=UTF-8'
+    headers['Signature'] = hashlib.md5(fr"{path}\r\n{headers['Token']}\r\n{headers['Lang']}\r\n{headers['Timestamp']}".encode('UTF-8')).hexdigest() + '.' + token_store['client_id']
+    if debug_setting > 1:
+        print(f"path = {path}")
+        print(f"headers = {headers}")
+    return headers
+
+def signed_get(path, params = None, login = 0):
+    global fox_domain
+    return requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
+
+def signed_post(path, data = None, login = 0):
+    global fox_domain
+    return requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data)
+
+
 ##################################################################################################
 # get error messages
 ##################################################################################################
@@ -73,11 +108,11 @@ messages = None
 user_agent = None
 
 def get_messages():
-    global debug_setting, messages, user_agent
+    global debug_setting, messages, fox_user_agent
     if debug_setting > 1:
         print(f"getting messages")
-    headers = {'User-Agent': user_agent_rotator.get_random_user_agent(), 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/errors/message", headers=headers)
+    headers = {'User-Agent': fox_user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
+    response = signed_get(path="/c/v0/errors/message", login=1)
     if response.status_code != 200:
         print(f"** get_messages() got response code: {response.status_code}")
         return None
@@ -106,38 +141,40 @@ def errno_message(errno, lang='en'):
 username = None
 password = None
 
-token = None
+token_store = None
 token_save = "token.txt"
 token_renewal = timedelta(hours=2).seconds       # interval before token needs to be renewed
 
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
-    global username, password, token, device_list, device, device_id, debug_setting, token_save, token_renewal, messages
+    global username, password, fox_user_agent, fox_client_id, time_zone, token_store, device_list, device, device_id, debug_setting, token_save, token_renewal, messages
+    if token_store is None:
+        token_store = {'token': None, 'valid_from': None, 'valid_for': token_renewal, 'user_agent': fox_user_agent, 'lang': 'en', 'time_zone': time_zone, 'client_id': fox_client_id}
+    if token_store['token'] is None and os.path.exists(token_save):
+        file = open(token_save)
+        token_store = json.load(file)
+        file.close()
+        if token_store.get('time_zone') is None:
+            token_store['time_zone'] = time_zone
+        if token_store.get('client_id') is None:
+            token_store['client_id'] = fox_client_id
     if messages is None:
         get_messages()
-    if token is None:
-        token = {'value': None, 'valid_from': None, 'valid_for': token_renewal, 'user_agent': None, 'lang': 'en'}
-    if token['value'] is None and os.path.exists(token_save):
-        file = open(token_save)
-        token = json.load(file)
-        file.close()
     time_now = datetime.now()
-    if token['value'] is not None and token['valid_from'] is not None:
-        if time_now < datetime.fromisoformat(token['valid_from']) + timedelta(seconds=token['valid_for']):
+    if token_store.get('token') is not None and token_store['valid_from'] is not None:
+        if time_now < datetime.fromisoformat(token_store['valid_from']) + timedelta(seconds=token_store['valid_for']):
             if debug_setting > 1:
                 print(f"token is still valid")
-            return token['value']
+            return token_store['token']
     if debug_setting > 1:
         print(f"loading new token")
     device_list = None
     device = None
-    token['user_agent'] = user_agent_rotator.get_random_user_agent()
-    headers = {'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     if username is None or password is None or username == 'my.fox_username' or password == 'my.fox_password':
         print(f"** please configure your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/user/login", headers=headers, data=json.dumps(credentials))
+    response = signed_post(path="/c/v0/user/login", data=json.dumps(credentials), login=1)
     if response.status_code != 200:
         print(f"** could not login to Fox ESS Cloud - check your username and password - got response code: {response.status_code}")
         return None
@@ -146,15 +183,15 @@ def get_token():
         errno = response.json().get('errno')
         print(f"** get_token(), no result data, {errno_message(errno)}")
         return None
-    token['value'] = result.get('token')
-    if token['value'] is None:
+    token_store['token'] = result.get('token')
+    if token_store['token'] is None:
         print(f"** no token  in result data")
-    token['valid_from'] = time_now.isoformat()
+    token_store['valid_from'] = time_now.isoformat()
     if token_save is not None :
         file = open(token_save, 'w')
-        json.dump(token, file, indent=4, ensure_ascii= False)
+        json.dump(token_store, file, indent=4, ensure_ascii=False)
         file.close()
-    return token['value']
+    return token_store['token']
 
 ##################################################################################################
 # get user / access info
@@ -168,19 +205,17 @@ def get_info():
         return None
     if debug_setting > 1:
         print(f"getting access")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/user/info", headers=headers)
+    response = signed_get(path="/c/v0/user/info")
     if response.status_code != 200:
         print(f"** get_info() got info response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(type(errno))
         print(f"** get_info(), no result data, {errno_message(errno)}")
         return None
     info = result
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/user/access", headers=headers)
+    response = signed_get(path="/c/v0/user/access")
     if response.status_code != 200:
         print(f"** get_info() got access response code: {response.status_code}")
         return None
@@ -203,9 +238,8 @@ def get_status(station=0):
         return None
     if debug_setting > 1:
         print(f"getting status")
-    url = "https://www.foxesscloud.com/c/v0/device/status/all" if station == 0 else "https://www.foxesscloud.com/c/v0/plant/status/all"
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    response = requests.get(url=url, headers=headers)
+    path = "/c/v0/device/status/all" if station == 0 else "/c/v0/plant/status/all"
+    response = signed_get(path=path)
     if response.status_code != 200:
         print(f"** get_status() got response code: {response.status_code}")
         return None
@@ -237,9 +271,8 @@ def get_site(name=None):
         print(f"getting sites")
     site = None
     station_id = None
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
-    response = requests.post(url="https://www.foxesscloud.com/c/v1/plant/list", headers=headers, data=json.dumps(query))
+    response = signed_post(path="/c/v1/plant/list", data=json.dumps(query))
     if response.status_code != 200:
         print(f"** get_sites() got response code: {response.status_code}")
         return None
@@ -286,9 +319,8 @@ def get_logger(sn=None):
         return logger
     if debug_setting > 1:
         print(f"getting loggers")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/module/list", headers=headers, data=json.dumps(query))
+    response = signed_post(path="/c/v0/module/list", data=json.dumps(query))
     if response.status_code != 200:
         print(f"** get_logger() got response code: {response.status_code}")
         return None
@@ -344,9 +376,8 @@ def get_device(sn=None):
     if sn is None and device_sn is not None and len(device_sn) == 15:
         sn = device_sn
     # get device list
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'queryDate': {'begin': 0, 'end':0} }
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/list", headers=headers, data=json.dumps(query))
+    query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'queryDate': {'begin': 0, 'end':0}}}
+    response = signed_post(path="/c/v0/device/list", data=json.dumps(query))
     if response.status_code != 200:
         print(f"** get_device() got response code: {response.status_code}")
         return None
@@ -428,10 +459,9 @@ def get_vars():
         return None
     if debug_setting > 1:
         print(f"getting variables")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
     # v1 api required for full list with {name, variable, unit}
-    response = requests.get(url="https://www.foxesscloud.com/c/v1/device/variables", params=params, headers=headers)
+    response = signed_get(path="/c/v1/device/variables", params=params)
     if response.status_code != 200:
         print(f"** get_vars() got response code: {response.status_code}")
         return None
@@ -458,9 +488,8 @@ def get_firmware():
         return None
     if debug_setting > 1:
         print(f"getting firmware")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/addressbook", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/addressbook", params=params)
     if response.status_code != 200:
         print(f"** get_firmware() got response code: {response.status_code}")
         return None
@@ -488,9 +517,8 @@ def get_battery():
         return None
     if debug_setting > 1:
         print(f"getting battery")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'id': device_id}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/info", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/battery/info", params=params)
     if response.status_code != 200:
         print(f"** get_battery() got response code: {response.status_code}")
         return None
@@ -512,9 +540,8 @@ def get_charge():
         return None
     if debug_setting > 1:
         print(f"getting charge times")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/time/get", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/battery/time/get", params=params)
     if response.status_code != 200:
         print(f"** get_charge() got response code: {response.status_code}")
         return None
@@ -596,9 +623,8 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
         print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
     # set charge times
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/time/set", headers=headers, data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/battery/time/set", data=json.dumps(data))
     if response.status_code != 200:
         print(f"** set_charge() got response code: {response.status_code}")
         return None
@@ -623,9 +649,8 @@ def get_min():
         return None
     if debug_setting > 1:
         print(f"getting min soc")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'sn': device_sn}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/battery/soc/get", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/battery/soc/get", params=params)
     if response.status_code != 200:
         print(f"** get_min() got response code: {response.status_code}")
         return None
@@ -666,9 +691,8 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
         return None
     if debug_setting > 0:
         print(f"\nSetting minSoc = {battery_settings['minSoc']}, minGridSoc = {battery_settings['minGridSoc']}")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/battery/soc/set", headers=headers, data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/battery/soc/set", data=json.dumps(data))
     if response.status_code != 200:
         print(f"** set_min() got response code: {response.status_code}")
         return None
@@ -697,16 +721,15 @@ def get_settings():
 # get remote settings
 ##################################################################################################
 
-# ui is locked by signed header from Fox app v2.0
+# ui is locked for end user
 def get_ui():
     global token, device_id, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
         print(f"getting ui settings")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceID': device_id}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/ui", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/setting/ui", params=params)
     if response.status_code != 200:
         print(f"** get_ui() got response code: {response.status_code}")
         return None
@@ -731,9 +754,8 @@ def get_remote_settings(key='h115__17'):
                 for x in v.keys():
                     values[x] = v[x]
         return values
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/setting/get", params=params)
     if response.status_code != 200:
         print(f"** get_remote_settings() got response code: {response.status_code}")
         return None
@@ -778,9 +800,8 @@ def get_work_mode():
         return None
     if debug_setting > 1:
         print(f"getting work mode")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
-    response = requests.get(url="https://www.foxesscloud.com/c/v0/device/setting/get", params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/setting/get", params=params)
     if response.status_code != 200:
         print(f"** get_work_mode() got response code: {response.status_code}")
         return None
@@ -823,9 +844,8 @@ def set_work_mode(mode, force = 0):
         return None
     if debug_setting > 0:
         print(f"\nSetting work mode: {mode}")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
-    response = requests.post(url="https://www.foxesscloud.com/c/v0/device/setting/set", headers=headers, data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/setting/set", data=json.dumps(data))
     if response.status_code != 200:
         print(f"** set_work_mode() got response code: {response.status_code}")
         return None
@@ -854,9 +874,8 @@ def get_schedule():
         return None
     if debug_setting > 1:
         print(f"getting schedule")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
-    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/list", params=params, headers=headers)
+    response = signed_get(path="/generic/v0/device/scheduler/list", params=params)
     if response.status_code != 200:
         print(f"** get_schedule() got response code: {response.status_code}")
         return None
@@ -878,9 +897,8 @@ def get_template_detail(template):
         return None
     if debug_setting > 1:
         print(f"getting template detail")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'templateID': template, 'deviceSN': device_sn}
-    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/detail", params=params, headers=headers)
+    response = signed_get(path="/generic/v0/device/scheduler/detail", params=params)
     if response.status_code != 200:
         print(f"** get_schedule() got response code: {response.status_code}")
         return None
@@ -907,9 +925,8 @@ def get_templates(template_type=[1,2]):
         return templates
     if debug_setting > 1:
         print(f"getting templates")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'templateType': template_type, 'deviceSN': device_sn}
-    response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/edit/list", params=params, headers=headers)
+    response = signed_get(path="/generic/v0/device/scheduler/edit/list", params=params)
     if response.status_code != 200:
         print(f"** get_schedule() got response code: {response.status_code}")
         return None
@@ -987,12 +1004,11 @@ def set_schedule(enable=1, periods=None, template=None):
     if debug_setting > 1:
         print(f"set_schedule(): enable = {enable}, periods = {periods}, template={template}")
         return None
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {'deviceSN': device_sn}
     if enable == 0:
         if debug_setting > 0:
             print(f"\nDisabling schedule")
-        response = requests.get(url="https://www.foxesscloud.com/generic/v0/device/scheduler/disable", params=params, headers=headers)
+        response = signed_get(path="/generic/v0/device/scheduler/disable", params=params)
         if response.status_code != 200:
             print(f"** set_schedule() got disable response code: {response.status_code}")
             return None
@@ -1019,7 +1035,7 @@ def set_schedule(enable=1, periods=None, template=None):
             return None
         if debug_setting > 0:
             print(f"\nEnabling schedule")
-        response = requests.post(url="https://www.foxesscloud.com/generic/v0/device/scheduler/enable", headers=headers, data=json.dumps(data))
+        response = signed_post(path="/generic/v0/device/scheduler/enable", data=json.dumps(data))
         if response.status_code != 200:
             print(f"** set_schedule() got enable response code: {response.status_code}")
             return None
@@ -1088,9 +1104,8 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
     if debug_setting > 1:
         print(f"getting raw data")
     if load is None:
-        headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
         query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
-        response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/raw", headers=headers, data=json.dumps(query))
+        response = signed_post(path="/c/v0/device/history/raw", data=json.dumps(query))
         if response.status_code != 200:
             print(f"** get_raw() got response code: {response.status_code}")
             return None
@@ -1110,8 +1125,14 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         file.close()
     for var in result:
         var['date'] = d[0:10]
-    if summary == 0 or time_span == 'hour':
-        if plot > 0:
+    if summary <= 0 or time_span == 'hour':
+        if summary == -1:     # return last value only for each variable
+            for v in result:
+                v['time'] = v['data'][-1]['time'][11:16]
+                v['value'] = v['data'][-1]['value']
+                del v['data']
+#                del v['date']
+        elif plot > 0:
             plot_raw(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
@@ -1305,7 +1326,6 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         summary = 1
     if summary == 0 and report_type == 'week':
         report_type = 'day'
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     if d is None:
         d = datetime.strftime(datetime.now(), "%Y-%m-%d")
     if v is None:
@@ -1327,7 +1347,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         side_date = query_date(d, -7) if report_type == 'week' else main_date
         if report_type == 'day' or main_date['month'] != side_date['month']:
             query = {id_name: id_code, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
-            response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
+            response = signed_post(path="/c/v0/device/history/report", data=json.dumps(query))
             if response.status_code != 200:
                 print(f"** get_report() side report got response code: {response.status_code}")
                 return None
@@ -1343,7 +1363,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                             data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
     if summary < 2:
         query = {id_name: id_code, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
-        response = requests.post(url="https://www.foxesscloud.com/c/v0/device/history/report", headers=headers, data=json.dumps(query))
+        response = signed_post(path="/c/v0/device/history/report", data=json.dumps(query))
         if response.status_code != 200:
             print(f"** get_report() main report got response code: {response.status_code}")
             return None
@@ -1486,7 +1506,7 @@ def plot_report(result, plot=1, station=0):
                 title = f"Month of {month_names[int(d[5:7])-1]} {d[:4]} / "
             elif types[0] == 'year':
                 title = f"Year {d[:4]} / "
-            if len(vars) == 1 or plot == 1:
+            if len(vars) == 1 or plot == 1 or len(dates) > 1:
                 title = f"{name} / {title}kWh / "
             else:
                 title = f"{title} kWh / "
@@ -1508,12 +1528,10 @@ def get_earnings():
         return None
     id_name = 'deviceID'
     id_code = device_id
-    url = "https://www.foxesscloud.com/c/v0/device/earnings"
     if debug_setting > 1:
         print(f"getting earnings")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     params = {id_name: id_code}
-    response = requests.get(url=url, params=params, headers=headers)
+    response = signed_get(path="/c/v0/device/earnings", params=params)
     if response.status_code != 200:
         print(f"** get_earnings() got response code: {response.status_code}")
         return None
@@ -1523,34 +1541,6 @@ def get_earnings():
         print(f"** get_earnings(), no result data, {errno_message(errno)}")
         return None
     return result
-
-##################################################################################################
-# get remote setting
-##################################################################################################
-
-def get_remote_setting():
-    global token, device_id, station_id, var_list, debug_setting, messages
-    if get_device() is None:
-        return None
-    id_name = 'id'
-    id_code = device_id
-    url = "https://www.foxesscloud.com/bus/device/inverter/remoteSetting"
-    if debug_setting > 1:
-        print(f"getting remote setting")
-    headers = {'token': token['value'], 'User-Agent': token['user_agent'], 'lang': token['lang'], 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
-    params = {id_name: id_code}
-    response = requests.get(url=url, params=params, headers=headers)
-    if response.status_code != 200:
-        print(f"** get_remote_setting() got response code: {response.status_code}")
-        return None
-    return response.text
-    result = response.json().get('result')
-    if result is None:
-        errno = response.json().get('errno')
-        print(f"** get_remote_setting(), no result data, {errno_message(errno)}")
-        return None
-    return result
-
 
 
 ##################################################################################################
@@ -1563,7 +1553,7 @@ def get_remote_setting():
 # Time and charge period functions
 ##################################################################################################
 # times are held either as text HH:MM or HH:MM:SS or as decimal hours e.g. 01.:30 = 1.5
-# deimal hours allows maths operations to be performed simply
+# decimal hours allows maths operations to be performed simply
 
 # time shift from UTC (before any DST adjustment)
 time_shift = 0
@@ -1658,7 +1648,7 @@ def british_summer_time(d=None):
         dat = datetime.strptime(d[:10], '%Y-%m-%d')
         hour = int(d[11:13]) if len(d) >= 16 else 12
     else:
-        now = datetime.utcnow()
+        now = datetime.now(tz=timezone.utc)
         dat =  d.date() if d is not None else now.date()
         hour = d.hour if d is not None else now.hour 
     start_date = dat.replace(month=3, day=31)
@@ -1799,7 +1789,7 @@ def get_agile_period(d=None):
     if d is not None and len(d) < 11:
         d += " 18:00"
     # get dates and times
-    system_time = (datetime.utcnow() + timedelta(hours=time_shift)) if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
     time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
     # adjust system to get local time now
     now = system_time + timedelta(hours=time_offset)
@@ -2066,7 +2056,7 @@ charge_config = {
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'timed_mode': 0,                  # 1 = apply timed work mode, 0 = None
-    'special_contingency': 30,        # contingency for special days when consumption might be higher
+    'special_contingency': 33,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'derate_temp': 22,                # battery temperature where cold derating starts to be applied
@@ -2114,7 +2104,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
-    system_time = (datetime.utcnow() + timedelta(hours=time_shift)) if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')
+    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')
     time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
     now = system_time + timedelta(hours=time_offset)
     today = datetime.strftime(now, '%Y-%m-%d')
@@ -2173,9 +2163,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
         print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
-#        return None
-    # get battery info from inverter
-    get_settings()      # also needed to fetch data on the inverter
+    # get device and battery info from inverter
+    if get_settings() is None:
+        return None
     if test_soc is None:
         min_soc = battery_settings['minGridSoc']
         get_battery()
@@ -2210,6 +2200,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"\nBattery Info:")
     print(f"  Count:       {bat_count} batteries")
     print(f"  Capacity:    {capacity:.1f}kWh")
+    print(f"  Residual:    {residual:.1f}kWh")
     print(f"  Voltage:     {bat_volt:.1f}V")
     print(f"  Current:     {bat_current:.1f}A")
     print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
@@ -2450,10 +2441,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # work out time to add kwh_needed to battery
         taper_time = 10/60 if (start_residual + kwh_needed) >= (capacity * 0.95) else 0
         hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
-        if full_charge is not None or force_charge == 2 or hours > charge_time:
+        # full charge if requested or charge time exceeded or charge needed exceeds capacity
+        if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.05):
             kwh_needed = capacity - start_residual
             hours = charge_time
-            print(f"  Full charge is expected to add {kwh_needed:.2f} kWh")
+            print(f"  Full charge time used, expecting to add {kwh_needed:.2f} kWh")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
             print(f"  Minimum charge time used")
