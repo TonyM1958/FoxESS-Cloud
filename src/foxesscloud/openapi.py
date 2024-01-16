@@ -902,7 +902,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
-def get_history(time_span='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
+def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_sn, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
@@ -2150,14 +2150,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     generation = None
     last_date = today if hour_now >= charge_config['use_today'] else yesterday
     gen_days = charge_config['generation_days']
-    history = get_raw('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
+    history = get_history('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
     if history is not None and len(history) > 0:
         for day in history:
             date = day['date']
             if pv_history.get(date) is None:
                 pv_history[date] = 0.0
-            pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
+            if day.get('kwh') is not None and day.get('kwh_neg') is not None:
+                pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
         pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
         print(f"\nGeneration (kWh):")
         s = ""
@@ -2528,7 +2529,7 @@ def get_pvoutput(d = None, tou = 0):
         return None
     # get raw power data for the day
     v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
-    raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
+    raw_data = get_history('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None or len(raw_data) == 0 or raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
         return(f"# error: {d.replace('-','')} No generation data available")
     # apply calibration and merge raw_data for meterPower2 into pvPower:

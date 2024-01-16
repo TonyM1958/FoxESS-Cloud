@@ -554,7 +554,8 @@ This setting can be:
 
 ## Version Info
 
-1.0.0<br>
+1.0.1<br>
+Fix for battery only inverter with no pv generation history.
 Change to force full charge if charge_needed exceeds battery capacity.
 
 0.9.9<br>

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  24 December 2023
+Updated:  16 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.0"
+version = "1.0.1"
 debug_setting = 1
 
 # constants
@@ -510,9 +510,10 @@ def get_firmware():
 
 battery = None
 battery_settings = None
+battery_capacity = None
 
 def get_battery():
-    global token, device_id, battery, debug_setting, messages
+    global token, device_id, battery, debug_setting, messages, battery_capacity
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -538,6 +539,8 @@ def get_charge():
     global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
+    if battery_settings is None:
+        battery_settings = {}
     if debug_setting > 1:
         print(f"getting charge times")
     params = {'sn': device_sn}
@@ -555,8 +558,6 @@ def get_charge():
         errno = response.json().get('errno')
         print(f"** get_charge(), no times data, {errno_message(errno)}")
         return None
-    if battery_settings is None:
-        battery_settings = {}
     battery_settings['times'] = times
     return battery_settings
 
@@ -576,10 +577,12 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
-    if battery_settings.get('times') is None or len(battery_settings['times']) != 2:
-        print(f"** set_charge(): invalid battery settings")
-        print(battery_settings)
-        return None
+    if battery_settings is None:
+        battery_settings = {}
+    if battery_settings.get('times') is None:
+        battery_settings['times'] = []
+        battery_settings['times'].append({'tip': '', 'enableCharge': True, 'enableGrid': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
+        battery_settings['times'].append({'tip': '', 'enableCharge': True, 'enableGrid': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
     if get_schedule().get('enable'):
         if force == 0:
             print(f"** set_charge(): cannot set charge when a schedule is enabled")
@@ -647,6 +650,8 @@ def get_min():
     global token, device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
+    if battery_settings is None:
+        battery_settings = {}
     if debug_setting > 1:
         print(f"getting min soc")
     params = {'sn': device_sn}
@@ -659,8 +664,6 @@ def get_min():
         errno = response.json().get('errno')
         print(f"** get_min(), no result data, {errno_message(errno)}")
         return None
-    if battery_settings is None:
-        battery_settings = {}
     battery_settings['minSoc'] = result.get('minSoc')
     battery_settings['minGridSoc'] = result.get('minGridSoc')
     return battery_settings
@@ -670,7 +673,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minGridSoc = None, minSoc = None, force = 0):
-    global token, device_sn, bat_settings, debug_setting, messages
+    global token, device_sn, bat_settings, debug_setting, messages, default_min_soc
     if get_device() is None:
         return None
     if get_schedule().get('enable'):
@@ -678,20 +681,20 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
             print(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
-    if battery_settings.get('minGridSoc') is None or battery_settings.get('minSoc') is None:
-        print(f"** no min soc settings")
-        print(battery_settings)
-        return None
+    data = {'sn': device_sn}
+    if battery_settings is None:
+        battery_settings = {}
     if minGridSoc is not None:
+        data['minGridSoc'] = minGridSoc
         battery_settings['minGridSoc'] = minGridSoc
     if minSoc is not None:
+        data['minSoc'] = minSoc
         battery_settings['minSoc'] = minSoc
     if debug_setting > 1:
         print(f"set_min(): {battery_settings}")
         return None
     if debug_setting > 0:
-        print(f"\nSetting minSoc = {battery_settings['minSoc']}, minGridSoc = {battery_settings['minGridSoc']}")
-    data = {'minGridSoc': battery_settings['minGridSoc'], 'minSoc': battery_settings['minSoc'], 'sn': device_sn}
+        print(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minGridSoc = {battery_settings.get('minGridSoc')}")
     response = signed_post(path="/c/v0/device/battery/soc/set", data=json.dumps(data))
     if response.status_code != 200:
         print(f"** set_min() got response code: {response.status_code}")
@@ -711,10 +714,8 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
 
 def get_settings():
     global battery_settings
-    if battery_settings is None or battery_settings.get('times') is None:
-        get_charge()
-    if battery_settings is None or battery_settings.get('minGridSoc') is None:
-        get_min()
+    get_charge()
+    get_min()
     return battery_settings
 
 ##################################################################################################
@@ -1155,6 +1156,12 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             kwh_off = 0.0   # kwh during off peak time (02:00-05:00)
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
             kwh_neg = 0.0
+            if len(var['data']) > 1:
+                sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 2)
+            else:
+                sample_time = 5.0
+            if debug_setting > 1:
+                print(f"sample_time = {sample_time} minutes")
         sum = 0.0
         count = 0
         max = None
@@ -1171,7 +1178,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
             if energy:
-                e = value / 12      # convert kW samples to kWh energy
+                e = value * sample_time / 60      # convert kW samples to kWh energy
                 if e > 0.0:
                     kwh += e
                     if tariff is not None:
@@ -2032,13 +2039,14 @@ lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 
 # charge_needed settings
 charge_config = {
     'contingency': 20,                # % of consumption to allow as contingency
-    'capacity': None,                 # Battery capacity (over-rides calculated value)
+    'capacity': None,                 # Battery capacity (over-ride)
+    'min_soc': None,                  # Minimum Soc (over-ride)
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power
     'discharge_loss': 0.97,           # loss converting battery discharge power to grid power
     'pv_loss': 0.95,                  # loss converting PV power to battery charge power
-    'grid_loss': 0.97,                # loss converting grid power to battery charge power
+    'grid_loss': 0.95,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
     'inverter_power': None,           # Inverter power consumption W
     'bms_power': 27,                  # BMS power consumption W
@@ -2076,7 +2084,7 @@ charge_config = {
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=None, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, battery_capacity, default_min_soc
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2164,10 +2172,18 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
     # get device and battery info from inverter
-    if get_settings() is None:
-        return None
+    if charge_config['capacity'] is not None and battery_capacity is None:
+        battery_capacity = charge_config['capacity']
     if test_soc is None:
-        min_soc = battery_settings['minGridSoc']
+        if charge_config.get('min_soc') is not None:
+            min_soc = charge_config['min_soc']
+        else:
+            get_min()
+            if battery_settings.get('minGridSoc') is not None:
+                min_soc = battery_settings['minGridSoc']
+            else:
+                print(f"\nMin SoC is not available. Please provide % via 'min_soc' parameter")
+                return None
         get_battery()
         if battery['status'] != 1:
             print(f"\nBattery status is not available")
@@ -2178,8 +2194,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']/1000
-        capacity = residual * 100 / current_soc if current_soc > 0 else residual
-        capacity = charge_config['capacity'] if charge_config.get('capacity') is not None else capacity
+        if charge_config.get('capacity') is not None:
+            capacity = charge_config['capacity']
+        elif residual is not None and residual > 0.0 and current_soc is not None and current_soc > 0.0:
+            capacity = residual * 100 / current_soc
+        else:
+            print(f"Battery capacity is not available. Please provide kWh via 'capacity' parameter")
+            return None
     else:
         current_soc = test_soc
         capacity = 8.2
@@ -2334,7 +2355,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             date = day['date']
             if pv_history.get(date) is None:
                 pv_history[date] = 0.0
-            pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
+            if day.get('kwh') is not None and day.get('kwh_neg') is not None:
+                pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
         pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
         print(f"\nGeneration (kWh):")
         s = ""
