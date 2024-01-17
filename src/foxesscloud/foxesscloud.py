@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  16 January 2024
+Updated:  17 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.1"
+version = "1.0.2"
 debug_setting = 1
 
 # constants
@@ -1775,18 +1775,16 @@ first_hour =   [1.0, 1.0]                               # lowest average price f
 tariff_config = {
     'product': "AGILE-FLEX-22-11-25",     # product code to use for Octopus API
     'region': "H",                        # region code to use for Octopus API
-    'duration': 3,                        # decimal hours for charge period
-    'start_at': 23,                       # earliest start time for charge period
-    'end_by': 8,                          # latest end time for charge period
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
-    'weighting': None                     # weights for weighted average
+    'weighting': None,                    # weights for weighted average
+    'pm_start': 8,                        # time when charge period is considered PM
+    'am_start': 23                        # time when charge period is considered AM
 }
 
 # get prices and work out lowest weighted average price time period
-def get_agile_period(d=None):
+def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, octopus_api_url, time_shift
     # get time, dates and duration
-    duration = tariff_config['duration']
     duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
     # round up to 30 minutes so charge periods covers complete end pricing period
     duration = round(duration * 2 + 0.49, 0) / 2
@@ -1826,7 +1824,7 @@ def get_agile_period(d=None):
         print(f"period_from = {period_from}, period_to = {period_to}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"** get_agile_period() response code from Octopus API: {response.status_code}")
+        print(f"** get_agile_period() response code from Octopus API {response.status_code}: {response.reason}")
         return None
     # results are in reverse chronological order...
     results = response.json().get('results')[::-1]
@@ -1838,9 +1836,7 @@ def get_agile_period(d=None):
         times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift))
         prices.append(r['value_inc_vat'])
     # work out start and end times for charging
-    start_at = tariff_config['start_at']
     start_at = time_hours(start_at) if type(start_at) is str else 23.0 if start_at is None else start_at
-    end_by = tariff_config['end_by']
     end_by = time_hours(end_by) if type(end_by) is str else 8.0 if end_by is None else end_by
     start_i = int(round_time(start_at - 23) * 2)
     end_i = int(round_time(end_by - 23 - duration) * 2)
@@ -1880,13 +1876,14 @@ def get_agile_period(d=None):
 
 
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(d=None):
+def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, agile_octopus
-    period = get_agile_period(d=d)
+    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
+    period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
     if period is None:
         return None
     tomorrow = period['date']
-    s = f"\nPrices for {tomorrow} AM charging period (p/kWh inc VAT):\n" + " " * 4 * 15
+    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
     for i in range(0, len(period['times'])):
         s += "\n" if i % 6 == 2 else ""
         s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
@@ -1897,19 +1894,24 @@ def set_agile_period(d=None):
     start = period['start']
     end = period['end']
     price = period['price']
-    duration = tariff_config['duration']
-    print(f"\nBest {duration} hour AM charging period:")
+    charge_pm = time_hours(start) >= tariff_config['pm_start'] and time_hours(end) < tariff_config['am_start']
+    am_pm = 'PM' if charge_pm else 'AM'
+    print(f"\nBest {duration} hour {am_pm} charging period:")
     print(f"  Time:  {start} to {end}")
     print(f"  Price: {price:.2f} p/kWh inc VAT")
-    agile_octopus['off_peak1']['start'] = time_hours(start)
-    agile_octopus['off_peak1']['end'] = time_hours(end)
-    print(f"\nAM charging period set for {agile_octopus['name']}")
+    if charge_pm:
+        agile_octopus['off_peak2']['start'] = time_hours(start)
+        agile_octopus['off_peak2']['end'] = time_hours(end)
+    else:
+        agile_octopus['off_peak1']['start'] = time_hours(start)
+        agile_octopus['off_peak1']['end'] = time_hours(end)
+    print(f"\n{am_pm} charging period set for {agile_octopus['name']}")
     return period
 
 tariff = octopus_flux
 
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_tariff(find, update=1, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1940,7 +1942,7 @@ def set_tariff(find, update=1, **settings):
         return None
     use = found[0]
     if use == agile_octopus:
-        period = set_agile_period()
+        period = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
         if period is None:
             return None
     if update == 1:

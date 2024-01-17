@@ -428,31 +428,33 @@ def get_generation():
 battery = None
 battery_settings = None
 battery_capacity = None
+battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature' ]
+battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
 
-def get_battery():
+def get_battery(v = None):
     global device_sn, battery, debug_setting, battery_capacity
     if get_device() is None:
         return None
     if debug_setting > 1:
         print(f"getting battery")
+    if v is None:
+        v = battery_vars
     params = {'sn': device_sn}
-    body = {'sn': device_sn, 'variables': ['Soc', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature' ]}
-    response = signed_post(path="/op/v0/real/query", json=body)
+    body = {'sn': device_sn, 'variables': v}
+    response = signed_post(path="/op/v0/device/real/query", json=body)
     if response.status_code != 200:
         print(f"** get_battery() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
-    if result is None:
+    if result is None or type(result) is not list or len(result) != 1:
         print(f"** get_battery(), no result data, {errno_message(response)}")
         return None
-    return result
-    battery = result['batterys'][0]
-    if battery.get('current') is None or battery['current'] == 0.0:
-        battery['current'] = round(battery['power'] * 1000 / battery['volt'] ,1)
-    if (battery.get('residual') is None or battery['residual'] == 0.0) and battery_capacity is not None:
-        battery['residual'] = round(battery_capacity * battery['soc'] * 10, 0)
-    if battery_capacity is None and battery.get('residual') is not None and battery['residual'] > 0.0 and battery['soc'] > 0:
-        battery_capacity = battery['residual'] / battery['soc'] / 10
+    result = result[0]
+    if battery is None:
+        battery = {}
+    for v in result['datas']:
+        i = battery_vars.index(v['variable'])
+        battery[battery_data[i]] = v.get('value')
     return battery
 
 ##################################################################################################
@@ -882,6 +884,32 @@ def set_schedule(enable=1, groups=None):
         return None
     schedule['enable'] = enable
     return schedule
+
+
+
+##################################################################################################
+# get real time data
+##################################################################################################
+
+# get real time data
+def get_real(v = None):
+    global device_sn, debug_setting
+    if get_device() is None:
+        return None
+    if v is None:
+        v = power_vars
+    if debug_setting > 1:
+        print(f"getting real-time data")
+    body = {'deviceSN': device_sn, 'variables': v}
+    response = signed_post(path="/op/v0/device/real/query", json=body)
+    if response.status_code != 200:
+        print(f"** get_real() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** get_real(), no result data, {errno_message(response)}")
+        return None
+    return result
 
 
 ##################################################################################################
@@ -1574,21 +1602,20 @@ regions = {'A':'Eastern England', 'B':'East Midlands', 'C':'London', 'D':'Mersey
 front_loaded = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]           # 3 hour average, front loaded
 first_hour =   [1.0, 1.0]                               # lowest average price for first hour
 
+
 tariff_config = {
     'product': "AGILE-FLEX-22-11-25",     # product code to use for Octopus API
     'region': "H",                        # region code to use for Octopus API
-    'duration': 3,                        # decimal hours for charge period
-    'start_at': 23,                       # earliest start time for charge period
-    'end_by': 8,                          # latest end time for charge period
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
-    'weighting': None                     # weights for weighted average
+    'weighting': None,                    # weights for weighted average
+    'pm_start': 8,                        # time when charge period is considered PM
+    'am_start': 23                        # time when charge period is considered AM
 }
 
 # get prices and work out lowest weighted average price time period
-def get_agile_period(d=None):
+def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, octopus_api_url, time_shift
     # get time, dates and duration
-    duration = tariff_config['duration']
     duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
     # round up to 30 minutes so charge periods covers complete end pricing period
     duration = round(duration * 2 + 0.49, 0) / 2
@@ -1640,9 +1667,7 @@ def get_agile_period(d=None):
         times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift))
         prices.append(r['value_inc_vat'])
     # work out start and end times for charging
-    start_at = tariff_config['start_at']
     start_at = time_hours(start_at) if type(start_at) is str else 23.0 if start_at is None else start_at
-    end_by = tariff_config['end_by']
     end_by = time_hours(end_by) if type(end_by) is str else 8.0 if end_by is None else end_by
     start_i = int(round_time(start_at - 23) * 2)
     end_i = int(round_time(end_by - 23 - duration) * 2)
@@ -1682,13 +1707,14 @@ def get_agile_period(d=None):
 
 
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(d=None):
+def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, agile_octopus
-    period = get_agile_period(d=d)
+    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
+    period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
     if period is None:
         return None
     tomorrow = period['date']
-    s = f"\nPrices for {tomorrow} AM charging period (p/kWh inc VAT):\n" + " " * 4 * 15
+    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
     for i in range(0, len(period['times'])):
         s += "\n" if i % 6 == 2 else ""
         s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
@@ -1699,19 +1725,24 @@ def set_agile_period(d=None):
     start = period['start']
     end = period['end']
     price = period['price']
-    duration = tariff_config['duration']
-    print(f"\nBest {duration} hour AM charging period:")
+    charge_pm = time_hours(start) >= tariff_config['pm_start'] and time_hours(end) < tariff_config['am_start']
+    am_pm = 'PM' if charge_pm else 'AM'
+    print(f"\nBest {duration} hour {am_pm} charging period:")
     print(f"  Time:  {start} to {end}")
     print(f"  Price: {price:.2f} p/kWh inc VAT")
-    agile_octopus['off_peak1']['start'] = time_hours(start)
-    agile_octopus['off_peak1']['end'] = time_hours(end)
-    print(f"\nAM charging period set for {agile_octopus['name']}")
+    if charge_pm:
+        agile_octopus['off_peak2']['start'] = time_hours(start)
+        agile_octopus['off_peak2']['end'] = time_hours(end)
+    else:
+        agile_octopus['off_peak1']['start'] = time_hours(start)
+        agile_octopus['off_peak1']['end'] = time_hours(end)
+    print(f"\n{am_pm} charging period set for {agile_octopus['name']}")
     return period
 
 tariff = octopus_flux
 
 # set tariff and charge time period based on pricing for Agile Octopus
-def set_tariff(find, update=1, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1742,7 +1773,7 @@ def set_tariff(find, update=1, **settings):
         return None
     use = found[0]
     if use == agile_octopus:
-        period = set_agile_period()
+        period = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
         if period is None:
             return None
     if update == 1:

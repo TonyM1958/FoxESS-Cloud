@@ -387,12 +387,14 @@ f.set_tariff('flux')
 When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_tariff('agile', product, region, duration, update, weighting, time_shift)
+f.set_tariff('agile', product, region, start_at, end_by, duration, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
 + product: optional Agile Octopus product code (see below). The default is "AGILE-FLEX-22-11-25"
 + region: optional region to use for prices (se below). The default is 'H' (Southern England)
++ start_at: optional earliest start time for charge period in hours, the default is 23:00
++ end_by: optional latest end time for charge period in hours, the default is 08:00
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
@@ -427,6 +429,8 @@ Pricing for tomorrow is updated around 4pm each day. If run before this time, pr
 The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally). You can change the weighting by providing 'weighting'. The following preset weightings are provided:
 + f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
+
+Either the AM or PM charging slot is updated, depending on the time. By default, it updates the AM charge period if the start is after 9pm and the end is before 8am, or updates the PM charge period if the start is after 8am and the end is before 9pm
 
 
 # PV Output
@@ -554,7 +558,8 @@ This setting can be:
 
 ## Version Info
 
-1.0.1<br>
+1.0.2<br>
+Suport for AM and PM charge periods when using Agile
 Fix for battery only inverter with no pv generation history.
 Change to force full charge if charge_needed exceeds battery capacity.
 
