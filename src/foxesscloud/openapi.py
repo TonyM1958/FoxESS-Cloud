@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  14 January 2024
+Updated:  17 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -455,6 +455,8 @@ def get_battery(v = None):
     for v in result['datas']:
         i = battery_vars.index(v['variable'])
         battery[battery_data[i]] = v.get('value')
+    if battery.get('residual') is None and battery_capacity is not None:
+        battery['residual'] = battery['soc'] * battery_capacity * 1000 / 100
     return battery
 
 ##################################################################################################
@@ -946,7 +948,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
                 return None
             result_list += result
         if plot > 0:
-            plot_raw(result_list, plot, station)
+            plot_history(result_list, plot)
         return result_list
     if v is None:
         if raw_vars is None:
@@ -995,7 +997,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
                 del v['data']
 #                del v['date']
         elif plot > 0:
-            plot_raw(result, plot)
+            plot_history(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
     if debug_setting > 1:
@@ -1524,7 +1526,7 @@ octopus_flux = {
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [21, 22, 23]                              # hours in a day to get a forecast
+    'forecast_times': [10, 11, 22, 23]                          # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1564,7 +1566,7 @@ agile_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [10, 11, 22, 23]
     }
 
 # time periods for British Gas Electric Driver
@@ -1587,6 +1589,7 @@ custom_periods = {'name': 'Custom',
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
+tariff = octopus_flux
 
 ##################################################################################################
 # Octopus Energy Agile Price
@@ -1634,7 +1637,7 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     update_time = time_hours(update_time) if type(update_time) is str else 17 if update_time is None else update_time
     today = datetime.strftime(now + timedelta(days=0 if hour_now >= update_time else -1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= update_time else 0), '%Y-%m-%d')
-    if debug_setting > 0:
+    if debug_setting > 1:
         print(f"  datetime = {today} {hours_time(hour_now)}")
     # get product and region
     product = tariff_config['product'].upper()
@@ -1709,39 +1712,63 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
 # set tariff and charge time period based on pricing for Agile Octopus
 def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, agile_octopus
-    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
-    period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
-    if period is None:
-        return None
-    tomorrow = period['date']
-    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
-    for i in range(0, len(period['times'])):
-        s += "\n" if i % 6 == 2 else ""
-        s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
-    print(s)
-    weighting = tariff_config['weighting']
-    if weighting is not None:
-        print(f"\nWeighting: {weighting}")
-    start = period['start']
-    end = period['end']
-    price = period['price']
-    charge_pm = time_hours(start) >= tariff_config['pm_start'] and time_hours(end) < tariff_config['am_start']
-    am_pm = 'PM' if charge_pm else 'AM'
-    print(f"\nBest {duration} hour {am_pm} charging period:")
-    print(f"  Time:  {start} to {end}")
-    print(f"  Price: {price:.2f} p/kWh inc VAT")
-    if charge_pm:
-        agile_octopus['off_peak2']['start'] = time_hours(start)
-        agile_octopus['off_peak2']['end'] = time_hours(end)
+    duration = 3 if duration is None else 6 if duration > 6 else duration
+    if duration > 0:
+        period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
+        if period is None:
+            return None
+        tomorrow = period['date']
+        s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
+        for i in range(0, len(period['times'])):
+            s += "\n" if i % 6 == 2 else ""
+            s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
+        print(s)
+        weighting = tariff_config['weighting']
+        if weighting is not None:
+            print(f"\nWeighting: {weighting}")
+        start = time_hours(period['start'])
+        end = time_hours(period['end'])
+        price = period['price']
+        charge_pm = start >= tariff_config['pm_start'] and end < tariff_config['am_start']
+        am_pm = 'PM' if charge_pm else 'AM'
+        print(f"\nBest {duration} hour {am_pm} charging period for {agile_octopus['name']}:")
+        print(f"  Price: {price:.2f} p/kWh inc VAT")
     else:
-        agile_octopus['off_peak1']['start'] = time_hours(start)
-        agile_octopus['off_peak1']['end'] = time_hours(end)
-    print(f"\n{am_pm} charging period set for {agile_octopus['name']}")
-    return period
+        start_at = 23 if start_at is None else start_at
+        charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(start_at) < tariff_config['am_start']
+        am_pm = 'PM' if charge_pm else 'AM'
+        start = 0.0
+        end = 0.0
+        print(f"\nDisabled {am_pm} charging period")
+    if charge_pm:
+        agile_octopus['off_peak2']['start'] = start
+        agile_octopus['off_peak2']['end'] = end
+    else:
+        agile_octopus['off_peak1']['start'] = start
+        agile_octopus['off_peak1']['end'] = end
+    print(f"  Charging period set for {hours_time(start)} to {hours_time(end)}")
+    return 1
 
-tariff = octopus_flux
+# set tariff and charge time for Octopus Flux
+def set_flux_period(start_at=None, end_by=None, duration=None):
+    global debug_setting, octopus_flux
+    start_at = time_hours(start_at) if type(start_at) is str else 2.0 if start_at is None else start_at
+    end_by = time_hours(end_by) if type(end_by) is str else 5.0 if end_by is None else end_by
+    duration = 3 if duration is None else 6 if duration > 6 else duration
+    charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(end_by) < tariff_config['am_start']
+    am_pm = 'PM' if charge_pm else 'AM'
+    start = start_at if duration > 0 else 0.0
+    end = end_by if duration > 0 else 0.0
+    if charge_pm:
+        octopus_flux['off_peak2']['start'] = start
+        octopus_flux['off_peak2']['end'] = end
+    else:
+        octopus_flux['off_peak1']['start'] = start
+        octopus_flux['off_peak1']['end'] = end
+    print(f"\n{octopus_flux['name']} {am_pm} charging period set for {hours_time(start)} to {hours_time(end)}")
+    return 1
 
-# set tariff and charge time period based on pricing for Agile Octopus
+# set tariff and charge time period
 def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
@@ -1757,7 +1784,7 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **sett
         else:
             tariff_config[key] = value
             s += f"\n  {key} = {value}"
-    if len(s) > 0:
+    if len(s) > 0 and debug_setting > 1:
         print(f"Parameters: {s}")
     found = []
     if find in tariff_list:
@@ -1773,9 +1800,11 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **sett
         return None
     use = found[0]
     if use == agile_octopus:
-        period = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
-        if period is None:
+        result = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
+        if result is None:
             return None
+    elif use == octopus_flux:
+        set_flux_period(start_at=start_at, end_by=end_by, duration=duration)
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -1931,9 +1960,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         else:
             charge_config[key] = value
             s += f"\n  {key} = {value}"
-    if len(s) > 0:
+    if len(s) > 0 and debug_setting > 1:
         print(f"Parameters: {s}")
-    if tariff is not None:
+    if tariff is not None and debug_setting > 1:
         print(f"  tariff = {tariff['name']}")
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
@@ -1951,7 +1980,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
     hour_now = now.hour + now.minute / 60
-    print(f"  datetime = {today} {hours_time(hour_now)}")
+    if debug_setting > 1:
+        print(f"  datetime = {today} {hours_time(hour_now)}")
     yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = day_names[(now.weekday() + 1) % 7]
@@ -2018,9 +2048,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 print(f"\nMin SoC is not available. Please provide % via 'min_soc' parameter")
                 return None
         get_battery()
-        if battery['status'] != 1:
-            print(f"\nBattery status is not available")
-            return None
         current_soc = battery['soc']
         bat_volt = battery['volt']
         bat_power = battery['power']

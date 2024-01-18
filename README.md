@@ -430,7 +430,7 @@ The best charging period is determined based on the weighted average of the 30 m
 + f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
 
-Either the AM or PM charging slot is updated, depending on the time. By default, it updates the AM charge period if the start is after 9pm and the end is before 8am, or updates the PM charge period if the start is after 8am and the end is before 9pm
+Either the AM or PM charging slot is updated, depending on the time. By default, it updates the AM charge period if start_at is after 9pm and end_by is before 8am; it updates the PM charge period if start_at is after 8am and the end_by is before 9pm. To disable a charging period, set duration=0
 
 
 # PV Output
@@ -558,7 +558,9 @@ This setting can be:
 
 ## Version Info
 
-1.0.2<br>
+1.0.3<br>
+Added ability to set AM/PM charging periods for Flux using set_tariff()
+Disable charging period added to set_tariff() when duration=0
 Suport for AM and PM charge periods when using Agile
 Fix for battery only inverter with no pv generation history.
 Change to force full charge if charge_needed exceeds battery capacity.
