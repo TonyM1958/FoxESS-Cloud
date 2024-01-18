@@ -46,6 +46,7 @@ lang = 'en'
 ##################################################################################################
 ##################################################################################################
 
+# return query date as a dictionary with year, month, day, hour, minute, second
 def query_date(d, offset = None):
     if d is not None and len(d) < 18:
         d += ' 00:00:00'
@@ -54,6 +55,7 @@ def query_date(d, offset = None):
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
 
+# return query date as begin and end timestamps in milliseconds
 def query_time(d, time_span):
     if d is not None and len(d) < 18:
         d += ' 00:00:00'
@@ -79,21 +81,21 @@ def interpolate(f, v):
 
 # build request header with signing and throttling for queries
 
-last_query = {}
-query_delay = 1
+last_call = {}          # timestamp of the last call for a given path
+query_delay = 1         # minimum time between calls in seconds
 
 def signed_header(path, login = 0):
-    global api_key, user_agent, time_zone, lang, debug_setting
+    global api_key, user_agent, time_zone, lang, debug_setting, last_call, query_delay
     headers = {}
     token = api_key if login == 0 else ""
     t_now = time.time()
     if 'query' in path:
-        t_last = last_query.get(path)
+        t_last = last_call.get(path)
         delta = t_now - t_last if t_last is not None else query_delay
         if delta < query_delay:
             time.sleep((query_delay - delta))
         t_now = time.time()
-        last_query[path] = t_now
+    last_call[path] = t_now
     timestamp = str(round(t_now * 1000))
     headers['Token'] = token
     headers['Lang'] = lang
@@ -118,7 +120,7 @@ def signed_post(path, json = None, login = 0):
 
 
 ##################################################################################################
-# get error messages
+# get error messages / error handling
 ##################################################################################################
 
 messages = None
@@ -151,6 +153,23 @@ def errno_message(response):
         return s
     return s + f": {messages[lang][errno]}"
 
+##################################################################################################
+# get access info
+##################################################################################################
+
+def get_access_count():
+    global debug_setting, messages, lang
+    if debug_setting > 1:
+        print(f"getting access info")
+    response = signed_get(path="/op/v0/user/getAccessCount")
+    if response.status_code != 200:
+        print(f"** get_access() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        print(f"** get_access(), no result data, {errno_message(response)}")
+        return None
+    return result
 
 ##################################################################################################
 # get list of variables
@@ -269,11 +288,10 @@ def get_logger(sn=None):
     if result is None:
         print(f"** get_logger(), no list result data, {errno_message(response)}")
         return None
-    total = result.get('total')
-    if total is None or total == 0 or total > 100:
+    if type(result) is not list or len(result) == 0 or len(result) > 100:
         print(f"** invalid list of loggers returned: {total}")
         return None
-    logger_list = result.get('data')
+    logger_list = result
     n = None
     if len(logger_list) > 1:
         if sn is not None:
@@ -304,11 +322,6 @@ def get_device(sn=None):
     global device_list, device, device_sn, firmware, battery, raw_vars, debug_setting, schedule
     if get_vars() is None:
         return None
-    #######
-    if device_sn is not None:
-        device = {}
-        return device_sn
-    #######
     if device is not None:
         if sn is None:
             return device
@@ -401,7 +414,7 @@ def get_device(sn=None):
 # get generation info and save to device
 ##################################################################################################
 
-def get_generation():
+def get_generation(update=1):
     global device_sn, device
     if get_device() is None:
         return None
@@ -416,10 +429,11 @@ def get_generation():
     if result is None:
         print(f"** get_generation(), no result data, {errno_message(response)}")
         return None
-    device['generationToday'] = result['today']
-    device['generationMonth'] = result['month']
-    device['generationTotal'] = result['cumulative']
-    return device
+    if update == 1:
+        device['generationToday'] = result['today']
+        device['generationMonth'] = result['month']
+        device['generationTotal'] = result['cumulative']
+    return result
 
 ##################################################################################################
 # get battery info and save to battery
@@ -427,12 +441,12 @@ def get_generation():
 
 battery = None
 battery_settings = None
-battery_capacity = None
-battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature' ]
+battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy' ]
 battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
+residual_scaling = 10
 
 def get_battery(v = None):
-    global device_sn, battery, debug_setting, battery_capacity
+    global device_sn, battery, debug_setting, residual_scaling
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -455,8 +469,7 @@ def get_battery(v = None):
     for v in result['datas']:
         i = battery_vars.index(v['variable'])
         battery[battery_data[i]] = v.get('value')
-    if battery.get('residual') is None and battery_capacity is not None:
-        battery['residual'] = battery['soc'] * battery_capacity * 1000 / 100
+    battery['residual'] *= residual_scaling
     return battery
 
 ##################################################################################################
@@ -480,11 +493,7 @@ def get_charge():
     if result is None:
         print(f"** get_charge(), no result data, {errno_message(response)}")
         return None
-    times = result.get('times')
-    if times is None:
-        print(f"** get_charge(), no times data, {errno_message(response)}")
-        return None
-    battery_settings['times'] = times
+    battery_settings['times'] = result
     return battery_settings
 
 
@@ -646,7 +655,7 @@ def get_settings():
 ##################################################################################################
 
 def get_remote_settings(key='h115__17'):
-    global token, device_id, debug_setting
+    global token, device_sn, debug_setting
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -659,8 +668,8 @@ def get_remote_settings(key='h115__17'):
                 for x in v.keys():
                     values[x] = v[x]
         return values
-    params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
-    response = signed_get(path="/c/v0/device/setting/get", params=params)
+    params = {'sn': device_sn, 'key': key}
+    response = signed_get(path="/op/v0/device/setting/get", params=params)
     if response.status_code != 200:
         print(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
         return None
@@ -699,16 +708,17 @@ def get_cell_volts():
 work_mode = None
 
 def get_work_mode():
-    global token, device_id, work_mode, debug_setting
+    global token, device_sn, work_mode, debug_setting
     if get_device() is None:
         return None
     if debug_setting > 1:
         print(f"getting work mode")
-    params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
-    response = signed_get(path="/c/v0/device/setting/get", params=params)
+    params = {'sn': device_sn, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
+    response = signed_get(path="/op/v0/device/setting/get", params=params)
     if response.status_code != 200:
         print(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
         return None
+    return None
     result = response.json().get('result')
     if result is None:
         print(f"** get_work_mode(), no result data, {errno_message(response)}")
@@ -731,7 +741,7 @@ work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
 settable_modes = work_modes[:3]
 
 def set_work_mode(mode, force = 0):
-    global token, device_id, work_modes, work_mode, debug_setting
+    global token, device_sn, work_modes, work_mode, debug_setting
     if get_device() is None:
         return None
     if mode not in settable_modes:
@@ -747,8 +757,8 @@ def set_work_mode(mode, force = 0):
         return None
     if debug_setting > 0:
         print(f"\nSetting work mode: {mode}")
-    data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
-    response = signed_post(path="/c/v0/device/setting/set", data=json.dumps(data))
+    body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
+    response = signed_post(path="/op/v0/device/setting/set", json=body)
     if response.status_code != 200:
         print(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
         return None
@@ -774,6 +784,9 @@ def get_flag():
     global device_sn, schedule, debug_setting
     if get_device() is None:
         return None
+    if device.get('function') is None or device['function'].get('scheduler') is None or device['function']['scheduler'] == False:
+        print(f"** get_schedule() schedules are not supported")
+        return None
     if debug_setting > 1:
         print(f"getting flag")
     body = {'deviceSN': device_sn}
@@ -789,7 +802,7 @@ def get_flag():
         schedule = {'enable': None, 'support': None, 'groups': None}
     schedule['enable'] = result.get('enable')
     schedule['support'] = result.get('support')
-    return flag
+    return result
 
 ##################################################################################################
 # get schedule
@@ -798,13 +811,8 @@ def get_flag():
 # get the current schedule
 def get_schedule():
     global device_sn, schedule, debug_setting
-    if get_device() is None:
+    if get_flag() is None:
         return None
-    if schedule is None or schedule.get('support') is None:
-        get_flag()
-        if schedule is None or schedule.get('support') is None or schedule['support'] == 0:
-            print(f"** get_schedule() schedules are not available")
-            return None
     if debug_setting > 1:
         print(f"getting schedule")
     body = {'deviceSN': device_sn}
@@ -825,13 +833,11 @@ def get_schedule():
 ##################################################################################################
 
 # create time segment structure
-def set_group(enable, start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
-    if type(start) is str:
-        start = time_hours(start)
-    if type(end) is str:
-        end = time_hours(end)
+def set_group(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0, enable=1):
     if start is None or end is None:
         return None
+    start = time_hours(start)
+    end = time_hours(end)
     if mode not in work_modes:
         print(f"** mode must be one of {work_modes}")
         return None
@@ -852,16 +858,15 @@ def set_group(enable, start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
 # set a schedule from a period or list of time segment groups
 def set_schedule(enable=1, groups=None):
     global token, device_sn, debug_setting, schedule
-    if schedule is None:
-        if get_schedule() is None:
-            return None
+    if get_flag() is None:
+        return None
     if debug_setting > 1:
         print(f"set_schedule(): enable = {enable}, groups = {groups}")
         return None
     if groups is not None:
         if type(groups) is not list:
             groups = [groups]
-        body = {'deviceSN': deviceSN, 'groups': groups}
+        body = {'deviceSN': device_sn, 'groups': groups}
         if debug_setting > 0:
             print(f"\nSaving schedule")
         response = signed_post(path="/op/v0/device/scheduler/enable", json=body)
@@ -874,8 +879,8 @@ def set_schedule(enable=1, groups=None):
             return None
         schedule['groups'] = groups
     if debug_setting > 0:
-        print(f"\nSetting flag to {enable}")
-    body = {'deviceSN': deviceSN, 'enable': enable}
+        print(f"\nSetting schedule enable flag to {enable}")
+    body = {'deviceSN': device_sn, 'enable': enable}
     response = signed_post(path="/op/v0/device/scheduler/set/flag", json=body)
     if response.status_code != 200:
         print(f"** set_schedule() flag response code {response.status_code}: {response.reason}")
@@ -886,7 +891,6 @@ def set_schedule(enable=1, groups=None):
         return None
     schedule['enable'] = enable
     return schedule
-
 
 
 ##################################################################################################
@@ -1433,6 +1437,8 @@ def time_hours(t, d = None):
 def hours_time(h, ss = False, day = False, mm = True):
     if h is None:
         return "None"
+    if type(h) is str:
+        h = time_hours(h)
     n = 8 if ss else 5 if mm else 2
     d = 0
     while h < 0:
@@ -1709,10 +1715,12 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     return period
 
 
-# set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
+# set AM/PM charge time period based on pricing for Agile Octopus
+def set_agile_period(period=None, tariff=agile_octopus, d=None):
     global debug_setting, agile_octopus
-    duration = 3 if duration is None else 6 if duration > 6 else duration
+    start_at = 23 if period.get('start') is None else period['start']
+    end_by = 8 if period.get('end') is None else period['end']
+    duration = 3 if period.get('duration') is None else period['duration']
     if duration > 0:
         period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
         if period is None:
@@ -1731,45 +1739,44 @@ def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
         price = period['price']
         charge_pm = start >= tariff_config['pm_start'] and end < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
-        print(f"\nBest {duration} hour {am_pm} charging period for {agile_octopus['name']}:")
+        print(f"\nBest {duration} hour {am_pm} charging period for {tariff['name']} between {hours_time(start_at)} and {hours_time((end_by))}:")
         print(f"  Price: {price:.2f} p/kWh inc VAT")
     else:
-        start_at = 23 if start_at is None else start_at
         charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(start_at) < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
         start = 0.0
         end = 0.0
         print(f"\nDisabled {am_pm} charging period")
     if charge_pm:
-        agile_octopus['off_peak2']['start'] = start
-        agile_octopus['off_peak2']['end'] = end
+        tariff['off_peak2']['start'] = start
+        tariff['off_peak2']['end'] = end
     else:
-        agile_octopus['off_peak1']['start'] = start
-        agile_octopus['off_peak1']['end'] = end
-    print(f"  Charging period set for {hours_time(start)} to {hours_time(end)}")
+        tariff['off_peak1']['start'] = start
+        tariff['off_peak1']['end'] = end
+    print(f"  Charging period {hours_time(start)} to {hours_time(end)}")
     return 1
 
-# set tariff and charge time for Octopus Flux
-def set_flux_period(start_at=None, end_by=None, duration=None):
-    global debug_setting, octopus_flux
-    start_at = time_hours(start_at) if type(start_at) is str else 2.0 if start_at is None else start_at
-    end_by = time_hours(end_by) if type(end_by) is str else 5.0 if end_by is None else end_by
-    duration = 3 if duration is None else 6 if duration > 6 else duration
+# set AM/PM charge time for any tariff
+def set_tariff_period(period=None, tariff=octopus_flux, d=None):
+    global debug_setting
+    start_at = 2 if period.get('start') is None else period['start']
+    end_by = 5 if period.get('end') is None else period['end']
+    duration = 3 if period.get('duration') is None else period['duration']
     charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(end_by) < tariff_config['am_start']
     am_pm = 'PM' if charge_pm else 'AM'
-    start = start_at if duration > 0 else 0.0
-    end = end_by if duration > 0 else 0.0
+    start = time_hours(start_at) if duration > 0 else 0.0
+    end = time_hours(end_by) if duration > 0 else 0.0
     if charge_pm:
-        octopus_flux['off_peak2']['start'] = start
-        octopus_flux['off_peak2']['end'] = end
+        tariff['off_peak2']['start'] = start
+        tariff['off_peak2']['end'] = end
     else:
-        octopus_flux['off_peak1']['start'] = start
-        octopus_flux['off_peak1']['end'] = end
-    print(f"\n{octopus_flux['name']} {am_pm} charging period set for {hours_time(start)} to {hours_time(end)}")
+        tariff['off_peak1']['start'] = start
+        tariff['off_peak1']['end'] = end
+    print(f"\n{tariff['name']} {am_pm} charging period {hours_time(start)} to {hours_time(end)}")
     return 1
 
-# set tariff and charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **settings):
+# set tariff and AM/PM charge time period
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1799,12 +1806,12 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **sett
             print(f"  {x['name']}")
         return None
     use = found[0]
-    if use == agile_octopus:
-        result = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
+    times = [] if times is None and start_at is None and end_by is None and duration is None else [(start_at, end_by, duration)] if times is None else times
+    set_proc = set_agile_period if use == agile_octopus else set_tariff_period
+    for t in times:
+        result = set_proc(period={'start': t[0], 'end': t[1], 'duration': t[2]}, tariff=use, d=d)
         if result is None:
             return None
-    elif use == octopus_flux:
-        set_flux_period(start_at=start_at, end_by=end_by, duration=duration)
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -1946,7 +1953,7 @@ charge_config = {
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=None, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, battery_capacity, default_min_soc
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, default_min_soc
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2035,8 +2042,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
     # get device and battery info from inverter
-    if charge_config['capacity'] is not None and battery_capacity is None:
-        battery_capacity = charge_config['capacity']
     if test_soc is None:
         if charge_config.get('min_soc') is not None:
             min_soc = charge_config['min_soc']

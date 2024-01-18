@@ -387,7 +387,7 @@ f.set_tariff('flux')
 When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_tariff('agile', product, region, start_at, end_by, duration, update, weighting, time_shift)
+f.set_tariff('agile', product, region, start_at, end_by, duration, times, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
@@ -396,6 +396,7 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + start_at: optional earliest start time for charge period in hours, the default is 23:00
 + end_by: optional latest end time for charge period in hours, the default is 08:00
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
++ times: a list of charge periods that can be used instead of start_at, end_by and duration (see below)
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
@@ -430,7 +431,12 @@ The best charging period is determined based on the weighted average of the 30 m
 + f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
 
-Either the AM or PM charging slot is updated, depending on the time. By default, it updates the AM charge period if start_at is after 9pm and end_by is before 8am; it updates the PM charge period if start_at is after 8am and the end_by is before 9pm. To disable a charging period, set duration=0
+Specifying start_at, end_by and duration allows either the AM or PM charging slot for any tariif to be updated, depending on the time. Agile periods will be calculated; othe rtariffs will use the start and end times directly. By default, set_tariff() updates the AM charge period if start_at is after 9pm and end_by is before 8am; it updates the PM charge period if start_at is after 8am and the end_by is before 9pm. Only the relevant AM or PM charge time is updated e.g. if you configure a PM charging period, the AM charginig period is not changed.
+
+To disable a charging period, set duration=0.
+
+set_tariff() can configure multiple charging periods for any tariff using the times parameter instead of start_at, end_by and duration. Times is a list of tuples containing values for start_at, end_by and duration. For example, this parameter configures an AM charging period between 11pm and 8am with a 3 hour period and a PM charging period between 12 noon and 4pm with a 1 hour period:
++ times=[("23:00", "8:00", 3), ("12:00", "16:00", 1)]
 
 
 # PV Output
@@ -558,8 +564,9 @@ This setting can be:
 
 ## Version Info
 
-1.0.3<br>
-Added ability to set AM/PM charging periods for Flux using set_tariff()
+1.0.4<br>
+Added times parameter to set_tariff to allow update of multiple charging periods in one call.
+Added ability to set AM/PM charging periods for any tariff using set_tariff()
 Disable charging period added to set_tariff() when duration=0
 Suport for AM and PM charge periods when using Agile
 Fix for battery only inverter with no pv generation history.

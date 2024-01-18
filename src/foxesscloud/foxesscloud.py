@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  17 January 2024
+Updated:  18 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.3"
+version = "1.0.4"
 debug_setting = 1
 
 # constants
@@ -510,10 +510,9 @@ def get_firmware():
 
 battery = None
 battery_settings = None
-battery_capacity = None
 
 def get_battery():
-    global token, device_id, battery, debug_setting, messages, battery_capacity
+    global token, device_id, battery, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
@@ -1601,6 +1600,8 @@ def time_hours(t, d = None):
 def hours_time(h, ss = False, day = False, mm = True):
     if h is None:
         return "None"
+    if type(h) is str:
+        h = time_hours(h)
     n = 8 if ss else 5 if mm else 2
     d = 0
     while h < 0:
@@ -1877,10 +1878,12 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     return period
 
 
-# set tariff and charge time period based on pricing for Agile Octopus
-def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
+# set AM/PM charge time period based on pricing for Agile Octopus
+def set_agile_period(period=None, tariff=agile_octopus, d=None):
     global debug_setting, agile_octopus
-    duration = 3 if duration is None else 6 if duration > 6 else duration
+    start_at = 23 if period.get('start') is None else period['start']
+    end_by = 8 if period.get('end') is None else period['end']
+    duration = 3 if period.get('duration') is None else period['duration']
     if duration > 0:
         period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
         if period is None:
@@ -1899,45 +1902,44 @@ def set_agile_period(start_at=None, end_by=None, duration=None, d=None):
         price = period['price']
         charge_pm = start >= tariff_config['pm_start'] and end < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
-        print(f"\nBest {duration} hour {am_pm} charging period for {agile_octopus['name']}:")
+        print(f"\nBest {duration} hour {am_pm} charging period for {tariff['name']} between {hours_time(start_at)} and {hours_time((end_by))}:")
         print(f"  Price: {price:.2f} p/kWh inc VAT")
     else:
-        start_at = 23 if start_at is None else start_at
         charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(start_at) < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
         start = 0.0
         end = 0.0
         print(f"\nDisabled {am_pm} charging period")
     if charge_pm:
-        agile_octopus['off_peak2']['start'] = start
-        agile_octopus['off_peak2']['end'] = end
+        tariff['off_peak2']['start'] = start
+        tariff['off_peak2']['end'] = end
     else:
-        agile_octopus['off_peak1']['start'] = start
-        agile_octopus['off_peak1']['end'] = end
-    print(f"  Charging period set for {hours_time(start)} to {hours_time(end)}")
+        tariff['off_peak1']['start'] = start
+        tariff['off_peak1']['end'] = end
+    print(f"  Charging period {hours_time(start)} to {hours_time(end)}")
     return 1
 
-# set tariff and charge time for Octopus Flux
-def set_flux_period(start_at=None, end_by=None, duration=None):
-    global debug_setting, octopus_flux
-    start_at = time_hours(start_at) if type(start_at) is str else 2.0 if start_at is None else start_at
-    end_by = time_hours(end_by) if type(end_by) is str else 5.0 if end_by is None else end_by
-    duration = 3 if duration is None else 6 if duration > 6 else duration
+# set AM/PM charge time for any tariff
+def set_tariff_period(period=None, tariff=octopus_flux, d=None):
+    global debug_setting
+    start_at = 2 if period.get('start') is None else period['start']
+    end_by = 5 if period.get('end') is None else period['end']
+    duration = 3 if period.get('duration') is None else period['duration']
     charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(end_by) < tariff_config['am_start']
     am_pm = 'PM' if charge_pm else 'AM'
-    start = start_at if duration > 0 else 0.0
-    end = end_by if duration > 0 else 0.0
+    start = time_hours(start_at) if duration > 0 else 0.0
+    end = time_hours(end_by) if duration > 0 else 0.0
     if charge_pm:
-        octopus_flux['off_peak2']['start'] = start
-        octopus_flux['off_peak2']['end'] = end
+        tariff['off_peak2']['start'] = start
+        tariff['off_peak2']['end'] = end
     else:
-        octopus_flux['off_peak1']['start'] = start
-        octopus_flux['off_peak1']['end'] = end
-    print(f"\n{octopus_flux['name']} {am_pm} charging period set for {hours_time(start)} to {hours_time(end)}")
+        tariff['off_peak1']['start'] = start
+        tariff['off_peak1']['end'] = end
+    print(f"\n{tariff['name']} {am_pm} charging period {hours_time(start)} to {hours_time(end)}")
     return 1
 
-# set tariff and charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **settings):
+# set tariff and AM/PM charge time period
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1967,12 +1969,12 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, **sett
             print(f"  {x['name']}")
         return None
     use = found[0]
-    if use == agile_octopus:
-        result = set_agile_period(start_at=start_at, end_by=end_by, duration=duration)
+    times = [] if times is None and start_at is None and end_by is None and duration is None else [(start_at, end_by, duration)] if times is None else times
+    set_proc = set_agile_period if use == agile_octopus else set_tariff_period
+    for t in times:
+        result = set_proc(period={'start': t[0], 'end': t[1], 'duration': t[2]}, tariff=use, d=d)
         if result is None:
             return None
-    elif use == octopus_flux:
-        set_flux_period(start_at=start_at, end_by=end_by, duration=duration)
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -2114,7 +2116,7 @@ charge_config = {
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=None, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, battery_capacity, default_min_soc
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, default_min_soc
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2203,8 +2205,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
         print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
     # get device and battery info from inverter
-    if charge_config['capacity'] is not None and battery_capacity is None:
-        battery_capacity = charge_config['capacity']
     if test_soc is None:
         if charge_config.get('min_soc') is not None:
             min_soc = charge_config['min_soc']
