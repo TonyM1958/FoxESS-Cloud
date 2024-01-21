@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  17 January 2024
+Updated:  21 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -105,18 +105,24 @@ def signed_header(path, login = 0):
     headers['Content-Type'] = 'application/json'
     if login == 0:
         headers['Signature'] = hashlib.md5(fr"{path}\r\n{headers['Token']}\r\n{headers['Timestamp']}".encode('UTF-8')).hexdigest()
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"path = {path}")
         print(f"headers = {headers}")
     return headers
 
 def signed_get(path, params = None, login = 0):
-    global fox_domain
-    return requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
+    global fox_domain, debug_setting
+    if debug_setting > 2:
+        print(f"params = {params}")
+    response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
+    return response
 
 def signed_post(path, json = None, login = 0):
-    global fox_domain
-    return requests.post(url=fox_domain + path, headers=signed_header(path, login), json=json)
+    global fox_domain, debug_setting
+    if debug_setting > 2:
+        print(f"body = {json}")
+    response = requests.post(url=fox_domain + path, headers=signed_header(path, login), json=json)
+    return response
 
 
 ##################################################################################################
@@ -502,10 +508,11 @@ def get_charge():
 ##################################################################################################
 
 # helper to format time period structure
-def time_period(t):
-    result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d} - {t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
-    if t['startTime']['hour'] != t['endTime']['hour'] or t['startTime']['minute'] != t['endTime']['minute']:
-        result += f" Charge from grid" if t['enableGrid'] else f" Force Charge"
+def time_period(t, n):
+    (enable, start, end) = (t['enable1'], t['startTime1'], t['endTime1']) if n ==1 else (t['enable2'], t['startTime2'], t['endTime2'])
+    result = f"{start['hour']:02d}:{start['minute']:02d} - {end['hour']:02d}:{end['minute']:02d}"
+    if start['hour'] != end['hour'] or start['minute'] != end['minute']:
+        result += f" Charge from grid" if enable else f" Force Charge"
     return result
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None, adjust = 0, force = 0):
@@ -515,9 +522,13 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     if battery_settings is None:
         battery_settings = {}
     if battery_settings.get('times') is None:
-        battery_settings['times'] = []
-        battery_settings['times'].append({'tip': '', 'enable': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
-        battery_settings['times'].append({'tip': '', 'enable': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
+        battery_settings['times'] = {}
+        battery_settings['times']['enable1']    = False,
+        battery_settings['times']['startTime1'] = {'hour': 0, 'minute': 0}
+        battery_settings['times']['endTime1']   = {'hour': 0, 'minute': 0}
+        battery_settings['times']['enable2']    = False,
+        battery_settings['times']['startTime2'] = {'hour': 0, 'minute': 0}
+        battery_settings['times']['endTime2']   = {'hour': 0, 'minute': 0}
     if get_schedule().get('enable'):
         if force == 0:
             print(f"** set_charge(): cannot set charge when a schedule is enabled")
@@ -532,11 +543,11 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         else:
             st1 = round_time(time_hours(st1) + adjust)
             en1 = round_time(time_hours(en1) + adjust)
-        battery_settings['times'][0]['enable'] = True if ch1 == True or ch1 == 1 else False
-        battery_settings['times'][0]['startTime']['hour'] = int(st1)
-        battery_settings['times'][0]['startTime']['minute'] = int(60 * (st1 - int(st1)) + 0.5)
-        battery_settings['times'][0]['endTime']['hour'] = int(en1)
-        battery_settings['times'][0]['endTime']['minute'] = int(60 * (en1 - int(en1)) + 0.5)
+        battery_settings['times']['enable1'] = True if ch1 == True or ch1 == 1 else False
+        battery_settings['times']['startTime1']['hour'] = int(st1)
+        battery_settings['times']['startTime1']['minute'] = int(60 * (st1 - int(st1)) + 0.5)
+        battery_settings['times']['endTime1']['hour'] = int(en1)
+        battery_settings['times']['endTime1']['minute'] = int(60 * (en1 - int(en1)) + 0.5)
     # configure time period 2
     if st2 is not None:
         if st2 == en2:
@@ -546,21 +557,22 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         else:
             st2 = round_time(time_hours(st2) + adjust)
             en2 = round_time(time_hours(en2) + adjust)
-        battery_settings['times'][1]['enable'] = True if ch2 == True or ch2 == 1 else False
-        battery_settings['times'][1]['startTime']['hour'] = int(st2)
-        battery_settings['times'][1]['startTime']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
-        battery_settings['times'][1]['endTime']['hour'] = int(en2)
-        battery_settings['times'][1]['endTime']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
-    if debug_setting > 1:
+        battery_settings['times']['enable2'] = True if ch2 == True or ch2 == 1 else False
+        battery_settings['times']['startTime2']['hour'] = int(st2)
+        battery_settings['times']['startTime2']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
+        battery_settings['times']['endTime2']['hour'] = int(en2)
+        battery_settings['times']['endTime2']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
+    if debug_setting > 2:
         print(f"set_charge(): {battery_settings}")
         return None
     if debug_setting > 0:
         print(f"\nSetting time periods:")
-        print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
-        print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
+        print(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}")
+        print(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}")
     # set charge times
-    data = {'sn': device_sn, 'times': battery_settings.get('times')}
-    response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", data=json.dumps(data))
+    body = battery_settings['times'].copy()
+    body['sn'] = device_sn
+    response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", json=body)
     if response.status_code != 200:
         print(f"** set_charge() got response code {response.status_code}: {response.reason}")
         return None
@@ -718,11 +730,12 @@ def get_work_mode():
     if response.status_code != 200:
         print(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
         return None
-    return None
+    return response
     result = response.json().get('result')
     if result is None:
         print(f"** get_work_mode(), no result data, {errno_message(response)}")
         return None
+    return result
     values = result.get('values')
     if values is None:
         print(f"** get_work_mode(), no work mode values data")
@@ -1004,7 +1017,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             plot_history(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"calculating summary data")
     # copy generationPower to produce inputPower data
     input_name = None
@@ -1027,7 +1040,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
                 sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 2)
             else:
                 sample_time = 5.0
-            if debug_setting > 1:
+            if debug_setting > 2:
                 print(f"sample_time = {sample_time} minutes")
         sum = 0.0
         count = 0
@@ -1168,7 +1181,7 @@ def plot_history(result, plot=1):
 report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 report_names = ['Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
 
-# fix power values after fox corrupts high word of 32-bit energy total
+# fix power values after corruption of high word of 32-bit energy total
 fix_values = 1
 fix_value_threshold = 200000000.0
 fix_value_mask = 0x0000FFFF
@@ -1184,7 +1197,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                 return None
             result_list += result
         if plot > 0:
-            plot_report(result_list, plot, station)
+            plot_report(result_list, plot)
         return result_list
     # validate parameters
     dimension = dimension.lower()
@@ -1224,10 +1237,10 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                 print(f"** get_report(), no report data available, {errno_message(response)}")
                 return None
             if fix_values == 1:
-                for var in side_result:
-                    for data in var['values']:
-                        if data['value'] > fix_value_threshold:
-                            data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
+                for i, var in enumerate(side_result):
+                    for j, value in enumerate(var['values']):
+                        if value > fix_value_threshold:
+                            side_result[i]['values'][j] = (int(value * 10) & fix_value_mask) / 10
     if summary < 2:
         body = {'sn': device_sn, 'dimension': dimension.replace('week', 'month'), 'variables': v, 'year': main_date['year'], 'month': main_date['month'], 'day': main_date['day']}
         response = signed_post(path="/op/v0/device/report/query", json=body)
@@ -1241,10 +1254,10 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             return None
         # correct errors in report values:
         if fix_values == 1:
-            for var in result:
-                for data in var['values']:
-                    if data['value'] > fix_value_threshold:
-                        data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
+            for i, var in enumerate(result):
+                for j, value in enumerate(var['values']):
+                    if value > fix_value_threshold:
+                        result[i]['values'][j] = (int(value * 10) & fix_value_mask) / 10
         # prune results back to only valid, complete data for day, week, month or year
         if dimension == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
             for var in result:
@@ -1256,9 +1269,9 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                 var['values'] = var['values'][:int(main_date['day'])]
                 if side_result is not None:
                     # prepend side results (previous month) if required
-                    var['values'] = side_result[i]['values'][int(side_date['day']):] + var['data']
+                    var['values'] = side_result[i]['values'][int(side_date['day']):] + var['values']
                 # prune to week required
-                var['data'] = var['data'][-7:]
+                var['values'] = var['values'][-7:]
         elif dimension == 'month' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month']:
             for var in result:
                 # prune current month to days that are valid
@@ -1271,7 +1284,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         # fake result for summary only report
         result = []
         for x in v:
-            result.append({'variable': x, 'data': [], 'date': d})
+            result.append({'variable': x, 'values': [], 'date': d})
     if load is not None:
         file = open(load)
         result = json.load(file)
@@ -1289,14 +1302,13 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         sum = 0.0
         max = None
         min = None
-        for y in var['values']:
-            value = y['value']
+        for value in var['values']:
             count += 1
             sum += value
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
         # correct day total from side report
-        var['total'] = sum if dimension != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
+        var['total'] = sum if dimension != 'day' else side_result[i]['values'][int(main_date['day'])-1]
         var['name'] = report_names[report_vars.index(var['variable'])]
         var['type'] = dimension
         if summary < 2:
@@ -1305,16 +1317,16 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             var['date'] = d
             var['count'] = count
             var['max'] = max if max is not None else None
-            var['max_index'] = [y['value'] for y in var['data']].index(max) if max is not None else None
+            var['max_index'] = [y for y in var['values']].index(max) if max is not None else None
             var['min'] = min if min is not None else None
-            var['min_index'] = [y['value'] for y in var['data']].index(min) if min is not None else None
+            var['min_index'] = [y for y in var['values']].index(min) if min is not None else None
     if plot > 0 and summary < 2:
         plot_report(result, plot, station)
     return result
 
 # plot get_report result
 def plot_report(result, plot=1, station=0):
-    global site, device_sn
+    global site, device_sn, debug_setting
     if result is None:
         return
     # work out what we have
@@ -1330,10 +1342,11 @@ def plot_report(result, plot=1, station=0):
                 types.append(v['type'])
             if v['date'] not in dates:
                 dates.append(v['date'])
-            for i in [x['index'] for x in v['data']]:
+            for i in range(1, len(v['values'])+1):
                 if i not in index:
                     index.append(i)
-#    print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+    if debug_setting > 2:
+        print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
     if len(vars) == 0:
         return
     # plot variables by date with the same units on the same charts
@@ -1356,7 +1369,7 @@ def plot_report(result, plot=1, station=0):
             d = v['date']
             n = len(v['values'])
             x = [i + align  for i in range(1, n+1)]
-            y = [v['values'][i]['value'] for i in range(0, n)]
+            y = [v['values'][i] for i in range(0, n)]
             label = f"{d}" if len(dates) > 1 else f"{name}"
             plt.bar(x, y ,label=label, width=width)
             align += width
@@ -1382,7 +1395,7 @@ def plot_report(result, plot=1, station=0):
             plt.grid()
             plt.show()
             lines = 0
-            align = -0.4
+            align = 0.0
     return
 
 
@@ -1532,7 +1545,7 @@ octopus_flux = {
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [10, 11, 22, 23]                          # hours in a day to get a forecast
+    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1572,7 +1585,7 @@ agile_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [10, 11, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # time periods for British Gas Electric Driver
@@ -1776,7 +1789,7 @@ def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     return 1
 
 # set tariff and AM/PM charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, d=None, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, forecast_times=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1806,12 +1819,21 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
             print(f"  {x['name']}")
         return None
     use = found[0]
-    times = [] if times is None and start_at is None and end_by is None and duration is None else [(start_at, end_by, duration)] if times is None else times
+    if times is None:
+        times = [(start_at, end_by, duration)]
     set_proc = set_agile_period if use == agile_octopus else set_tariff_period
     for t in times:
         result = set_proc(period={'start': t[0], 'end': t[1], 'duration': t[2]}, tariff=use, d=d)
         if result is None:
             return None
+    if forecast_times is not None:
+        if type(forecast_times) is not list:
+            forecast_times = [forecast_times]
+        forecast_hours = []
+        for t in forecast_times:
+            forecast_hours.append(time_hours(t))
+        use['forecast_times'] = forecast_hours
+        print(f"\nForecast times set to {forecast_times}")
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -1874,8 +1896,8 @@ def report_value_profile(result):
     for day in result:
         hours = 0
         # sum and count available values by hour
-        for i in range(0, len(day['data'])):
-            data[i] = (data[i][0] + day['data'][i]['value'], data[i][1]+1)
+        for i in range(0, len(day['values'])):
+            data[i] = (data[i][0] + day['values'][i], data[i][1]+1)
             hours += 1
         totals += day['total'] * (24 / hours if hours >= 1 else 1)
         n += 1
@@ -1891,8 +1913,8 @@ def report_value_profile(result):
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
 # take forecast and return (value and timed profile)
-def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
-    value = forecast.daily[tomorrow]['kwh']
+def forecast_value_timed(forecast, forecast_day, today, tomorrow, hour_now, run_time, time_offset=0):
+    value = forecast.daily[forecast_day]['kwh']
     profile = []
     for h in range(0, 24):
         profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
@@ -2024,6 +2046,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     start_hour = base_hour + time_to_start
     time_to_next = int(time_to_start)
     start_part_hour = time_to_start % 1
+    forecast_day = today if charge_pm else tomorrow
     if hour_adjustment < 0 and start_hour > change_hour:
         time_to_next -= 1       # 1 hour less if charging after clocks go forward
     run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1 + hour_adjustment
@@ -2033,7 +2056,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
     elif type(full_charge) is str:          # value = daily or day of week
         full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}")
         print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
@@ -2047,10 +2070,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             min_soc = charge_config['min_soc']
         else:
             get_min()
-            if battery_settings.get('minGridSoc') is not None:
-                min_soc = battery_settings['minGridSoc']
+            if battery_settings.get('minSocOnGrid') is not None:
+                min_soc = battery_settings['minSocOnGrid']
             else:
-                print(f"\nMin SoC is not available. Please provide % via 'min_soc' parameter")
+                print(f"\nMin SoC On Grid is not available. Please provide % via 'min_soc' parameter")
                 return None
         get_battery()
         current_soc = battery['soc']
@@ -2144,7 +2167,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / discharge_loss
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
     print(f"\nDevice Info:")
     print(f"  Rating:    {device_power:.2f}kW")
@@ -2185,10 +2208,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_value = None
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
-        fsolcast = Solcast(quiet=True, estimated=0)
-        if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(tomorrow) is not None:
-            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
-            print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
+        fsolcast = Solcast(quiet=True, estimated=1 if charge_pm else 0)
+        if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
+            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, forecast_day, today, tomorrow, hour_now, run_time, time_offset)
+            print(f"\nSolcast forecast for {forecast_day}: {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
                 solcast_value = solcast_value * adjust / 100
@@ -2199,9 +2222,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solar_profile = None
     if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
-        if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(tomorrow) is not None:
-            (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
-            print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
+        if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
+            (solar_value, solar_timed) = forecast_value_timed(fsolar, forecast_day, today, tomorrow, hour_now, run_time)
+            print(f"\nSolar forecast for {forecast_day}: {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
             if adjust != 100:
                 solar_value = solar_value * adjust / 100
@@ -2239,15 +2262,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing manual forecast for {tomorrow}: {expected:.1f}kWh with {sun_name} sun profile")
+        print(f"\nUsing manual forecast for {forecast_day}: {expected:.1f}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        print(f"\nUsing Solcast forecast for {tomorrow}: {expected:.1f}kWh")
+        print(f"\nUsing Solcast forecast for {forecast_day}: {expected:.1f}kWh")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        print(f"\nUsing Solar forecast for {tomorrow}: {expected:.1f}kWh")
+        print(f"\nUsing Solar forecast for {forecast_day}: {expected:.1f}kWh")
     elif generation is None or generation == 0.0:
         print(f"\nNo generation data available")
         return None
@@ -2355,7 +2378,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 t = 1.0                             # complete hour inside start and end
             else:
                 t = 0.0                             # complete hour before start or after end
-            if debug_setting > 1:
+            if debug_setting > 2:
                 print(f"i = {i}, j = {j}, t = {t}")
             charge_added = charge_limit * t
             charge_timed[i] = charge_timed[i] + charge_added if charge_timed[i] + charge_added < charge_limit else charge_limit

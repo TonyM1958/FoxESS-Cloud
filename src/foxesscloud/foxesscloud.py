@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 January 2024
+Updated:  21 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.4"
+version = "1.0.5"
 debug_setting = 1
 
 # constants
@@ -86,7 +86,7 @@ def signed_header(path, login = 0):
     headers['Timestamp'] = timestamp
     headers['Content-Type'] = 'application/json;charset=UTF-8'
     headers['Signature'] = hashlib.md5(fr"{path}\r\n{headers['Token']}\r\n{headers['Lang']}\r\n{headers['Timestamp']}".encode('UTF-8')).hexdigest() + '.' + token_store['client_id']
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"path = {path}")
         print(f"headers = {headers}")
     return headers
@@ -617,7 +617,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times'][1]['startTime']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
         battery_settings['times'][1]['endTime']['hour'] = int(en2)
         battery_settings['times'][1]['endTime']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"set_charge(): {battery_settings}")
         return None
     if debug_setting > 0:
@@ -1453,7 +1453,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
 
 # plot get_report result
 def plot_report(result, plot=1, station=0):
-    global site, device_sn
+    global site, device_sn, debug_setting
     if result is None:
         return
     # work out what we have
@@ -1472,7 +1472,8 @@ def plot_report(result, plot=1, station=0):
             for i in [x['index'] for x in v['data']]:
                 if i not in index:
                     index.append(i)
-#    print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+    if debug_setting > 2:
+        print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
     if len(vars) == 0:
         return
     # plot variables by date with the same units on the same charts
@@ -1521,7 +1522,7 @@ def plot_report(result, plot=1, station=0):
             plt.grid()
             plt.show()
             lines = 0
-            align = -0.4
+            align = 0.0
     return
 
 ##################################################################################################
@@ -1695,7 +1696,7 @@ octopus_flux = {
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'default_mode': 'SelfUse',                                  # default work mode
     'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [10, 11, 22, 23]                          # hours in a day to get a forecast
+    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
     }
 
 # time periods for Intelligent Octopus
@@ -1735,7 +1736,7 @@ agile_octopus = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
     'peak': {'start': 16.0, 'end': 19.0 },
     'peak2': {'start': 0.0, 'end': 0.0 },
-    'forecast_times': [10, 11, 22, 23]
+    'forecast_times': [22, 23]
     }
 
 # time periods for British Gas Electric Driver
@@ -1916,7 +1917,7 @@ def set_agile_period(period=None, tariff=agile_octopus, d=None):
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"  Charging period {hours_time(start)} to {hours_time(end)}")
+    print(f"  Charging period set: {hours_time(start)} to {hours_time(end)}")
     return 1
 
 # set AM/PM charge time for any tariff
@@ -1935,11 +1936,11 @@ def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"\n{tariff['name']} {am_pm} charging period {hours_time(start)} to {hours_time(end)}")
+    print(f"\n{tariff['name']} {am_pm} charging period set: {hours_time(start)} to {hours_time(end)}")
     return 1
 
 # set tariff and AM/PM charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, d=None, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=3, times=None, forecast_times=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1969,12 +1970,21 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
             print(f"  {x['name']}")
         return None
     use = found[0]
-    times = [] if times is None and start_at is None and end_by is None and duration is None else [(start_at, end_by, duration)] if times is None else times
+    if times is None:
+        times = [(start_at, end_by, duration)]
     set_proc = set_agile_period if use == agile_octopus else set_tariff_period
     for t in times:
         result = set_proc(period={'start': t[0], 'end': t[1], 'duration': t[2]}, tariff=use, d=d)
         if result is None:
             return None
+    if forecast_times is not None:
+        if type(forecast_times) is not list:
+            forecast_times = [forecast_times]
+        forecast_hours = []
+        for t in forecast_times:
+            forecast_hours.append(time_hours(t))
+        use['forecast_times'] = forecast_hours
+        print(f"\nForecast times set to {forecast_times}")
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -2054,8 +2064,8 @@ def report_value_profile(result):
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
 # take forecast and return (value and timed profile)
-def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
-    value = forecast.daily[tomorrow]['kwh']
+def forecast_value_timed(forecast, day, today, tomorrow, hour_now, run_time, time_offset=0):
+    value = forecast.daily[day]['kwh']
     profile = []
     for h in range(0, 24):
         profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
@@ -2187,6 +2197,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     start_hour = base_hour + time_to_start
     time_to_next = int(time_to_start)
     start_part_hour = time_to_start % 1
+    forecast_day = today if charge_pm else tomorrow
     if hour_adjustment < 0 and start_hour > change_hour:
         time_to_next -= 1       # 1 hour less if charging after clocks go forward
     run_time = int((time_to_am if charge_pm else time_to_am + 24 if time_to_pm is None else time_to_pm) + 0.99) + 1 + hour_adjustment
@@ -2196,7 +2207,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
     elif type(full_charge) is str:          # value = daily or day of week
         full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}")
         print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
         print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
@@ -2310,7 +2321,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / discharge_loss
-    if debug_setting > 1:
+    if debug_setting > 2:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
     print(f"\nDevice Info:")
     print(f"  Rating:    {device_power:.2f}kW")
@@ -2351,10 +2362,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_value = None
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
-        fsolcast = Solcast(quiet=True, estimated=0)
-        if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(tomorrow) is not None:
-            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
-            print(f"\nSolcast forecast for {tomorrow}: {solcast_value:.1f}kWh")
+        fsolcast = Solcast(quiet=True, estimated=1 if charge_pm else 0)
+        if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
+            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, forecast_day, today, tomorrow, hour_now, run_time, time_offset)
+            print(f"\nSolcast forecast for {forecast_day}: {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
                 solcast_value = solcast_value * adjust / 100
@@ -2365,9 +2376,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solar_profile = None
     if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
-        if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(tomorrow) is not None:
-            (solar_value, solar_timed) = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time)
-            print(f"\nSolar forecast for {tomorrow}: {solar_value:.1f}kWh")
+        if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
+            (solar_value, solar_timed) = forecast_value_timed(fsolar, forecast_day, today, tomorrow, hour_now, run_time)
+            print(f"\nSolar forecast for {forecast_day}: {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
             if adjust != 100:
                 solar_value = solar_value * adjust / 100
@@ -2405,15 +2416,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing manual forecast for {tomorrow}: {expected:.1f}kWh with {sun_name} sun profile")
+        print(f"\nUsing manual forecast for {forecast_day}: {expected:.1f}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        print(f"\nUsing Solcast forecast for {tomorrow}: {expected:.1f}kWh")
+        print(f"\nUsing Solcast forecast for {forecast_day}: {expected:.1f}kWh")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        print(f"\nUsing Solar forecast for {tomorrow}: {expected:.1f}kWh")
+        print(f"\nUsing Solar forecast for {forecast_day}: {expected:.1f}kWh")
     elif generation is None or generation == 0.0:
         print(f"\nNo generation data available")
         return None
@@ -2521,7 +2532,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 t = 1.0                             # complete hour inside start and end
             else:
                 t = 0.0                             # complete hour before start or after end
-            if debug_setting > 1:
+            if debug_setting > 2:
                 print(f"i = {i}, j = {j}, t = {t}")
             charge_added = charge_limit * t
             charge_timed[i] = charge_timed[i] + charge_added if charge_timed[i] + charge_added < charge_limit else charge_limit
