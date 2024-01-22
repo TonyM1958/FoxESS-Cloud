@@ -381,7 +381,7 @@ f.set_tariff('flux')
 When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_tariff('agile', product, region, start_at, end_by, duration, times, forecast_times, update, weighting, time_shift)
+f.set_tariff('agile', product, region, start_at, end_by, duration, times, forecast_times, work_times, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
@@ -391,7 +391,8 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + end_by: optional latest end time for charge period in hours, the default is 08:00
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
 + times: a list of charge periods that can be used instead of start_at, end_by and duration (see below)
-+ forecast_times: a list of hours when a forecast can be obtained from Solcast or forecast.solar
++ forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar
++ work_times: a list of work modes and times when these are set. The format is [(mode, start, end),...]
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)

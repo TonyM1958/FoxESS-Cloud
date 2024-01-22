@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  21 January 2024
+Updated:  22 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -912,8 +912,13 @@ def set_schedule(enable=1, groups=None):
 
 # get real time data
 def get_real(v = None):
-    global device_sn, debug_setting
+    global device_sn, debug_setting, device
     if get_device() is None:
+        return None
+    if device['status'] > 1:
+        status_code = device['status']
+        state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
+        print(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
         return None
     if v is None:
         v = power_vars
@@ -1543,9 +1548,9 @@ octopus_flux = {
     'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},        # off-peak period 2 / pm charging period
     'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
-    'default_mode': 'SelfUse',                                  # default work mode
-    'Feedin': {'start': 16.0, 'end': 7.0, 'min_soc': 75},       # when feedin work mode is set
-    'forecast_times': [22, 23]                                  # hours in a day to get a forecast
+    'forecast_times': [22, 23],                                 # hours in a day to get a forecast
+    'work_hours': [                                             # timed work mode settings
+        {'mode': 'SelfUse', 'start': 7, 'end': 16}, {'mode': 'Feedin', 'start': 16, 'end': 7}]
     }
 
 # time periods for Intelligent Octopus
@@ -1789,7 +1794,7 @@ def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     return 1
 
 # set tariff and AM/PM charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, forecast_times=None, d=None, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, forecast_times=None, work_times=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -1834,12 +1839,30 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
             forecast_hours.append(time_hours(t))
         use['forecast_times'] = forecast_hours
         print(f"\nForecast times set to {forecast_times}")
+    if work_times is not None:
+        if type(work_times) is not None:
+            work_times = [work_times]
+        work_hours = []
+        for d in work_times:
+            (mode, start, end) = d
+            work_hours.append({'mode': mode, 'start': time_hours(start), 'end': time_hours(end)})
+        use['work_hours'] = work_hours
+        print(f"\nWork mode times set to {work_hours}")
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
     elif debug_setting > 0:
         print(f"\nNo changes made to current tariff")
     return None
+
+# get work mode for a time of day based on the tariff:
+def timed_work_mode(h, default = 'SelfUse'):
+    if tariff is None or tariff.get('work_hours') is None:
+        return default
+    for d in tariff['work_hours']:
+        if hour_in(h, d):
+            return d['mode']
+    return default
 
 
 ##################################################################################################
@@ -1997,7 +2020,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
     run_after = 1 if run_after is None else run_after 
-    timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('default_mode') is not None else 0 if timed_mode is None else timed_mode
+    timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('work_hours') is not None else 0 if timed_mode is None else timed_mode
     if forecast_times is None:
         forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
     if type(forecast_times) is not list:
@@ -2167,6 +2190,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / discharge_loss
+    current_mode = get_work_mode()
     if debug_setting > 2:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
     print(f"\nDevice Info:")
@@ -2176,6 +2200,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"  Discharge: {discharge_current:.1f}A, {discharge_limit:.2f}kW, {discharge_loss * 100:.1f}% efficient")
     print(f"  Inverter:  {inverter_power:.0f}W power consumption")
     print(f"  BMS:       {bms_power:.0f}W power consumption")
+    print(f"  Work Mode: {current_mode}")
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
@@ -2285,8 +2310,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     charge_timed = [x * charge_config['pv_loss'] for x in generation_timed]
     discharge_timed = [x / charge_config['discharge_loss'] + charge_config['bms_power'] / 1000 for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
+    work_mode = current_mode
     for i in range(0, run_time):
         h = base_hour + i
+        # get work mode and check for changes
+        new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
+        if new_work_mode is not None and new_work_mode != work_mode:
+            if debug_setting > 0:
+                print(f"  Work mode changed from {work_mode} to {new_work_mode} at {hours_time(h)}")
+            work_mode = new_work_mode
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
         discharge_timed[i] = discharge_limit if discharge_timed[i] > discharge_limit else discharge_timed[i]
@@ -2294,9 +2326,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             discharge_timed[i] = operating_loss if charge_timed[i] == 0.0 else 0.0
         elif force_charge_pm == 1 and hour_in(h, {'start': start_pm, 'end': end_pm}):
             discharge_timed[i] = operating_loss if charge_timed[i] == 0.0 else 0.0
-        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Backup')):
+        elif timed_mode > 0 and work_mode == 'Backup':
             discharge_timed[i] = operating_loss if charge_timed[i] == 0.0 else 0.0
-        elif timed_mode > 0 and tariff is not None and hour_in(h, tariff.get('Feedin')):
+        elif timed_mode > 0 and work_mode == 'Feedin':
             (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
                 0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
     # track the battery residual over the run time (if we don't add any charge)
@@ -2412,8 +2444,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        print(f"\nCharging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
-#        print(f"  Charging for {int(hours * 60)} minutes adds {kwh_added:.2f}kWh ({net_added:.2f}kWh net)")
+        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh net ({kwh_added:.2f}kWh total)")
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
 #        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
         print(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
@@ -2477,23 +2508,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     else:
         print(f"\nNo changes made to charge settings")
     # timed work mode change
-    target_mode = tariff.get('default_mode') if tariff is not None else None
-    if update_settings in [0,1] or target_mode is None:
+    if update_settings in [0,1] or timed_mode == 0:
         return None
-    required_soc = 0
-    current_mode = get_work_mode()
     if current_mode is None:
         return None
-    for w in work_modes:
-        if tariff.get(w) is not None and hour_in(hour_now, tariff[w]):
-                target_mode = w
-                required_soc = tariff[w].get('min_soc') if tariff[w].get('min_soc') is not None else 0
+    target_mode = timed_work_mode(hour_now) if timed_mode == 1 else current_mode
     if update_settings in [2,3] and current_mode != target_mode:
-        print(f"\nCurrent SoC = {current_soc}%, Required SoC = {required_soc}%, Target work mode = '{target_mode}'")
-        if current_soc >= required_soc and set_work_mode(target_mode) == target_mode:
+        if set_work_mode(target_mode) == target_mode:
             print(f"  Changed work mode from '{current_mode}' to '{target_mode}'")
-    else:
-        print(f"\nCurrent work mode is '{current_mode}'")
     return None
 
 ##################################################################################################
