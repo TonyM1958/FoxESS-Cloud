@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  22 January 2024
+Updated:  23 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.6"
+version = "1.0.7"
 debug_setting = 1
 
 # constants
@@ -1159,7 +1159,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
                 sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 2)
             else:
                 sample_time = 5.0
-            if debug_setting > 1:
+            if debug_setting > 2:
                 print(f"sample_time = {sample_time} minutes")
         sum = 0.0
         count = 0
@@ -2080,16 +2080,15 @@ def report_value_profile(result):
     current_total = sum(by_hour)
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
-# take forecast and return (value and timed profile)
-def forecast_value_timed(forecast, day, today, tomorrow, hour_now, run_time, time_offset=0):
-    value = forecast.daily[day]['kwh']
+# take forecast and return a timed profile
+def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
     profile = []
     for h in range(0, 24):
         profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
     timed = []
     for h in range(int(hour_now), 24):
         timed.append(c_float(forecast.daily[today]['hourly'].get(int(round_time(h - time_offset)))))
-    return (value, (timed + profile + profile)[:run_time])
+    return (timed + profile + profile)[:run_time]
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
@@ -2383,8 +2382,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, estimated=1 if charge_pm else 0)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
-            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, forecast_day, today, tomorrow, hour_now, run_time, time_offset)
-            print(f"\nSolcast forecast for {forecast_day}: {solcast_value:.1f}kWh")
+            solcast_value = fsolcast.daily[forecast_day]['kwh']
+            solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
+            if charge_pm:
+                print(f"\nSolcast forecast for {today} = {fsolcast.daily[today]['kwh']:.1f}, {tomorrow} = {fsolcast.daily[tomorrow]['kwh']:.1f}")
+            else:
+                print(f"\nSolcast forecast for {forecast_day} = {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
                 solcast_value = solcast_value * adjust / 100
@@ -2396,8 +2399,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
-            (solar_value, solar_timed) = forecast_value_timed(fsolar, forecast_day, today, tomorrow, hour_now, run_time)
-            print(f"\nSolar forecast for {forecast_day}: {solar_value:.1f}kWh")
+            solar_value = fsolar.daily[forecast_day]['kwh']
+            solar_timed = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time, time_offset)
+            if charge_pm:
+                print(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
+            else:
+                print(f"\nSolar forecast for {forecast_day} = {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
             if adjust != 100:
                 solar_value = solar_value * adjust / 100
@@ -2507,7 +2514,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_current += kwh_timed[i]
         h += 1
     # work out what we need to add to stay above reserve and provide contingency
-    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] and not charge_pm else charge_config['contingency']
+    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'

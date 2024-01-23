@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  22 January 2024
+Updated:  23 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -449,7 +449,6 @@ battery = None
 battery_settings = None
 battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy' ]
 battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
-residual_scaling = 10
 
 def get_battery(v = None):
     global device_sn, battery, debug_setting, residual_scaling
@@ -459,23 +458,11 @@ def get_battery(v = None):
         print(f"getting battery")
     if v is None:
         v = battery_vars
-    params = {'sn': device_sn}
-    body = {'sn': device_sn, 'variables': v}
-    response = signed_post(path="/op/v0/device/real/query", json=body)
-    if response.status_code != 200:
-        print(f"** get_battery() got response code {response.status_code}: {response.reason}")
-        return None
-    result = response.json().get('result')
-    if result is None or type(result) is not list or len(result) != 1:
-        print(f"** get_battery(), no result data, {errno_message(response)}")
-        return None
-    result = result[0]
+    result = get_real(v)
     if battery is None:
         battery = {}
-    for v in result['datas']:
-        i = battery_vars.index(v['variable'])
-        battery[battery_data[i]] = v.get('value')
-    battery['residual'] *= residual_scaling
+    for i in range(0, len(battery_vars)):
+        battery[battery_data[i]] = result[i].get('value')
     return battery
 
 ##################################################################################################
@@ -910,6 +897,20 @@ def set_schedule(enable=1, groups=None):
 # get real time data
 ##################################################################################################
 
+# parse the unit and return unit and scale
+def split_unit(u):
+    n = ''
+    s = '0.01kWh' if u == '10Wh' else u
+    for c in s:
+        if c in '0123456789.':
+            n += c
+        else:
+            break
+    unit = s[len(n):]
+    scale = float(n) if len(n) > 0 else 1
+    return (unit, scale)
+
+
 # get real time data
 def get_real(v = None):
     global device_sn, debug_setting, device
@@ -920,7 +921,9 @@ def get_real(v = None):
         state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
         print(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
         return None
-    if v is None:
+    if type(v) is not list:
+        v = [v]
+    elif v is None:
         v = power_vars
     if debug_setting > 1:
         print(f"getting real-time data")
@@ -933,6 +936,12 @@ def get_real(v = None):
     if result is None:
         print(f"** get_real(), no result data, {errno_message(response)}")
         return None
+    result = result[0]['datas']
+    for var in result:
+        if var['unit'][0] in '0123456789':
+            (unit, scale) = split_unit(var['unit'])
+            var['unit'] = unit
+            var['value'] *= scale
     return result
 
 
@@ -1010,15 +1019,14 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
     for var in result:
         var['date'] = d[0:10]
         if var.get('unit') is None:
-            var['unit'] = '-'
+            var['unit'] = ''
+        elif var['unit'][0] in '0123456789':
+            (unit, scale) = split_unit(var['unit'])
+            var['unit'] = unit
+            for x in var['data']:
+                x['value'] *= scale
     if summary <= 0 or time_span == 'hour':
-        if summary == -1:     # return last value only for each variable
-            for v in result:
-                v['time'] = v['data'][-1]['time'][11:16]
-                v['value'] = v['data'][-1]['value']
-                del v['data']
-#                del v['date']
-        elif plot > 0:
+        if plot > 0:
             plot_history(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
@@ -1242,10 +1250,10 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                 print(f"** get_report(), no report data available, {errno_message(response)}")
                 return None
             if fix_values == 1:
-                for i, var in enumerate(side_result):
-                    for j, value in enumerate(var['values']):
+                for var in side_result:
+                    for i, value in enumerate(var['values']):
                         if value > fix_value_threshold:
-                            side_result[i]['values'][j] = (int(value * 10) & fix_value_mask) / 10
+                            var['values'][i] = (int(value * 10) & fix_value_mask) / 10
     if summary < 2:
         body = {'sn': device_sn, 'dimension': dimension.replace('week', 'month'), 'variables': v, 'year': main_date['year'], 'month': main_date['month'], 'day': main_date['day']}
         response = signed_post(path="/op/v0/device/report/query", json=body)
@@ -1259,10 +1267,10 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             return None
         # correct errors in report values:
         if fix_values == 1:
-            for i, var in enumerate(result):
-                for j, value in enumerate(var['values']):
+            for var in result:
+                for i, value in enumerate(var['values']):
                     if value > fix_value_threshold:
-                        result[i]['values'][j] = (int(value * 10) & fix_value_mask) / 10
+                        var['values'][i] = (int(value * 10) & fix_value_mask) / 10
         # prune results back to only valid, complete data for day, week, month or year
         if dimension == 'day' and main_date['year'] == current_date['year'] and main_date['month'] == current_date['month'] and main_date['day'] == current_date['day']:
             for var in result:
@@ -1935,16 +1943,15 @@ def report_value_profile(result):
     current_total = sum(by_hour)
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
-# take forecast and return (value and timed profile)
-def forecast_value_timed(forecast, forecast_day, today, tomorrow, hour_now, run_time, time_offset=0):
-    value = forecast.daily[forecast_day]['kwh']
+# take forecast and return timed profile
+def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
     profile = []
     for h in range(0, 24):
         profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
     timed = []
     for h in range(int(hour_now), 24):
         timed.append(c_float(forecast.daily[today]['hourly'].get(int(round_time(h - time_offset)))))
-    return (value, (timed + profile + profile)[:run_time])
+    return (timed + profile + profile)[:run_time]
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
@@ -2104,7 +2111,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = battery['power']
         bat_current = battery['current']
         temperature = battery['temperature']
-        residual = battery['residual']/1000
+        residual = battery['residual']
         if charge_config.get('capacity') is not None:
             capacity = charge_config['capacity']
         elif residual is not None and residual > 0.0 and current_soc is not None and current_soc > 0.0:
@@ -2235,8 +2242,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, estimated=1 if charge_pm else 0)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
-            (solcast_value, solcast_timed) = forecast_value_timed(fsolcast, forecast_day, today, tomorrow, hour_now, run_time, time_offset)
-            print(f"\nSolcast forecast for {forecast_day}: {solcast_value:.1f}kWh")
+            solcast_value = fsolcast.daily[forecast_day]['kwh']
+            solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
+            if charge_pm:
+                print(f"\nSolcast forecast for {today} = {fsolcast.daily[today]['kwh']:.1f}, {tomorrow} = {fsolcast.daily[tomorrow]['kwh']:.1f}")
+            else:
+                print(f"\nSolcast forecast for {forecast_day} = {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
                 solcast_value = solcast_value * adjust / 100
@@ -2248,8 +2259,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
-            (solar_value, solar_timed) = forecast_value_timed(fsolar, forecast_day, today, tomorrow, hour_now, run_time)
-            print(f"\nSolar forecast for {forecast_day}: {solar_value:.1f}kWh")
+            solar_value = fsolar.daily[forecast_day]['kwh']
+            solar_timed = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time, time_offset)
+            if charge_pm:
+                print(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
+            else:
+                print(f"\nSolar forecast for {forecast_day} = {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
             if adjust != 100:
                 solar_value = solar_value * adjust / 100
@@ -2359,7 +2374,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_current += kwh_timed[i]
         h += 1
     # work out what we need to add to stay above reserve and provide contingency
-    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] and not charge_pm else charge_config['contingency']
+    contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
