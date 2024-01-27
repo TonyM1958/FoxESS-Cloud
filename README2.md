@@ -30,9 +30,9 @@ f.pv_system_id = "my.pv_system_id"
 f.solcast_api_key = "my.solcast_api_key"
 ```
 
-You don't have to configure all of the settings. Your Fox ESS Cloud api key and device serial number are the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login). Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
+You don't have to configure all of the settings. Your Fox ESS Cloud api key is the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login). Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
 
-For example, replace _my.fox_api_key_ with the API key and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
+For example, replace _my.fox_api_key_ with the API key. Add you inverter serial number if you have more than 1 inverter linked to your account. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
 Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 

@@ -165,6 +165,9 @@ def errno_message(response):
 
 def get_access_count():
     global debug_setting, messages, lang
+    if api_key is None:
+        print(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
+        return None
     if debug_setting > 1:
         print(f"getting access info")
     response = signed_get(path="/op/v0/user/getAccessCount")
@@ -185,7 +188,10 @@ var_table = None
 raw_vars = None
 
 def get_vars():
-    global var_table, raw_vars, debug_setting, messages, lang
+    global var_table, raw_vars, debug_setting, messages, lang, token
+    if api_key is None:
+        print(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
+        return None
     if messages is None:
         get_messages()
     if raw_vars is not None:
@@ -1643,7 +1649,7 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'pm_start': 8,                        # time when charge period is considered PM
+    'pm_start': 11,                       # time when charge period is considered PM
     'am_start': 23                        # time when charge period is considered AM
 }
 
@@ -1651,7 +1657,7 @@ tariff_config = {
 def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     global debug_setting, octopus_api_url, time_shift
     # get time, dates and duration
-    duration = 3 if duration is None else 6 if duration > 6 else 1 if duration < 1 else duration
+    duration = 3 if duration is None else 6 if duration > 6 else 0.5 if duration < 0.5 else duration
     # round up to 30 minutes so charge periods covers complete end pricing period
     duration = round(duration * 2 + 0.49, 0) / 2
     # number of 30 minute pricing periods
@@ -1705,11 +1711,14 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     start_at = time_hours(start_at) if type(start_at) is str else 23.0 if start_at is None else start_at
     end_by = time_hours(end_by) if type(end_by) is str else 8.0 if end_by is None else end_by
     start_i = int(round_time(start_at - 23) * 2)
-    end_i = int(round_time(end_by - 23 - duration) * 2)
-    end_i = start_i if end_i < start_i else end_i
+    end_i = int(round_time(end_by - 23) * 2)
+    end_i = 48 if end_i == 0 or end_i > 48 else end_i
     if debug_setting > 1:
-        print(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}")
-    if len(results) < (end_i + span):
+        print(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}, duration = {duration}, span = {span}")
+    if (start_i + span) > 48 or start_i > end_i:
+        print(f"** get_agile_period(): invalid times {hours_time(start_at)} - {hours_time(end_by)}. Must start from 23:00 today and end by 23:00 tomorrow")
+        return None
+    if len(results) < (start_i + span):
         print(f"** get_agile_period(): prices not available for {tomorrow}")
         return None
     # work out weighted average for each period and track lowest price
@@ -1718,18 +1727,18 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     min_v = None
     weighting = tariff_config['weighting']
     weights = [1.0] * span if weighting is None else (weighting + [0.0] * span)[:span]
-    for i in range(start_i, end_i + 1):
+    for i in range(start_i, end_i):
         start = times[i]
         p_span = prices[i: i + span]
+        if (i + span) > 48:
+            break
         wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
-        if debug_setting > 1:
-            print(f"  {start}: {wavg:.2f}")
         if min_v is None or wavg < min_v:
             min_v = wavg
             min_i = i
     # save results
     start = times[min_i]
-    end = times[min_i + span]
+    end = times[min_i + span] if (min_i + span) < 48 else "23:00"
     price = min_v
     period['date'] = tomorrow
     period['times'] = times
@@ -1744,31 +1753,31 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
 # set AM/PM charge time period based on pricing for Agile Octopus
 def set_agile_period(period=None, tariff=agile_octopus, d=None):
     global debug_setting, agile_octopus
-    start_at = 23 if period.get('start') is None else period['start']
-    end_by = 8 if period.get('end') is None else period['end']
+    start_at = 23 if period.get('start') is None else time_hours(period['start'])
+    end_by = 8 if period.get('end') is None else time_hours(period['end'])
     duration = 3 if period.get('duration') is None else period['duration']
     if duration > 0:
-        period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
-        if period is None:
+        agile_period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
+        if agile_period is None:
             return None
-        tomorrow = period['date']
+        tomorrow = agile_period['date']
         s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
-        for i in range(0, len(period['times'])):
+        for i in range(0, len(agile_period['times'])):
             s += "\n" if i % 6 == 2 else ""
-            s += f"  {period['times'][i]} = {period['prices'][i]:5.2f}"
+            s += f"  {agile_period['times'][i]} = {agile_period['prices'][i]:5.2f}"
         print(s)
         weighting = tariff_config['weighting']
         if weighting is not None:
             print(f"\nWeighting: {weighting}")
-        start = time_hours(period['start'])
-        end = time_hours(period['end'])
-        price = period['price']
+        start = time_hours(agile_period['start'])
+        end = time_hours(agile_period['end'])
+        price = agile_period['price']
         charge_pm = start >= tariff_config['pm_start'] and end < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
         print(f"\nBest {duration} hour {am_pm} charging period for {tariff['name']} between {hours_time(start_at)} and {hours_time((end_by))}:")
         print(f"  Price: {price:.2f} p/kWh inc VAT")
     else:
-        charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(start_at) < tariff_config['am_start']
+        charge_pm = start_at >= tariff_config['pm_start'] and start_at < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
         start = 0.0
         end = 0.0
@@ -1779,26 +1788,26 @@ def set_agile_period(period=None, tariff=agile_octopus, d=None):
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"  Charging period {hours_time(start)} to {hours_time(end)}")
+    print(f"  Charging period: {hours_time(start)} to {hours_time(end)}")
     return 1
 
 # set AM/PM charge time for any tariff
 def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     global debug_setting
-    start_at = 2 if period.get('start') is None else period['start']
-    end_by = 5 if period.get('end') is None else period['end']
+    start_at = 2 if period.get('start') is None else time_hours(period['start'])
+    end_by = 5 if period.get('end') is None else time_hours(period['end'])
     duration = 3 if period.get('duration') is None else period['duration']
-    charge_pm = time_hours(start_at) >= tariff_config['pm_start'] and time_hours(end_by) < tariff_config['am_start']
+    charge_pm = start_at >= tariff_config['pm_start'] and end_by < tariff_config['am_start']
     am_pm = 'PM' if charge_pm else 'AM'
-    start = time_hours(start_at) if duration > 0 else 0.0
-    end = time_hours(end_by) if duration > 0 else 0.0
+    start = start_at if duration > 0 else 0.0
+    end = end_by if duration > 0 else 0.0
     if charge_pm:
         tariff['off_peak2']['start'] = start
         tariff['off_peak2']['end'] = end
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"\n{tariff['name']} {am_pm} charging period {hours_time(start)} to {hours_time(end)}")
+    print(f"\n{tariff['name']} {am_pm} charging period: {hours_time(start)} to {hours_time(end)}")
     return 1
 
 # set tariff and AM/PM charge time period
@@ -1833,7 +1842,12 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
         return None
     use = found[0]
     if times is None:
-        times = [(start_at, end_by, duration)]
+        times = [(start_at, end_by, duration)] if start_at is not None or end_by is not None or duration is not None else []
+    elif type(times) is not list:
+        times = [times]
+    if len(times) > 2:
+        print(f"** set_tariff(): one AM (11pm - 11am) and one PM (11am - 11pm) charge time can be set. times = {times}")
+        return None
     set_proc = set_agile_period if use == agile_octopus else set_tariff_period
     for t in times:
         result = set_proc(period={'start': t[0], 'end': t[1], 'duration': t[2]}, tariff=use, d=d)
@@ -1843,7 +1857,8 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
         if type(forecast_times) is not list:
             forecast_times = [forecast_times]
         forecast_hours = []
-        for t in forecast_times:
+        for i, t in enumerate(forecast_times):
+            forecast_times[i] = hours_time(t)
             forecast_hours.append(time_hours(t))
         use['forecast_times'] = forecast_hours
         print(f"\nForecast times set to {forecast_times}")
@@ -1871,7 +1886,6 @@ def timed_work_mode(h, default = 'SelfUse'):
         if hour_in(h, d):
             return d['mode']
     return default
-
 
 ##################################################################################################
 # CHARGE_NEEDED - calculate charge from current battery charge, forecast yield and expected load
