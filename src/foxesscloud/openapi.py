@@ -117,11 +117,12 @@ def signed_get(path, params = None, login = 0):
     response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
     return response
 
-def signed_post(path, json = None, login = 0):
+def signed_post(path, body = None, login = 0):
     global fox_domain, debug_setting
+    data = json.dumps(body)
     if debug_setting > 2:
-        print(f"body = {json}")
-    response = requests.post(url=fox_domain + path, headers=signed_header(path, login), json=json)
+        print(f"body = {data}")
+    response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data)
     return response
 
 
@@ -234,7 +235,7 @@ def get_site(name=None):
     site = None
     station_id = None
     body = {'pageSize': 100, 'currentPage': 1 }
-    response = signed_post(path="/op/v0/plant/list", json=body)
+    response = signed_post(path="/op/v0/plant/list", body=body)
     if response.status_code != 200:
         print(f"** get_sites() got list response code {response.status_code}: {response.reason}")
         return None
@@ -292,7 +293,7 @@ def get_logger(sn=None):
     if debug_setting > 1:
         print(f"getting loggers")
     body = {'pageSize': 100, 'currentPage': 1}
-    response = signed_post(path="/op/v0/module/list", json=body)
+    response = signed_post(path="/op/v0/module/list", body=body)
     if response.status_code != 200:
         print(f"** get_logger() got list response code {response.status_code}: {response.reason}")
         return None
@@ -345,7 +346,7 @@ def get_device(sn=None):
         sn = device_sn
     # get device list
     body = {'pageSize': 100, 'currentPage': 1}
-    response = signed_post(path="/op/v0/device/list", json=body)
+    response = signed_post(path="/op/v0/device/list", body=body)
     if response.status_code != 200:
         print(f"** get_device() list got response code {response.status_code}: {response.reason}")
         return None
@@ -502,14 +503,14 @@ def get_charge():
 
 # helper to format time period structure
 def time_period(t, n):
-    (enable, start, end) = (t['enable1'], t['startTime1'], t['endTime1']) if n ==1 else (t['enable2'], t['startTime2'], t['endTime2'])
+    (enable, start, end) = (t['enable1'], t['startTime1'], t['endTime1']) if n == 1 else (t['enable2'], t['startTime2'], t['endTime2'])
     result = f"{start['hour']:02d}:{start['minute']:02d} - {end['hour']:02d}:{end['minute']:02d}"
     if start['hour'] != end['hour'] or start['minute'] != end['minute']:
         result += f" Charge from grid" if enable else f" Force Charge"
     return result
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None, adjust = 0, force = 0):
-    global token, device_sn, battery_settings, debug_setting
+    global token, device_sn, battery_settings, debug_setting, time_period_vars
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -522,7 +523,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times']['enable2']    = False,
         battery_settings['times']['startTime2'] = {'hour': 0, 'minute': 0}
         battery_settings['times']['endTime2']   = {'hour': 0, 'minute': 0}
-    if get_schedule().get('enable'):
+    if get_flag().get('enable') == 1:
         if force == 0:
             print(f"** set_charge(): cannot set charge when a schedule is enabled")
             return None
@@ -555,17 +556,15 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times']['startTime2']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
         battery_settings['times']['endTime2']['hour'] = int(en2)
         battery_settings['times']['endTime2']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
-    if debug_setting > 2:
-        print(f"set_charge(): {battery_settings}")
-        return None
     if debug_setting > 0:
         print(f"\nSetting time periods:")
         print(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}")
         print(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}")
     # set charge times
-    body = battery_settings['times'].copy()
-    body['sn'] = device_sn
-    response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", json=body)
+    body = {'sn': device_sn}
+    for k in ['enable1', 'startTime1', 'endTime1', 'enable2', 'startTime2', 'endTime2']:
+        body[k] = battery_settings['times'][k]          # try forcing order of items?
+    response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", body=body)
     if response.status_code != 200:
         print(f"** set_charge() got response code {response.status_code}: {response.reason}")
         return None
@@ -764,7 +763,7 @@ def set_work_mode(mode, force = 0):
     if debug_setting > 0:
         print(f"\nSetting work mode: {mode}")
     body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
-    response = signed_post(path="/op/v0/device/setting/set", json=body)
+    response = signed_post(path="/op/v0/device/setting/set", body=body)
     if response.status_code != 200:
         print(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
         return None
@@ -796,7 +795,7 @@ def get_flag():
     if debug_setting > 1:
         print(f"getting flag")
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v0/device/scheduler/get/flag", json=body)
+    response = signed_post(path="/op/v0/device/scheduler/get/flag", body=body)
     if response.status_code != 200:
         print(f"** get_flag() got response code {response.status_code}: {response.reason}")
         return None
@@ -822,7 +821,7 @@ def get_schedule():
     if debug_setting > 1:
         print(f"getting schedule")
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v0/device/scheduler/get", json=body)
+    response = signed_post(path="/op/v0/device/scheduler/get", body=body)
     if response.status_code != 200:
         print(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
@@ -875,7 +874,7 @@ def set_schedule(enable=1, groups=None):
         body = {'deviceSN': device_sn, 'groups': groups}
         if debug_setting > 0:
             print(f"\nSaving schedule")
-        response = signed_post(path="/op/v0/device/scheduler/enable", json=body)
+        response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
         if response.status_code != 200:
             print(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
             return None
@@ -887,7 +886,7 @@ def set_schedule(enable=1, groups=None):
     if debug_setting > 0:
         print(f"\nSetting schedule enable flag to {enable}")
     body = {'deviceSN': device_sn, 'enable': enable}
-    response = signed_post(path="/op/v0/device/scheduler/set/flag", json=body)
+    response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
         print(f"** set_schedule() flag response code {response.status_code}: {response.reason}")
         return None
@@ -934,7 +933,7 @@ def get_real(v = None):
     if debug_setting > 1:
         print(f"getting real-time data")
     body = {'deviceSN': device_sn, 'variables': v}
-    response = signed_post(path="/op/v0/device/real/query", json=body)
+    response = signed_post(path="/op/v0/device/real/query", body=body)
     if response.status_code != 200:
         print(f"** get_real() got response code {response.status_code}: {response.reason}")
         return None
@@ -1003,7 +1002,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
         body = {'sn': device_sn, 'variables': v, 'begin': t_begin, 'end': t_end}
-        response = signed_post(path="/op/v0/device/history/query", json=body)
+        response = signed_post(path="/op/v0/device/history/query", body=body)
         if response.status_code != 200:
             print(f"** get_history() got response code {response.status_code}: {response.reason}")
             return None
@@ -1246,7 +1245,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         side_date = query_date(d, -7) if dimension == 'week' else main_date
         if dimension == 'day' or main_date['month'] != side_date['month']:
             body = {'sn': device_sn, 'dimension': 'month', 'variables': v, 'year': side_date['year'], 'month': side_date['month'], 'day': side_date['day']}
-            response = signed_post(path="/op/v0/device/report/query", json=body)
+            response = signed_post(path="/op/v0/device/report/query", body=body)
             if response.status_code != 200:
                 print(f"** get_report() side report got response code {response.status_code}: {response.reason}")
                 return None
@@ -1262,7 +1261,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                             var['values'][i] = (int(value * 10) & fix_value_mask) / 10
     if summary < 2:
         body = {'sn': device_sn, 'dimension': dimension.replace('week', 'month'), 'variables': v, 'year': main_date['year'], 'month': main_date['month'], 'day': main_date['day']}
-        response = signed_post(path="/op/v0/device/report/query", json=body)
+        response = signed_post(path="/op/v0/device/report/query", body=body)
         if response.status_code != 200:
             print(f"** get_report() main report got response code {response.status_code}: {response.reason}")
             return None
@@ -1969,7 +1968,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
-lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 53.63, 55.00]
+lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
 
 # charge_needed settings
 charge_config = {
@@ -2473,9 +2472,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh net ({kwh_added:.2f}kWh total)")
+        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-#        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
         print(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
         print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")

@@ -566,7 +566,8 @@ This setting can be:
 
 ## Version Info
 
-1.0.8<br>
+1.0.9<br>
+Adjustment to lifepo4_curve to improve accuracy of OCV estimation / charge power.
 Bug fix so set_tariff() does not update the default charge times if none of start_at, end_by, duration or times are provided
 Added work_hours to tariff and work_times to set_tariff()
 Added ability to set forecast times in set_tariff()

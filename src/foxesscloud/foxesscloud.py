@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  23 January 2024
+Updated:  29 January 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.8"
+version = "1.0.9"
 debug_setting = 1
 
 # constants
@@ -97,7 +97,7 @@ def signed_get(path, params = None, login = 0):
 
 def signed_post(path, data = None, login = 0):
     global fox_domain
-    return requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data)
+    return requests.post(url=fox_domain + path, headers=signed_header(path, login), data=json.dumps(data))
 
 
 ##################################################################################################
@@ -174,7 +174,7 @@ def get_token():
         print(f"** please configure your Fox ESS Cloud username and password")
         return None
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
-    response = signed_post(path="/c/v0/user/login", data=json.dumps(credentials), login=1)
+    response = signed_post(path="/c/v0/user/login", data=credentials, login=1)
     if response.status_code != 200:
         print(f"** could not login to Fox ESS Cloud - check your username and password - got response code: {response.status_code}")
         return None
@@ -271,8 +271,8 @@ def get_site(name=None):
         print(f"getting sites")
     site = None
     station_id = None
-    query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
-    response = signed_post(path="/c/v1/plant/list", data=json.dumps(query))
+    query = {'pageSize': 10, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
+    response = signed_post(path="/c/v1/plant/list", data=query)
     if response.status_code != 200:
         print(f"** get_sites() got response code: {response.status_code}")
         return None
@@ -320,7 +320,7 @@ def get_logger(sn=None):
     if debug_setting > 1:
         print(f"getting loggers")
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
-    response = signed_post(path="/c/v0/module/list", data=json.dumps(query))
+    response = signed_post(path="/c/v0/module/list", data=query)
     if response.status_code != 200:
         print(f"** get_logger() got response code: {response.status_code}")
         return None
@@ -377,7 +377,7 @@ def get_device(sn=None):
         sn = device_sn
     # get device list
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'queryDate': {'begin': 0, 'end':0}}}
-    response = signed_post(path="/c/v0/device/list", data=json.dumps(query))
+    response = signed_post(path="/c/v0/device/list", data=query)
     if response.status_code != 200:
         print(f"** get_device() got response code: {response.status_code}")
         return None
@@ -619,16 +619,13 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times'][1]['startTime']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
         battery_settings['times'][1]['endTime']['hour'] = int(en2)
         battery_settings['times'][1]['endTime']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
-    if debug_setting > 2:
-        print(f"set_charge(): {battery_settings}")
-        return None
     if debug_setting > 0:
         print(f"\nSetting time periods:")
         print(f"   Time Period 1 = {time_period(battery_settings['times'][0])}")
         print(f"   Time Period 2 = {time_period(battery_settings['times'][1])}")
     # set charge times
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
-    response = signed_post(path="/c/v0/device/battery/time/set", data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/battery/time/set", data=data)
     if response.status_code != 200:
         print(f"** set_charge() got response code: {response.status_code}")
         return None
@@ -696,7 +693,7 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
         return None
     if debug_setting > 0:
         print(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minGridSoc = {battery_settings.get('minGridSoc')}")
-    response = signed_post(path="/c/v0/device/battery/soc/set", data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/battery/soc/set", data=data)
     if response.status_code != 200:
         print(f"** set_min() got response code: {response.status_code}")
         return None
@@ -847,7 +844,7 @@ def set_work_mode(mode, force = 0):
     if debug_setting > 0:
         print(f"\nSetting work mode: {mode}")
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
-    response = signed_post(path="/c/v0/device/setting/set", data=json.dumps(data))
+    response = signed_post(path="/c/v0/device/setting/set", data=data)
     if response.status_code != 200:
         print(f"** set_work_mode() got response code: {response.status_code}")
         return None
@@ -1037,7 +1034,7 @@ def set_schedule(enable=1, periods=None, template=None):
             return None
         if debug_setting > 0:
             print(f"\nEnabling schedule")
-        response = signed_post(path="/generic/v0/device/scheduler/enable", data=json.dumps(data))
+        response = signed_post(path="/generic/v0/device/scheduler/enable", data=data)
         if response.status_code != 200:
             print(f"** set_schedule() got enable response code: {response.status_code}")
             return None
@@ -1107,7 +1104,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         print(f"getting raw data")
     if load is None:
         query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
-        response = signed_post(path="/c/v0/device/history/raw", data=json.dumps(query))
+        response = signed_post(path="/c/v0/device/history/raw", data=query)
         if response.status_code != 200:
             print(f"** get_raw() got response code: {response.status_code}")
             return None
@@ -1355,7 +1352,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         side_date = query_date(d, -7) if report_type == 'week' else main_date
         if report_type == 'day' or main_date['month'] != side_date['month']:
             query = {id_name: id_code, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
-            response = signed_post(path="/c/v0/device/history/report", data=json.dumps(query))
+            response = signed_post(path="/c/v0/device/history/report", data=query)
             if response.status_code != 200:
                 print(f"** get_report() side report got response code: {response.status_code}")
                 return None
@@ -1371,7 +1368,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
                             data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
     if summary < 2:
         query = {id_name: id_code, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
-        response = signed_post(path="/c/v0/device/history/report", data=json.dumps(query))
+        response = signed_post(path="/c/v0/device/history/report", data=query)
         if response.status_code != 200:
             print(f"** get_report() main report got response code: {response.status_code}")
             return None
@@ -2103,7 +2100,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
-lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 53.63, 55.00]
+lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
 
 # charge_needed settings
 charge_config = {
@@ -2610,9 +2607,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh net ({kwh_added:.2f}kWh total)")
+        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
         print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-#        print(f"  Old SoC:   {old_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({old_residual:.2f}kWh)")
         print(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
         print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
