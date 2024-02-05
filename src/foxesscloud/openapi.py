@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  23 January 2024
+Updated:  05 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -186,17 +186,17 @@ def get_access_count():
 ##################################################################################################
 
 var_table = None
-raw_vars = None
+var_list = None
 
 def get_vars():
-    global var_table, raw_vars, debug_setting, messages, lang, token
+    global var_table, var_list, debug_setting, messages, lang, token
     if api_key is None:
         print(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
     if messages is None:
         get_messages()
-    if raw_vars is not None:
-        return raw_vars
+    if var_list is not None:
+        return var_list
     if debug_setting > 1:
         print(f"getting variables")
     response = signed_get(path="/op/v0/device/variable/get")
@@ -208,13 +208,11 @@ def get_vars():
         print(f"** get_vars(), no result data, {errno_message(response)}")
         return None
     var_table = result
-    raw_vars = []
+    var_list = []
     for v in var_table:
         k = next(iter(v))
-        unit = v[k]['unit'] if v[k].get('unit') is not None else ''
-        name = v[k]['name'].get(lang) if v[k].get('name') is not None else k
-        raw_vars.append({'variable': k , 'unit': unit, 'name': name})
-    return raw_vars
+        var_list.append(k)
+    return var_list
 
 ##################################################################################################
 # get list of sites
@@ -332,7 +330,7 @@ device = None
 device_sn = None
 
 def get_device(sn=None):
-    global device_list, device, device_sn, firmware, battery, raw_vars, debug_setting, schedule
+    global device_list, device, device_sn, firmware, battery, debug_setting, schedule
     if get_vars() is None:
         return None
     if device is not None:
@@ -722,8 +720,10 @@ def get_work_mode():
     if response.status_code != 200:
         print(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
         return None
-    return response
-    result = response.json().get('result')
+    try:
+        result = response.json().get('result')
+    except:
+        return None
     if result is None:
         print(f"** get_work_mode(), no result data, {errno_message(response)}")
         return None
@@ -815,7 +815,7 @@ def get_flag():
 
 # get the current schedule
 def get_schedule():
-    global device_sn, schedule, debug_setting
+    global device_sn, schedule, debug_setting, work_modes
     if get_flag() is None:
         return None
     if debug_setting > 1:
@@ -830,7 +830,11 @@ def get_schedule():
         print(f"** get_schedule(), no result data, {errno_message(response)}")
         return None
     schedule['enable'] = result['enable']
-    schedule['groups'] = result['groups']
+    schedule['groups'] = []
+    # remove invalid work mode from groups
+    for g in result['groups']:
+        if g['workMode'] in work_modes:
+            schedule['groups'].append(g)
     return schedule
 
 ##################################################################################################
@@ -918,7 +922,7 @@ def split_unit(u):
 
 # get real time data
 def get_real(v = None):
-    global device_sn, debug_setting, device
+    global device_sn, debug_setting, device, power_vars
     if get_device() is None:
         return None
     if device['status'] > 1:
@@ -926,13 +930,11 @@ def get_real(v = None):
         state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
         print(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
         return None
-    if type(v) is not list:
-        v = [v]
-    elif v is None:
-        v = power_vars
     if debug_setting > 1:
         print(f"getting real-time data")
-    body = {'deviceSN': device_sn, 'variables': v}
+    body = {'deviceSN': device_sn}
+    if v is not None:
+        body['variables'] = v if type(v) is list else [v]
     response = signed_post(path="/op/v0/device/real/query", body=body)
     if response.status_code != 200:
         print(f"** get_real() got response code {response.status_code}: {response.reason}")
@@ -941,9 +943,15 @@ def get_real(v = None):
     if result is None:
         print(f"** get_real(), no result data, {errno_message(response)}")
         return None
+    if len(result) < 1:
+        return None
+    elif len(result) > 1:
+        print(f"** get_real(), more than 1 value returned: {result}")
     result = result[0]['datas']
     for var in result:
-        if var['unit'][0] in '0123456789':
+        if var.get('unit') is None:
+            var['unit'] = ''
+        elif var['unit'][0] in '0123456789':
             (unit, scale) = split_unit(var['unit'])
             var['unit'] = unit
             var['value'] *= scale
@@ -969,7 +977,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
+    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -987,15 +995,15 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             plot_history(result_list, plot)
         return result_list
     if v is None:
-        if raw_vars is None:
-            raw_vars = get_vars()
-        v = [x['variable'] for x in raw_vars]
+        if var_list is None:
+            var_list = get_vars()
+        v = var_list
     elif type(v) is not list:
         v = [v]
     for var in v:
-        if var not in [x['variable'] for x in raw_vars]:
+        if var not in var_list:
             print(f"** get_history(): invalid variable '{var}'")
-            print(f"{[x['variable'] for x in raw_vars]}")
+            print(f"var_list = {var_list}")
             return None
     if debug_setting > 1:
         print(f"getting history data")
@@ -2345,7 +2353,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
         if new_work_mode is not None and new_work_mode != work_mode:
             if debug_setting > 0:
-                print(f"  Work mode changed from {work_mode} to {new_work_mode} at {hours_time(h)}")
+                print(f"  {hours_time(h)}: {new_work_mode} work mode")
             work_mode = new_work_mode
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
@@ -2415,7 +2423,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.05):
             kwh_needed = capacity - start_residual
             hours = charge_time
-            print(f"  Full charge time used, expecting to add {kwh_needed:.2f} kWh")
+            print(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
             print(f"  Minimum charge time used")

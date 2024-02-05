@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  29 January 2024
+Updated:  05 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.0.9"
+version = "1.1.0"
 debug_setting = 1
 
 # constants
@@ -2480,7 +2480,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
         if new_work_mode is not None and new_work_mode != work_mode:
             if debug_setting > 0:
-                print(f"  Work mode changed from {work_mode} to {new_work_mode} at {hours_time(h)}")
+                print(f"  {hours_time(h)}: {new_work_mode} work mode")
             work_mode = new_work_mode
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
@@ -2550,7 +2550,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.05):
             kwh_needed = capacity - start_residual
             hours = charge_time
-            print(f"  Full charge time used, expecting to add {kwh_needed:.2f} kWh")
+            print(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
             print(f"  Minimum charge time used")
