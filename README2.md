@@ -36,14 +36,15 @@ For example, replace _my.fox_api_key_ with the API key. Add you inverter serial 
 
 Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
-## Information
-Load information about the user, site or device:
+## User info
+Return information about the current user:
 
 ```
-f.get_info()
+f.get_access_count()
 ```
 
-f.get_info() sets the variable f.info and returns a dictionary containing user information.
+Returns the 'total' number of API accesses allowed per day and the number of API accesses 'remaining' today.
+
 
 ## Site, Logger and Device Information
 Load information about a site, data logger or inverter (device):
@@ -59,11 +60,12 @@ By default, this will load the first item in the list provided by the cloud. If 
 + Logger: full or partial serial number
 + Inverter: full or partial serial number
 
-When an item is selected, the functions returns a dictionary containing item details. For an inverter, a list of variables that can be used with the device is also loaded and stored as raw_vars
+When an item is selected, the functions returns a dictionary containing item details and saves these to a global variable (f.site, f.logger, f.device respectively)
 
 Once an inverter is selected, you can make other calls to get information:
 
 ```
+f.get_generation()
 f.get_battery()
 f.get_settings()
 f.get_charge()
@@ -73,9 +75,11 @@ f.get_schedule()
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
 
-get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
+get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
-get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge time periods.
+get_battery() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery.
+
+get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge times.
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 
@@ -84,15 +88,16 @@ get_schedule() returns the current work mode / soc schedule settings. The result
 You can change inverter settings using:
 
 ```
-f.set_min(minGridSoc, minSoc)
+f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
-f.set_period(start, end, mode, min_soc, fdsoc, fdpwr)
-f.set_schedule(enable, periods, template)
+f.set_group(start, end, mode, min_soc, fdsoc, fdpwr)
+f.get_flag()
+f.set_schedule(enable, groups, template)
 ```
 
-set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
-+ minGridSoc: min Soc on Grid setting e.g. 15 = 15%
+set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
++ minSocOnGrid: min Soc on Grid setting e.g. 15 = 15%
 + minSoc: min Soc setting e.g. 10 = 10%
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
@@ -105,25 +110,38 @@ set_charge() takes the charge times from the battery_settings and applies these 
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
-set_period() returns a period structure that can be used to build a list of strategy periods for set_schedule()
+set_flag() returns the current settings for strategy periods: 'supported' and 'enable'
+
+set_group() returns a time segment structure that can be used to build a list of time segments for set_schedule()
 + start, end, mode: required parameters
 + min_soc: optional, default is 10
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
-+ fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode. 
++ fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
++ enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 
-set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide either a list of periods or a template ID
-+ enable: 1 to enable a schedule 0 to disable. The default is 1.
-+ periods: a period or list of periods created using f.set_period().
-+ template: a template ID from get_templates() or find_template()
+set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
++ enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
++ groups: a time segment or list of time segments created using f.set_group().
+
 
 ## Real Time Data
 Real time data reports the latest values for inverter variables, collected every 5 minutes:
 
 ```
+f.get_vars()
 f.get_real(v)
 ```
 
-+ v is a variable, or list of variables (see below)
+f.get_vars() returns the list of variables that can be queried. This also stores the information:
++ f.var_table: a table, indexed by variable that contains information such as the name and unit.
+++ f.var_list: a list of all the variables that are available
+
+There are also pre-defined lists:
++ power_vars lists the main power variables provided by the inverter
++ battery_vars lists the main variables relevant to the battery / BMS
+
+f.get_real returns the latest values for a list of variables.
++ v is a variable, or list of variables. The default is to return the latest value for all available variables
 
 
 ## History Data
@@ -135,15 +153,11 @@ f.get_history(time_span, d, v, summary, save, load, plot)
 
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is today's date and time. d may also be a list of dates
-+ v is a variable, or list of variables (see below)
++ v is a variable, or list of variables (see above)
 + summary is optional - see below
 + save: set to the root part of a filename to save the results
 + load: set to the full filename to load previously saved results
 + plot is optional. 1 plots the results with a chart per unit and per day. 2 plots multiple days on the same chart. Default is 0, no plots
-
-The list of variables that can be queried is stored in raw_vars. There are also pred-defined lists:
-+ power_vars lists the main power values provided by the inverter
-+ battery_vars lists the main values relevant to the battery / BMS
 
 Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -169,7 +183,7 @@ The summary includes the following attributes:
 + min: the minimum value of the data points
 + min_time: the time when the minimum value occured (HH:MM)
 
-For power values, the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
+For power values (unit = kW), the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
 + kwh: the total energy generated or consumed
 + kwh_off: the total energy consumed or generated during the off-peak time of use
 + kwh_peak: the total energy consumed or generated during the peak time of use

@@ -561,12 +561,14 @@ f.debug_setting = 2
 This setting can be:
 + 0: silent mode (minimal output)
 + 1: information reporting (default)
-+ 2: more debug information, updating of inverter settings is disabled
++ 2: more debug information
++ 3: lots of debug information
 
 
 ## Version Info
 
-1.0.9<br>
+1.1.0<br>
+Minor changes to log information for charge_needed()
 Adjustment to lifepo4_curve to improve accuracy of OCV estimation / charge power.
 Bug fix so set_tariff() does not update the default charge times if none of start_at, end_by, duration or times are provided
 Added work_hours to tariff and work_times to set_tariff()

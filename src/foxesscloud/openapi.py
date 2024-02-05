@@ -607,7 +607,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minSocOnGrid = None, minSoc = None, force = 0):
-    global token, device_sn, bat_settings, debug_setting, default_min_soc
+    global token, device_sn, battery_settings, debug_setting
     if get_device() is None:
         return None
     if get_schedule().get('enable'):
@@ -615,21 +615,29 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
             print(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
-    data = {'sn': device_sn}
     if battery_settings is None:
         battery_settings = {}
     if minSocOnGrid is not None:
-        data['minSocOnGrid'] = minSocOnGrid
+        if minSocOnGrid < 10 or minSocOnGrid > 100:
+            print(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 10 and 100")
+            return None
         battery_settings['minSocOnGrid'] = minSocOnGrid
     if minSoc is not None:
-        data['minSoc'] = minSoc
+        if minSoc < 10 or minSoc > 100:
+            print(f"** set_min(): invalid minSoc = {minSoc}. Must be between 10 and 100")
+            return None
         battery_settings['minSoc'] = minSoc
     if debug_setting > 1:
         print(f"set_min(): {battery_settings}")
         return None
+    body = {'sn': device_sn}
+    if battery_settings.get('minSocOnGrid') is not None:
+        body['minSocOnGrid'] = battery_settings['minSocOnGrid']
+    if battery_settings.get('minSoc') is not None:
+        body['minSoc'] = battery_settings['minSoc']
     if debug_setting > 0:
         print(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}")
-    response = signed_post(path="/op/v0/device/battery/soc/set", data=json.dumps(data))
+    response = signed_post(path="/op/v0/device/battery/soc/set", body=body)
     if response.status_code != 200:
         print(f"** set_min() got response code {response.status_code}: {response.reason}")
         return None
