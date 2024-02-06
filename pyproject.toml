@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foxesscloud"
-version = "1.1.0"
+version = "2.0.0"
 authors = [
   {name="Tony Matthews", email="tony@quasair.co.uk"},
 ]
-description = "library for accessing Fox ESS cloud data"
+description = "library for accessing Fox ESS cloud data using Open API"
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
