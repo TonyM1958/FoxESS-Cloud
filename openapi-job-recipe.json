@@ -1,0 +1,69 @@
+schema_version: 2023.09.01
+type: job
+spec:
+  name: openapi
+  description: >-
+    Fox ESS Open API management job - works out battery charge and uploads data to PV
+    Output
+  image: community/saturncloud/saturn-python:2023.05.01
+  instance_type: medium
+  environment_variables:
+    PV1: '''East'',lat=51.1789,lon=-1.8262,dec=30,az=260,kwp=3.2,inv=3.6'
+    PV2: '''West'',lat=51.1789,lon=-1.8262,dec=30,az=80,kwp=3.2,inv=3.6'
+    TARIFF_PARAMS: '''flux'',region=''H'''
+    CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0,force_charge=0
+  working_directory: /home/jovyan/workspace
+  extra_packages:
+    pip:
+      install: foxesscloud
+  start_script: |
+    #! /usr/bin/bash
+    cat > script.py <<EOF
+    import foxesscloud.openapi as f
+
+    f.api_key = $FOX_API_KEY
+    f.device_sn = ${FOX_DEVICE_SN:-None}
+    f.pv_api_key = ${PV_API_KEY:-None}
+    f.pv_system_id = ${PV_SYSTEM_ID:-None}
+    f.solcast_api_key = ${SOLCAST_API_KEY:-None}
+    f.solar_array($PV1)
+    f.solar_array($PV2)
+
+    f.set_tariff($TARIFF_PARAMS)
+    f.charge_needed($CHARGE_PARAMS)
+    f.set_pvoutput()
+
+    EOF
+  git_repositories: []
+  secrets:
+    - location: FOX_API_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_API_KEY
+    - location: FOX_DEVICE_SN
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_DEVICE_SN
+    - location: PV_API_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: PV_API_KEY
+    - location: PV_SYSTEM_ID
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: PV_SYSTEM_ID
+    - location: SOLCAST_API_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: SOLCAST_API_KEY
+  shared_folders: []
+  command: python script.py
+  scale: 1
+  schedule: 1 22,23 * * *
+  concurrency_policy: Allow
+  retries: 0
