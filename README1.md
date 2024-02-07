@@ -335,17 +335,19 @@ Provides detailed information on the current state of the batteries:
 
 ```
 f.battery_info(count, plot, log)
-f.battery_monitor(interval, run, count)
+f.battery_monitor(interval, run, log, save, count)
 ```
 
 battery_info() prints information on the battery and cells:
 + count: optional over-ride. The default is based on rounding the battery voltage divided by 53
 + plot: 1 plot the cell voltages for each battery, 0 don't plot. The default is 1
-+ log: 1 run in log mode (1 output line), 0 normal mode. The default is 0.
++ log: see below. Default is 0
 
 battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
 + interval: the time in minutes between log entries. The default is 30 minutes
 + run: the number of log entries to create. The default is 48 i.e. every 30 minues for 24 hours in total
++ log: 0 = display, 1 = log battery info, 2 = log cell volts, 3 = log cell volts and temps. The default is 1
++ save: name of a CSV file to write log data to
 + count: optional over-ride for the number of batteries
 
 
