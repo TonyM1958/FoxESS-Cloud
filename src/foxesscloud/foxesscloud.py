@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 February 2024
+Updated:  06 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.0"
+version = "1.1.1"
 debug_setting = 1
 
 # constants
@@ -2283,7 +2283,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_resistance = charge_config['bat_resistance'] * bat_count
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
-    available = residual - reserve
     print(f"\nBattery Info:")
     print(f"  Count:       {bat_count} batteries")
     print(f"  Capacity:    {capacity:.1f}kWh")
@@ -2291,7 +2290,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"  Voltage:     {bat_volt:.1f}V")
     print(f"  Current:     {bat_current:.1f}A")
     print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    print(f"  Current SoC: {current_soc}% ({residual:.1f}kWh)")
+    print(f"  Current SoC: {current_soc}%")
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     print(f"  Resistance:  {bat_resistance:.2f} ohms")
@@ -2677,6 +2676,93 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if set_work_mode(target_mode) == target_mode:
             print(f"  Changed work mode from '{current_mode}' to '{target_mode}'")
     return None
+
+
+
+##################################################################################################
+# Battery Info / Battery Monitor
+##################################################################################################
+
+# calculate the average of a list of values
+def avg(x):
+    if len(x) == 0:
+        return None
+    return sum(x) / len(x)
+
+# calculate the % imbalance in a list of values
+def imbalance(v):
+    if len(v) == 0:
+        return None
+    max_v = max(v)
+    min_v = min(v)
+    return (max_v - min_v) / (max_v + min_v) * 200
+
+# show information about the current state of the batteries
+def battery_info(count=None, log=0):
+    global debug_setting
+    bat = get_battery()
+    bat_volt = bat['volt']
+    current_soc = bat['soc']
+    bat_count = int(bat_volt / 53 + 0.5) if count is None else count
+    residual = bat['residual']
+    bat_current = bat['current']
+    bat_power = bat['power']
+    bms_temperature = bat['temperature']
+    capacity = residual / current_soc * 100
+    volts = get_cell_volts()
+    nv = len(volts)
+    nv_cell = int(nv / bat_count + 0.5)
+    temps = get_cell_temps()
+    nt = len(temps)
+    nt_cell = int(nt / bat_count + 0.5)
+    bat_volts = []
+    bat_temps = []
+    for i in range(0, bat_count):
+        bat_volts.append(volts[i * nv_cell : (i + 1) * nv_cell])
+        bat_temps.append(temps[i * nt_cell : (i + 1) * nt_cell])
+    if log == 1:
+        now = datetime.now()
+        s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
+        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count}"
+        for i in range(0, bat_count):
+            s +=f",{sum(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{imbalance(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{avg(bat_temps[i]):.1f}"
+        print(s)
+        return None
+    print(f"Current SoC:       {current_soc}%")
+    print(f"State:             {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
+    print(f"Residual:          {residual:.1f}kWh")
+    print(f"Est. Capacity:     {capacity:.1f}kWh")
+    print(f"InvBatVolt:        {bat_volt:.1f}V")
+    print(f"InvBatCurrent:     {bat_current:.1f}A")
+    print(f"BMS Temperature:   {bms_temperature:.1f}°C")
+    print(f"Battery Count:     {bat_count} batteries")
+    print(f"Cell Volt Total:   {sum(volts):.1f}V")
+    print(f"Max Cell Volt:     {max(volts):.3f}V")
+    print(f"Min Cell Volt:     {min(volts):.3f}V")
+    print(f"Cell Imbalance:    {imbalance(volts):.2f}%:")
+    print(f"Max Temperature:   {max(temps):.1f}°C average")
+    print(f"Min Temperature:   {min(temps):.1f}°C average")
+    print(f"\nVolts:")
+    for i in range(0, bat_count):
+        print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
+    print(f"\nTemperatures:")
+    for i in range(0, bat_count):
+        print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C, Imbalance = {imbalance(bat_temps[i]):.0f}%")
+    return None
+
+# log battery information in CSV format at 'interval' minutes apart for 'run' times
+def battery_monitor(interval=30, run=48, count=None):
+    t1 = time.time()
+    for i in range(0, run):
+        battery_info(count=count, log=1)
+        t2 = time.time()
+        time.sleep(interval * 60 - t2 + t1)
+        t1 = t2
+    return
 
 ##################################################################################################
 # Date Ranges

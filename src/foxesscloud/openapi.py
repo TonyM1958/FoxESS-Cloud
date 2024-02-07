@@ -79,6 +79,11 @@ def interpolate(f, v):
     x = f - i
     return v[i] * (1-x) + v[i+1] * x
 
+# return the average of a list
+def avg(x):
+    if len(x) == 0:
+        return None
+    return sum(x) / len(x)
 # build request header with signing and throttling for queries
 
 last_call = {}          # timestamp of the last call for a given path
@@ -2164,7 +2169,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_resistance = charge_config['bat_resistance'] * bat_count
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
-    available = residual - reserve
     print(f"\nBattery Info:")
     print(f"  Count:       {bat_count} batteries")
     print(f"  Capacity:    {capacity:.1f}kWh")
@@ -2172,7 +2176,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"  Voltage:     {bat_volt:.1f}V")
     print(f"  Current:     {bat_current:.1f}A")
     print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    print(f"  Current SoC: {current_soc}% ({residual:.1f}kWh)")
+    print(f"  Current SoC: {current_soc}%")
     print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
     print(f"  Temperature: {temperature:.1f}°C")
     print(f"  Resistance:  {bat_resistance:.2f} ohms")

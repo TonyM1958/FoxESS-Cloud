@@ -1,0 +1,49 @@
+schema_version: 2023.09.01
+type: job
+spec:
+  name: battery
+  description: >-
+    Fox ESS battery monitor job
+    Output
+  image: community/saturncloud/saturn-python:2023.05.01
+  instance_type: medium
+  environment_variables:
+    PARAMS: interval=30,run=48
+  working_directory: /home/jovyan/workspace
+  extra_packages:
+    pip:
+      install: foxesscloud
+  start_script: |
+    #! /usr/bin/bash
+    cat > script.py <<EOF
+    import foxesscloud.foxesscloud as f
+
+    f.username = $FOX_USERNAME
+    f.password = $FOX_PASSWORD
+    f.device_sn = ${FOX_DEVICE_SN:-None}
+
+    f.battery_monitor($PARAMS)
+
+    EOF
+  git_repositories: []
+  secrets:
+    - location: FOX_USERNAME
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_USERNAME
+    - location: FOX_PASSWORD
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_PASSWORD
+    - location: FOX_DEVICE_SN
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_DEVICE_SN
+  shared_folders: []
+  command: python script.py
+  scale: 1
+  concurrency_policy: Allow
+  retries: 0
