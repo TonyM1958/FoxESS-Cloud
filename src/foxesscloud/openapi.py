@@ -2566,6 +2566,107 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     return None
 
 ##################################################################################################
+# Battery Info / Battery Monitor
+##################################################################################################
+
+# calculate the average of a list of values
+def avg(x):
+    if len(x) == 0:
+        return None
+    return sum(x) / len(x)
+
+# calculate the % imbalance in a list of values
+def imbalance(v):
+    if len(v) == 0:
+        return None
+    max_v = max(v)
+    min_v = min(v)
+    return (max_v - min_v) / (max_v + min_v) * 200
+
+# show information about the current state of the batteries
+def battery_info(count=None, log=0, plot=1):
+    global debug_setting
+    bat = get_battery()
+    bat_volt = bat['volt']
+    current_soc = bat['soc']
+    bat_count = int(bat_volt / 53 + 0.5) if count is None else count
+    residual = bat['residual']
+    bat_current = bat['current']
+    bat_power = bat['power']
+    bms_temperature = bat['temperature']
+    capacity = residual / current_soc * 100
+    volts = get_cell_volts()
+    nv = len(volts)
+    nv_cell = int(nv / bat_count + 0.5)
+    temps = get_cell_temps()
+    nt = len(temps)
+    nt_cell = int(nt / bat_count + 0.5)
+    bat_volts = []
+    bat_temps = []
+    for i in range(0, bat_count):
+        bat_volts.append(volts[i * nv_cell : (i + 1) * nv_cell])
+        bat_temps.append(temps[i * nt_cell : (i + 1) * nt_cell])
+    if log == 1:
+        now = datetime.now()
+        s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
+        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count}"
+        for i in range(0, bat_count):
+            s +=f",{sum(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{imbalance(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{avg(bat_temps[i]):.1f}"
+        print(s)
+        return None
+    print(f"Battery Count:     {bat_count} batteries")
+    print(f"Current SoC:       {current_soc}%")
+    print(f"State:             {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
+    print(f"Residual:          {residual:.1f}kWh")
+    print(f"Est. Capacity:     {capacity:.1f}kWh")
+    print(f"InvBatVolt:        {bat_volt:.1f}V")
+    print(f"InvBatCurrent:     {bat_current:.1f}A")
+    print(f"BMS Temperature:   {bms_temperature:.1f}°C")
+    print(f"Cell Temperature:  {avg(temps):.1f}°C average, {max(temps):.1f}°C maximum, {min(temps):.1f}°C minimum")
+    print(f"Cell Volts:        {sum(volts):.1f}V total, {avg(volts):.3f}V average, {max(volts):.3f}V maximum, {min(volts):.3f}V minimum")
+    print(f"Cell Imbalance:    {imbalance(volts):.2f}%:")
+    print(f"\nVolts by battery:")
+    for i in range(0, bat_count):
+        print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
+    if plot == 1:
+        plot_cells('Volts', bat_volts)
+    print(f"\nTemperatures by battery:")
+    for i in range(0, bat_count):
+        print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C")
+    return None
+
+# plot cell info
+def plot_cells(name, data):
+    plt.figure(figsize=(figure_width, figure_width/3))
+    x = range(1, len(data[0]) + 1)
+    plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
+    for i in range(0, len(data)):
+        plt.plot(x, data[i], label = f"Battery {i+1}")
+    plt.title(f"Cell {name} by battery", fontsize=12)
+    plt.legend(fontsize=8, loc='lower right')
+    plt.grid()
+    plt.show()
+    return None
+
+# log battery information in CSV format at 'interval' minutes apart for 'run' times
+def battery_monitor(interval=30, run=48, count=None):
+    i = run
+    while i > 0:
+        t1 = time.time()
+        battery_info(count=count, log=1)
+        if i == 1:
+            break
+        i -= 1
+        t2 = time.time()
+        time.sleep(interval * 60 - t2 + t1)
+    return
+
+
+##################################################################################################
 # Date Ranges
 ##################################################################################################
 

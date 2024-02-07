@@ -1,15 +1,13 @@
 schema_version: 2023.09.01
 type: job
 spec:
-  name: openapi
+  name: daily
   description: >-
-    Fox ESS Open API management job - works out battery charge and uploads data to PV
+    Fox ESS Open API daily management job - works out battery charge and uploads data to PV
     Output
   image: community/saturncloud/saturn-python:2023.05.01
   instance_type: medium
   environment_variables:
-    PV1: '''East'',lat=51.1789,lon=-1.8262,dec=30,az=260,kwp=3.2,inv=3.6'
-    PV2: '''West'',lat=51.1789,lon=-1.8262,dec=30,az=80,kwp=3.2,inv=3.6'
     TARIFF_PARAMS: '''flux'',region=''H'''
     CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0,force_charge=0
   working_directory: /home/jovyan/workspace
@@ -26,8 +24,6 @@ spec:
     f.pv_api_key = ${PV_API_KEY:-None}
     f.pv_system_id = ${PV_SYSTEM_ID:-None}
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
-    f.solar_array($PV1)
-    f.solar_array($PV2)
 
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)

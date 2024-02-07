@@ -238,6 +238,7 @@ result=f.get_report('month', d=d)
 
 The previous section provides functions that can be used to access and control your inverter. This section covers utilities and operations that build upon these functions.
 
+
 ## Charge Needed
 
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
@@ -325,8 +326,28 @@ These values are stored / available in f.charge_config.
 
 The default battery open circuit voltage curve versus SoC from 0% to 100% is:
 ```
-lifepo4_curve = [51.31, 51.84, 52.41, 52.45, 52.50, 52.64, 52.97, 53.10, 53.16, 53.63, 55.00]
+lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
 ```
+
+## Battery Info
+
+Provides detailed information on the current state of the batteries:
+
+```
+f.battery_info(count, plot, log)
+f.battery_monitor(interval, run, count)
+```
+
+battery_info() prints information on the battery and cells:
++ count: optional over-ride. The default is based on rounding the battery voltage divided by 53
++ plot: 1 plot the cell voltages for each battery, 0 don't plot. The default is 1
++ log: 1 run in log mode (1 output line), 0 normal mode. The default is 0.
+
+battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
++ interval: the time in minutes between log entries. The default is 30 minutes
++ run: the number of log entries to create. The default is 48 i.e. every 30 minues for 24 hours in total
++ count: optional over-ride for the number of batteries
+
 
 ## Date Ranges
 
@@ -567,7 +588,8 @@ This setting can be:
 
 ## Version Info
 
-1.1.0<br>
+1.1.1<br>
+Added battery_info() and battery_monitor()
 Minor changes to log information for charge_needed()
 Adjustment to lifepo4_curve to improve accuracy of OCV estimation / charge power.
 Bug fix so set_tariff() does not update the default charge times if none of start_at, end_by, duration or times are provided

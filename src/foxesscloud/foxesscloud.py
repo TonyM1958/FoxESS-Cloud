@@ -2678,7 +2678,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     return None
 
 
-
 ##################################################################################################
 # Battery Info / Battery Monitor
 ##################################################################################################
@@ -2698,7 +2697,7 @@ def imbalance(v):
     return (max_v - min_v) / (max_v + min_v) * 200
 
 # show information about the current state of the batteries
-def battery_info(count=None, log=0):
+def battery_info(count=None, log=0, plot=1):
     global debug_setting
     bat = get_battery()
     bat_volt = bat['volt']
@@ -2732,6 +2731,7 @@ def battery_info(count=None, log=0):
             s +=f",{avg(bat_temps[i]):.1f}"
         print(s)
         return None
+    print(f"Battery Count:     {bat_count} batteries")
     print(f"Current SoC:       {current_soc}%")
     print(f"State:             {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
     print(f"Residual:          {residual:.1f}kWh")
@@ -2739,29 +2739,43 @@ def battery_info(count=None, log=0):
     print(f"InvBatVolt:        {bat_volt:.1f}V")
     print(f"InvBatCurrent:     {bat_current:.1f}A")
     print(f"BMS Temperature:   {bms_temperature:.1f}°C")
-    print(f"Battery Count:     {bat_count} batteries")
-    print(f"Cell Volt Total:   {sum(volts):.1f}V")
-    print(f"Max Cell Volt:     {max(volts):.3f}V")
-    print(f"Min Cell Volt:     {min(volts):.3f}V")
+    print(f"Cell Temperature:  {avg(temps):.1f}°C average, {max(temps):.1f}°C maximum, {min(temps):.1f}°C minimum")
+    print(f"Cell Volts:        {sum(volts):.1f}V total, {avg(volts):.3f}V average, {max(volts):.3f}V maximum, {min(volts):.3f}V minimum")
     print(f"Cell Imbalance:    {imbalance(volts):.2f}%:")
-    print(f"Max Temperature:   {max(temps):.1f}°C average")
-    print(f"Min Temperature:   {min(temps):.1f}°C average")
-    print(f"\nVolts:")
+    print(f"\nVolts by battery:")
     for i in range(0, bat_count):
         print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
-    print(f"\nTemperatures:")
+    if plot == 1:
+        plot_cells('Volts', bat_volts)
+    print(f"\nTemperatures by battery:")
     for i in range(0, bat_count):
-        print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C, Imbalance = {imbalance(bat_temps[i]):.0f}%")
+        print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C")
+    return None
+
+# plot cell info
+def plot_cells(name, data):
+    plt.figure(figsize=(figure_width, figure_width/3))
+    x = range(1, len(data[0]) + 1)
+    plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
+    for i in range(0, len(data)):
+        plt.plot(x, data[i], label = f"Battery {i+1}")
+    plt.title(f"Cell {name} by battery", fontsize=12)
+    plt.legend(fontsize=8, loc='lower right')
+    plt.grid()
+    plt.show()
     return None
 
 # log battery information in CSV format at 'interval' minutes apart for 'run' times
 def battery_monitor(interval=30, run=48, count=None):
-    t1 = time.time()
-    for i in range(0, run):
+    i = run
+    while i > 0:
+        t1 = time.time()
         battery_info(count=count, log=1)
+        if i == 1:
+            break
+        i -= 1
         t2 = time.time()
         time.sleep(interval * 60 - t2 + t1)
-        t1 = t2
     return
 
 ##################################################################################################
