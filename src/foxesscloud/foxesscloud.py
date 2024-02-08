@@ -2772,7 +2772,7 @@ def battery_info(log=0, plot=1, count=None):
     return None
 
 # log battery information in CSV format at 'interval' minutes apart for 'run' times
-# log 1: battery info, 2: cell volts, 3: cell volts and temps
+# log 1: battery info, 2: add cell volts, 3: add cell temps
 def battery_monitor(interval=30, run=48, log=1, count=None, save=None):
     run_time = interval * run / 60
     print(f"---------------- battery_monitor ------------------")
