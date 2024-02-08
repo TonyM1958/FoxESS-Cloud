@@ -1155,7 +1155,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
             kwh_neg = 0.0
             if len(var['data']) > 1:
-                sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 2)
+                sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 1)
             else:
                 sample_time = 5.0
             if debug_setting > 2:
