@@ -1,11 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-<<<<<<< Updated upstream
-Updated:  07 February 2024
-=======
 Updated:  08 February 2024
->>>>>>> Stashed changes
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -14,11 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-<<<<<<< Updated upstream
-version = "1.1.2"
-=======
 version = "1.1.3"
->>>>>>> Stashed changes
 debug_setting = 1
 
 # constants
@@ -2737,16 +2729,6 @@ def battery_info(log=0, plot=1, count=None):
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
         s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count},{nv_cell},{nt_cell}"
-<<<<<<< Updated upstream
-        if log == 1:
-            for i in range(0, bat_count):
-                s +=f",{sum(bat_volts[i]):.2f}"
-            for i in range(0, bat_count):
-                s +=f",{imbalance(bat_volts[i]):.2f}"
-            for i in range(0, bat_count):
-                s +=f",{avg(bat_temps[i]):.1f}"
-        elif log >= 2:
-=======
         for i in range(0, bat_count):
             s +=f",{sum(bat_volts[i]):.2f}"
         for i in range(0, bat_count):
@@ -2754,7 +2736,6 @@ def battery_info(log=0, plot=1, count=None):
         for i in range(0, bat_count):
             s +=f",{avg(bat_temps[i]):.1f}"
         if log >= 2:
->>>>>>> Stashed changes
             for v in cell_volts:
                 s +=f",{v:.3f}"
             if log >= 3:
@@ -2796,13 +2777,8 @@ def battery_monitor(interval=30, run=48, log=1, count=None, save=None):
     run_time = interval * run / 60
     print(f"---------------- battery_monitor ------------------")
     print(f"Expected runtime = {hours_time(run_time, day=True)} (hh:mm/days)")
-<<<<<<< Updated upstream
-    s = f"timestamp,soc,residual,bat_volt,bat_current,temperature,nbat,nvolt,ntemp"
-    s += ",volts*,imbalance*,temps*" if log == 1 else ",cell_volts*" if log ==2 else ",cell_volts*,cell_temps*"
-=======
     s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,nvolt,ntemp,volts*,imbalance*,temps*"
     s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
->>>>>>> Stashed changes
     if save is not None:
         print(f"Saving data to {save} ")
         file = open(save, 'w')
