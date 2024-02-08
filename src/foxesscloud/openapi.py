@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.0.1"
+version = "2.0.2"
 debug_setting = 1
 
 # constants
@@ -2586,6 +2586,20 @@ def imbalance(v):
     min_v = min(v)
     return (max_v - min_v) / (max_v + min_v) * 200
 
+cells_per_battery = [16,18,15]      # allowed number of cells per battery
+
+# deduce the number of batteries from the number of cells
+def bat_count(cell_count):
+    global cell_per_battery
+    n = None
+    for i in cells_per_battery:
+        if cell_count % i == 0:
+            n = i
+            break
+    if n is None:
+        return None
+    return int(cell_count / n + 0.5)
+
 # show information about the current state of the batteries
 def battery_info(log=0, plot=1, count=None):
     global debug_setting
@@ -2594,7 +2608,6 @@ def battery_info(log=0, plot=1, count=None):
         return None
     bat_volt = bat['volt']
     current_soc = bat['soc']
-    bat_count = int(bat_volt / 53 + 0.5) if count is None else count
     residual = bat['residual']
     bat_current = bat['current']
     bat_power = bat['power']
@@ -2604,26 +2617,30 @@ def battery_info(log=0, plot=1, count=None):
     if cell_volts is None:
         return None
     nv = len(cell_volts)
-    nv_cell = int(nv / bat_count + 0.5)
+    nbat = bat_count(nv) if count is None else count
+    if nbat is None:
+        print(f"** battery_info(): unable to match cells_per_battery for {nv}")
+        return None
+    nv_cell = int(nv / nbat + 0.5)
     cell_temps = get_cell_temps()
     if cell_temps is None:
         return None
     nt = len(cell_temps)
-    nt_cell = int(nt / bat_count + 0.5)
+    nt_cell = int(nt / nbat + 0.5)
     bat_volts = []
     bat_temps = []
-    for i in range(0, bat_count):
+    for i in range(0, nbat):
         bat_volts.append(cell_volts[i * nv_cell : (i + 1) * nv_cell])
         bat_temps.append(cell_temps[i * nt_cell : (i + 1) * nt_cell])
     if log > 0:
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
         s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count},{nv_cell},{nt_cell}"
-        for i in range(0, bat_count):
+        for i in range(0, nbat):
             s +=f",{sum(bat_volts[i]):.2f}"
-        for i in range(0, bat_count):
+        for i in range(0, nbat):
             s +=f",{imbalance(bat_volts[i]):.2f}"
-        for i in range(0, bat_count):
+        for i in range(0, nbat):
             s +=f",{avg(bat_temps[i]):.1f}"
         if log >= 2:
             for v in cell_volts:
@@ -2632,7 +2649,7 @@ def battery_info(log=0, plot=1, count=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    print(f"Battery Count:     {bat_count} batteries")
+    print(f"Battery Count:     {nbat} batteries with {nv_cell} cells each")
     print(f"Current SoC:       {current_soc}%")
     print(f"State:             {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
     print(f"Residual:          {residual:.1f}kWh")
@@ -2644,7 +2661,7 @@ def battery_info(log=0, plot=1, count=None):
     print(f"Cell Volts:        {sum(cell_volts):.1f}V total, {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
     print(f"Cell Imbalance:    {imbalance(cell_volts):.2f}%:")
     print(f"\nVolts by battery:")
-    for i in range(0, bat_count):
+    for i in range(0, nbat):
         print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
     if plot == 1:
         plt.figure(figsize=(figure_width, figure_width/3))
@@ -2657,33 +2674,35 @@ def battery_info(log=0, plot=1, count=None):
         plt.grid()
         plt.show()
     print(f"\nTemperatures by battery:")
-    for i in range(0, bat_count):
+    for i in range(0, nbat):
         print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C")
     return None
+# helper to write file / echo to screen
+def write(f, s, m='a'):
+    print(s)
+    if f is None or s is None:
+        return
+    file = open(f, m)
+    print(s, file)
+    file.close()
+    return
 
 # log battery information in CSV format at 'interval' minutes apart for 'run' times
 # log 1: battery info, 2: add cell volts, 3: add cell temps
-def battery_monitor(interval=30, run=48, log=1, count=None, save=None):
+def battery_monitor(interval=30, run=48, log=1, count=None, save=None, overwrite=0):
     run_time = interval * run / 60
-    print(f"---------------- battery_monitor ------------------")
+    print(f"\n---------------- battery_monitor ------------------")
     print(f"Expected runtime = {hours_time(run_time, day=True)} (hh:mm/days)")
-    s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,nvolt,ntemp,volts*,imbalance*,temps*"
-    s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
     if save is not None:
         print(f"Saving data to {save} ")
-        file = open(save, 'w')
-        print(s, file=file)
-        file.close()
-    print(f"\n{s}")
+    print()
+    s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,ncell,ntemp,volts*,imbalance*,temps*"
+    s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
+    write(save, s, 'w' if overwrite == 1 else 'a')
     i = run
     while i > 0:
         t1 = time.time()
-        s = battery_info(log=log, count=count)
-        if save is not None:
-            file = open(save, 'a')
-            print(s, file=file)
-            file.close()
-        print(s)
+        write(save, battery_info(log=log, count=count), 'a')
         if i == 1:
             break
         i -= 1
