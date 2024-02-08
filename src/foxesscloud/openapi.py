@@ -1,7 +1,11 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
+<<<<<<< Updated upstream
 Updated:  07 February 2024
+=======
+Updated:  08 February 2024
+>>>>>>> Stashed changes
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -178,11 +182,11 @@ def get_access_count():
         print(f"getting access info")
     response = signed_get(path="/op/v0/user/getAccessCount")
     if response.status_code != 200:
-        print(f"** get_access() got response code {response.status_code}: {response.reason}")
+        print(f"** get_access_count() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_access(), no result data, {errno_message(response)}")
+        print(f"** get_access_count(), no result data, {errno_message(response)}")
         return None
     return result
 
@@ -445,10 +449,12 @@ def get_generation(update=1):
     if result is None:
         print(f"** get_generation(), no result data, {errno_message(response)}")
         return None
+    if result.get('today') is None:
+        result['today'] = 0.0
     if update == 1:
         device['generationToday'] = result['today']
         device['generationMonth'] = result['month']
-        device['generationTotal'] = result['cumulative']
+        device['generationTotal'] = result['cumulative'] 
     return result
 
 ##################################################################################################
@@ -2617,6 +2623,7 @@ def battery_info(log=0, plot=1, count=None):
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
         s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count},{nv_cell},{nt_cell}"
+<<<<<<< Updated upstream
         if log == 1:
             for i in range(0, bat_count):
                 s +=f",{sum(bat_volts[i]):.2f}"
@@ -2625,6 +2632,15 @@ def battery_info(log=0, plot=1, count=None):
             for i in range(0, bat_count):
                 s +=f",{avg(bat_temps[i]):.1f}"
         elif log >= 2:
+=======
+        for i in range(0, bat_count):
+            s +=f",{sum(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{imbalance(bat_volts[i]):.2f}"
+        for i in range(0, bat_count):
+            s +=f",{avg(bat_temps[i]):.1f}"
+        if log >= 2:
+>>>>>>> Stashed changes
             for v in cell_volts:
                 s +=f",{v:.3f}"
             if log >= 3:
@@ -2646,23 +2662,18 @@ def battery_info(log=0, plot=1, count=None):
     for i in range(0, bat_count):
         print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
     if plot == 1:
-        plot_cells('Volts', bat_volts)
+        plt.figure(figsize=(figure_width, figure_width/3))
+        x = range(1, len(bat_volts[0]) + 1)
+        plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
+        for i in range(0, len(bat_volts)):
+            plt.plot(x, bat_volts[i], label = f"Battery {i+1}")
+        plt.title(f"Cell Volts by battery", fontsize=12)
+        plt.legend(fontsize=8, loc='lower right')
+        plt.grid()
+        plt.show()
     print(f"\nTemperatures by battery:")
     for i in range(0, bat_count):
         print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C")
-    return None
-
-# plot cell info
-def plot_cells(name, data):
-    plt.figure(figsize=(figure_width, figure_width/3))
-    x = range(1, len(data[0]) + 1)
-    plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
-    for i in range(0, len(data)):
-        plt.plot(x, data[i], label = f"Battery {i+1}")
-    plt.title(f"Cell {name} by battery", fontsize=12)
-    plt.legend(fontsize=8, loc='lower right')
-    plt.grid()
-    plt.show()
     return None
 
 # log battery information in CSV format at 'interval' minutes apart for 'run' times
@@ -2671,8 +2682,13 @@ def battery_monitor(interval=30, run=48, log=1, count=None, save=None):
     run_time = interval * run / 60
     print(f"---------------- battery_monitor ------------------")
     print(f"Expected runtime = {hours_time(run_time, day=True)} (hh:mm/days)")
+<<<<<<< Updated upstream
     s = f"timestamp,soc,residual,bat_volt,bat_current,temperature,nbat,nvolt,ntemp"
     s += ",volts*,imbalance*,temps*" if log == 1 else ",cell_volts*" if log ==2 else ",cell_volts*,cell_temps*"
+=======
+    s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,nvolt,ntemp,volts*,imbalance*,temps*"
+    s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
+>>>>>>> Stashed changes
     if save is not None:
         print(f"Saving data to {save} ")
         file = open(save, 'w')

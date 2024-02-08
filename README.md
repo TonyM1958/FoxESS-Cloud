@@ -353,7 +353,7 @@ battery_info() prints information on the battery and cells:
 battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
 + interval: the time in minutes between log entries. The default is 30 minutes
 + run: the number of log entries to create. The default is 48 i.e. every 30 minues for 24 hours in total
-+ log: 0 = display, 1 = log battery info, 2 = log cell volts, 3 = log cell volts and temps. The default is 1
++ log: 0 = display, 1 = log battery info, 2 = add cell volts, 3 = add cell temps. The default is 1
 + save: name of a CSV file to write log data to
 + count: optional over-ride for the number of batteries
 
@@ -597,5 +597,6 @@ This setting can be:
 
 ## Version Info
 
-2.0.0<br>
+2.0.1<br>
+Updated battery_info() and battery_monitor() to include mre log information and save to file.
 Updated library that uses the Fox Open API. Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)

@@ -346,7 +346,7 @@ battery_info() prints information on the battery and cells:
 battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
 + interval: the time in minutes between log entries. The default is 30 minutes
 + run: the number of log entries to create. The default is 48 i.e. every 30 minues for 24 hours in total
-+ log: 0 = display, 1 = log battery info, 2 = log cell volts, 3 = log cell volts and temps. The default is 1
++ log: 0 = display, 1 = log battery info, 2 = add cell volts, 3 = add cell temps. The default is 1
 + save: name of a CSV file to write log data to
 + count: optional over-ride for the number of batteries
 
@@ -590,17 +590,18 @@ This setting can be:
 
 ## Version Info
 
-1.1.1<br>
-Added battery_info() and battery_monitor()
-Minor changes to log information for charge_needed()
+1.1.3<br>
+Updated battery_monitor() to log more info and save to file.
+Added battery_info() and battery_monitor().
+Minor changes to log information for charge_needed().
 Adjustment to lifepo4_curve to improve accuracy of OCV estimation / charge power.
-Bug fix so set_tariff() does not update the default charge times if none of start_at, end_by, duration or times are provided
-Added work_hours to tariff and work_times to set_tariff()
-Added ability to set forecast times in set_tariff()
+Bug fix so set_tariff() does not update the default charge times if none of start_at, end_by, duration or times are provided.
+Added work_hours to tariff and work_times to set_tariff().
+Added ability to set forecast times in set_tariff().
 Added times parameter to set_tariff to allow update of multiple charging periods in one call.
-Added ability to set AM/PM charging periods for any tariff using set_tariff()
-Disable charging period added to set_tariff() when duration=0
-Suport for AM and PM charge periods when using Agile
+Added ability to set AM/PM charging periods for any tariff using set_tariff().
+Disable charging period added to set_tariff() when duration=0.
+Suport for AM and PM charge periods when using Agile.
 Fix for battery only inverter with no pv generation history.
 Change to force full charge if charge_needed exceeds battery capacity.
 
