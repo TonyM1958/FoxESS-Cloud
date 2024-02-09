@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.0.2"
+version = "2.0.3"
 debug_setting = 1
 
 # constants
@@ -2683,7 +2683,7 @@ def write(f, s, m='a'):
     if f is None or s is None:
         return
     file = open(f, m)
-    print(s, file)
+    print(s, file=file)
     file.close()
     return
 

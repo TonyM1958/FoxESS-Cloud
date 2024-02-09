@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  08 February 2024
+Updated:  09 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.4"
+version = "1.1.5"
 debug_setting = 1
 
 # constants
@@ -2794,7 +2794,7 @@ def write(f, s, m='a'):
     if f is None or s is None:
         return
     file = open(f, m)
-    print(s, file)
+    print(s, file=file)
     file.close()
     return
 

@@ -597,7 +597,8 @@ This setting can be:
 
 ## Version Info
 
-2.0.2<br>
+2.0.3<br>
+Fix battery_monitor() logging to file.
 Improvements to determine number of batteries.
 Updated battery_info() and battery_monitor() to include mre log information and save to file.
 Updated library that uses the Fox Open API. Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)
