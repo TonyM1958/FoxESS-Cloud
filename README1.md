@@ -590,7 +590,7 @@ This setting can be:
 
 ## Version Info
 
-1.1.5<br>
+1.1.6<br>
 FIx battery_monitor() logging to file.
 Improvement to determine number of batteries.
 Updated battery_monitor() to log more info and save to file.

@@ -597,7 +597,7 @@ This setting can be:
 
 ## Version Info
 
-2.0.3<br>
+2.0.4<br>
 Fix battery_monitor() logging to file.
 Improvements to determine number of batteries.
 Updated battery_info() and battery_monitor() to include mre log information and save to file.

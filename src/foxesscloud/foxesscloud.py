@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.5"
+version = "1.1.6"
 debug_setting = 1
 
 # constants
@@ -2745,7 +2745,7 @@ def battery_info(log=0, plot=1, count=None):
     if log > 0:
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
-        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{bat_count},{nv_cell},{nt_cell}"
+        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{nbat},{nv_cell},{nt_cell}"
         for i in range(0, nbat):
             s +=f",{sum(bat_volts[i]):.2f}"
         for i in range(0, nbat):
