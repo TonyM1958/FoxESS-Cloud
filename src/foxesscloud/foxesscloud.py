@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  09 February 2024
+Updated:  12 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.6"
+version = "1.1.7"
 debug_setting = 1
 
 # constants
@@ -2100,7 +2100,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
-lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
+lifepo4_curve = [51.00, 51.50, 52.00, 52.30, 52.60, 52.90, 53.00, 53.10, 53.2, 53.3, 54.00]
 
 # charge_needed settings
 charge_config = {
@@ -2279,12 +2279,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     volt_curve = charge_config['volt_curve']
     nominal_soc = charge_config['nominal_soc']
     volt_nominal = interpolate(nominal_soc / 10, volt_curve)
-    bat_count = int(bat_volt / volt_nominal + 0.5)
-    bat_resistance = charge_config['bat_resistance'] * bat_count
+    bat_resistance = charge_config['bat_resistance'] * bat_volt / volt_nominal
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
     print(f"\nBattery Info:")
-    print(f"  Count:       {bat_count} batteries")
     print(f"  Capacity:    {capacity:.1f}kWh")
     print(f"  Residual:    {residual:.1f}kWh")
     print(f"  Voltage:     {bat_volt:.1f}V")
@@ -2737,21 +2735,25 @@ def battery_info(log=0, plot=1, count=None):
         return None
     nt = len(cell_temps)
     nt_cell = int(nt / nbat + 0.5)
+    bat_cell_volts = []
+    bat_cell_temps = []
     bat_volts = []
     bat_temps = []
     for i in range(0, nbat):
-        bat_volts.append(cell_volts[i * nv_cell : (i + 1) * nv_cell])
-        bat_temps.append(cell_temps[i * nt_cell : (i + 1) * nt_cell])
+        bat_cell_volts.append(cell_volts[i * nv_cell : (i + 1) * nv_cell])
+        bat_cell_temps.append(cell_temps[i * nt_cell : (i + 1) * nt_cell])
+        bat_volts.append(sum(bat_cell_volts[i]))
+        bat_temps.append(avg(bat_cell_temps[i]))
     if log > 0:
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
         s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{nbat},{nv_cell},{nt_cell}"
         for i in range(0, nbat):
-            s +=f",{sum(bat_volts[i]):.2f}"
+            s +=f",{bat_volts[i]:.2f}"
         for i in range(0, nbat):
-            s +=f",{imbalance(bat_volts[i]):.2f}"
+            s +=f",{imbalance(bat_cell_volts[i]):.2f}"
         for i in range(0, nbat):
-            s +=f",{avg(bat_temps[i]):.1f}"
+            s +=f",{bat_temps[i]:.1f}"
         if log >= 2:
             for v in cell_volts:
                 s +=f",{v:.3f}"
@@ -2759,33 +2761,32 @@ def battery_info(log=0, plot=1, count=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    print(f"Battery Count:     {nbat} batteries with {nv_cell} cells each")
-    print(f"Current SoC:       {current_soc}%")
-    print(f"State:             {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    print(f"Residual:          {residual:.1f}kWh")
-    print(f"Est. Capacity:     {capacity:.1f}kWh")
-    print(f"InvBatVolt:        {bat_volt:.1f}V")
-    print(f"InvBatCurrent:     {bat_current:.1f}A")
-    print(f"BMS Temperature:   {bms_temperature:.1f}°C")
-    print(f"Cell Temperature:  {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
-    print(f"Cell Volts:        {sum(cell_volts):.1f}V total, {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
-    print(f"Cell Imbalance:    {imbalance(cell_volts):.2f}%:")
-    print(f"\nVolts by battery:")
+    print(f"Current SoC:         {current_soc}%")
+    print(f"Residual:            {residual:.1f}kWh")
+    print(f"Est. Capacity:       {capacity:.1f}kWh")
+    print(f"InvBatVolt:          {bat_volt:.1f}V")
+    print(f"InvBatCurrent:       {bat_current:.1f}A")
+    print(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
+    print(f"Battery Count:       {nbat} batteries with {nv_cell} cells each")
+    print(f"Battery Volts:       {sum(bat_volts):.1f}V total, {avg(bat_volts):.2f}V average, {max(bat_volts):.2f}V maximum, {min(bat_volts):.2f}V minimum")
+    print(f"Cell Volts:          {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
+    print(f"Cell Imbalance:      {imbalance(cell_volts):.2f}%:")
+    print(f"BMS Temperature:     {bms_temperature:.1f}°C")
+    print(f"Battery Temperature: {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
+    print(f"\nInfo by battery:")
     for i in range(0, nbat):
-        print(f"  Battery {i+1}: {sum(bat_volts[i]):.2f}V, Imbalance = {imbalance(bat_volts[i]):.2f}%")
+        print(f"  Battery {i+1}: {bat_volts[i]:.2f}V, Cell Imbalance = {imbalance(bat_cell_volts[i]):.2f}%, Average Cell Temperature = {bat_temps[i]:.1f}°C")
     if plot == 1:
+        print()
         plt.figure(figsize=(figure_width, figure_width/3))
-        x = range(1, len(bat_volts[0]) + 1)
+        x = range(1, len(bat_cell_volts[0]) + 1)
         plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
         for i in range(0, len(bat_volts)):
-            plt.plot(x, bat_volts[i], label = f"Battery {i+1}")
+            plt.plot(x, bat_cell_volts[i], label = f"Battery {i+1}")
         plt.title(f"Cell Volts by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
         plt.show()
-    print(f"\nTemperatures by battery:")
-    for i in range(0, nbat):
-        print(f"  Battery {i+1}: {avg(bat_temps[i]):.1f}°C")
     return None
 
 # helper to write file / echo to screen

@@ -597,7 +597,9 @@ This setting can be:
 
 ## Version Info
 
-2.0.4<br>
+2.0.5<br>
+Revised battery LiFePO4 calibration.
+Updated battery_info() to show more derrived battery data.
 Fix battery_monitor() logging to file.
 Improvements to determine number of batteries.
 Updated battery_info() and battery_monitor() to include mre log information and save to file.
