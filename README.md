@@ -189,6 +189,10 @@ For power values (unit = kW), the summary performs a Riemann sum of the data, in
 + kwh_peak: the total energy consumed or generated during the peak time of use
 + kwh_neg: the total energy from -ve power flow (all other totals are based on +ve power flow)
 
+This example shows power graphs for today and yesterday:
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/d84c55c9-4f4c-431d-bc55-d7796b7e4fea)
+
 
 ## Report Data
 Report data provides information on the energy produced by the inverter, battery charge and discharge energy, grid consumption and feed-in energy and home energy consumption:
@@ -241,6 +245,11 @@ For example, this Jupyter Lab cell will report energy data by day for the month 
 d = '2023-06-17'
 result=f.get_report('month', d=d)
 ```
+
+This example plots weekly data:
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/f408a010-9600-4b2f-979f-83e32d960586)
+
 
 # Built-in Utilities and Operations
 
@@ -336,6 +345,11 @@ The default battery open circuit voltage curve versus SoC from 0% to 100% is:
 lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
 ```
 
+This example shows the results reported by charge needed:
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/8b77956b-c326-43cd-b165-20d806b1e7e8)
+
+
 ## Battery Info
 
 Provides detailed information on the current state of the batteries:
@@ -356,6 +370,10 @@ battery_monitor() runs battery_info() in log mode on a schedule to provide infor
 + log: 0 = display, 1 = log battery info, 2 = add cell volts, 3 = add cell temps. The default is 1
 + save: name of a CSV file to write log data to
 + count: optional over-ride for the number of batteries
+
+This is an example of the output from battery_info():
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/a8eb52b6-ce3f-4b58-bb76-5483d5e40fa7)
 
 
 ## Date Ranges
