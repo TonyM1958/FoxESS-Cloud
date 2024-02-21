@@ -590,7 +590,8 @@ This setting can be:
 
 ## Version Info
 
-1.1.7<br>
+1.1.8<br>
+Updated condition where charge needed exceeds battery capacity
 Revised battery LiFePO4 calibration.
 Updated battery_info() to show more derrived battery data.
 Fix battery_monitor() logging to file.

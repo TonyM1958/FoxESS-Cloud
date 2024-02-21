@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.7"
+version = "1.1.8"
 debug_setting = 1
 
 # constants
@@ -2100,7 +2100,7 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
 
 # Battery open circuit voltage (OCV) from 0% to 100% SoC
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
-lifepo4_curve = [51.00, 51.50, 52.00, 52.30, 52.60, 52.90, 53.00, 53.10, 53.2, 53.3, 54.00]
+lifepo4_curve = [51.00, 51.50, 52.00, 52.30, 52.60, 52.80, 52.90, 53.00, 53.10, 53.30, 54.00]
 
 # charge_needed settings
 charge_config = {
@@ -2546,8 +2546,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # full charge if requested or charge time exceeded or charge needed exceeds capacity
         if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.05):
             kwh_needed = capacity - start_residual
-            hours = charge_time
-            print(f"  Full charge time used")
+            hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
+            if full_charge is not None or force_charge == 2 or hours > charge_time:
+                hours = charge_time
+                print(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
             print(f"  Minimum charge time used")
