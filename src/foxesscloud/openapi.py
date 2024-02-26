@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 February 2024
+Updated:  24 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.0.6"
+version = "2.0.7"
 debug_setting = 1
 
 # constants
@@ -937,7 +937,7 @@ def split_unit(u):
 
 # get real time data
 def get_real(v = None):
-    global device_sn, debug_setting, device, power_vars
+    global device_sn, debug_setting, device, power_vars, invert_ct2
     if get_device() is None:
         return None
     if device['status'] > 1:
@@ -964,6 +964,8 @@ def get_real(v = None):
         print(f"** get_real(), more than 1 value returned: {result}")
     result = result[0]['datas']
     for var in result:
+        if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
+            var['value'] *= -1
         if var.get('unit') is None:
             var['unit'] = ''
         elif var['unit'][0] in '0123456789':
@@ -992,7 +994,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw
+    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -1046,6 +1048,9 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         file.close()
     for var in result:
         var['date'] = d[0:10]
+        if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
+            for y in var['data']:
+                y['value'] = -y['value']
         if var.get('unit') is None:
             var['unit'] = ''
         elif var['unit'][0] in '0123456789':
@@ -2802,6 +2807,7 @@ max_pv_power = 100
 # data calibration settings compared with HA inverter data 
 pv_calibration = 0.98
 ct2_calibration = 0.92
+invert_ct2 = 1
 
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
@@ -2841,10 +2847,9 @@ def get_pvoutput(d = None, tou = 0):
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
     for i, data in enumerate(raw_data[ct2_index]['data']):
-        # meterPower2 is -ve when generating
-        raw_data[pv_index]['data'][i]['value'] -= data['value'] / ct2_calibration if data['value'] <= 0.0 else 0
+        raw_data[pv_index]['data'][i]['value'] += data['value'] / ct2_calibration if data['value'] <= 0.0 else 0
     # kwh is positive for generation
-    raw_data[pv_index]['kwh'] = raw_data[pv_index]['kwh'] / pv_calibration + raw_data[ct2_index]['kwh_neg'] / ct2_calibration
+    raw_data[pv_index]['kwh'] = raw_data[pv_index]['kwh'] / pv_calibration + raw_data[ct2_index]['kwh'] / ct2_calibration
     pv_max = max(data['value'] for data in raw_data[pv_index]['data'])
     max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
     raw_data[pv_index]['max'] = pv_max

@@ -75,6 +75,7 @@ f.get_remote_settings()
 f.get_cell_temps()
 f.get_cell_volts
 f.get_work_mode()
+f.get_flag()
 f.get_templates()
 f.get_schedule()
 f.get_earnings()
@@ -82,23 +83,25 @@ f.get_earnings()
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
 
-get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
++ get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
 
-get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
++ get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
 
-get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
++ get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
-get_remote_settings() will return a dictionary of settings given a query key
++ get_remote_settings() will return a dictionary of settings given a query key
 
-get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings()
++ get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings()
 
-get_work_mode() returns the current work mode. The result is stored in f.work_mode.
++ get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
-get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
++ get_flag() returns the flag information for Mode Scheduler, indicating if this is supported or enabled.
 
-get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
++ get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
 
-get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
++ get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
+
++ get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
 
 ## Inverter Settings
 You can change inverter settings using:
@@ -140,6 +143,7 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
+f.invert_ct2 = 1
 f.get_raw(time_span, d, v, summary, save, load, plot, station)
 ```
 
@@ -153,6 +157,8 @@ f.get_raw(time_span, d, v, summary, save, load, plot, station)
 + station is optional. 1 gets data for a site (using f.station_id), 0 gets data for a device (using f.device_id). The default is 0.
 
 The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
+
+f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
@@ -590,8 +596,10 @@ This setting can be:
 
 ## Version Info
 
-1.1.8<br>
-Updated condition where charge needed exceeds battery capacity
+1.1.9<br>
+Added invert_ct2 setting so the values for secondary generation can be configured so they are always +ve for secondary generation.
+Added get_flag() and added 'support' flag into schedule.
+Updated condition where charge needed exceeds battery capacity.
 Revised battery LiFePO4 calibration.
 Updated battery_info() to show more derrived battery data.
 Fix battery_monitor() logging to file.

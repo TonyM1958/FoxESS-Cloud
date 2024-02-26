@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  12 February 2024
+Updated:  26 February 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.8"
+version = "1.1.9"
 debug_setting = 1
 
 # constants
@@ -363,7 +363,7 @@ device_sn = None
 raw_vars = None
 
 def get_device(sn=None):
-    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting, messages, schedule, templates
+    global token, device_list, device, device_id, device_sn, firmware, battery, raw_vars, debug_setting, messages, flag, schedule, templates
     if get_token() is None:
         return None
     if device is not None:
@@ -575,7 +575,7 @@ def time_period(t):
     return result
 
 def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 = None, adjust = 0, force = 0):
-    global token, device_sn, battery_settings, debug_setting, messages
+    global token, device_sn, battery_settings, debug_setting, messages, schedule
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -584,7 +584,9 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times'] = []
         battery_settings['times'].append({'tip': '', 'enableCharge': True, 'enableGrid': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
         battery_settings['times'].append({'tip': '', 'enableCharge': True, 'enableGrid': False, 'startTime': {'hour': 0, 'minute': 0}, 'endTime': {'hour': 0, 'minute': 0}})
-    if get_schedule().get('enable'):
+    if get_flag() is None:
+        return None
+    if schedule.get('enable') == True:
         if force == 0:
             print(f"** set_charge(): cannot set charge when a schedule is enabled")
             return None
@@ -827,13 +829,15 @@ work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
 settable_modes = work_modes[:3]
 
 def set_work_mode(mode, force = 0):
-    global token, device_id, work_modes, work_mode, debug_setting, messages
+    global token, device_id, work_modes, work_mode, debug_setting, messages, schedule
     if get_device() is None:
         return None
     if mode not in settable_modes:
         print(f"** work mode: must be one of {settable_modes}")
         return None
-    if get_schedule().get('enable'):
+    if get_flag() is None:
+        return None
+    if schedule.get('enable') == True:
         if force == 0:
             print(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
             return None
@@ -866,10 +870,42 @@ def set_work_mode(mode, force = 0):
 schedule = None
 templates = None
 
+# get the current enable flag
+def get_flag():
+    global token, device_id, schedule, debug_setting, messages
+    if get_device() is None:
+        return None
+    if schedule is not None and schedule.get('support') is not None:
+        return schedule
+    if debug_setting > 1:
+        print(f"getting flag")
+    params = {'deviceSN': device_sn}
+    response = signed_get(path="/generic/v0/device/scheduler/get/flag", params=params)
+    if response.status_code != 200:
+        print(f"** get_flag() got response code: {response.status_code}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        if errno == 40256:
+            print(f"** get_flag(), not suported on this device")
+        else:
+            print(f"** get_flag()), no result data, {errno_message(errno)}")
+        return None
+    if schedule is None:
+        schedule = {'enable': None, 'support': None, 'pollcy': None}
+    schedule['enable'] = result.get('enable')
+    schedule['support'] = result.get('support')
+    return schedule
+
+
 # get the current schedule
 def get_schedule():
     global token, device_id, schedule, debug_setting, messages
-    if get_device() is None:
+    if get_flag() is None:
+        return None
+    if schedule.get('support') == False:
+        print(f"** get_schedule(), not supported on this device")
         return None
     if debug_setting > 1:
         print(f"getting schedule")
@@ -881,10 +917,7 @@ def get_schedule():
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        if errno == 40256:
-            print(f"** get_schedule(), not suported on this device")
-        else:
-            print(f"** get_schedule(), no result data, {errno_message(errno)}")
+        print(f"** get_schedule(), no result data, {errno_message(errno)}")
         return None
     schedule = result
     return schedule
@@ -892,7 +925,10 @@ def get_schedule():
 # get the details for a specific template
 def get_template_detail(template):
     global token, device_id, schedule, debug_setting, messages, templates
-    if get_device() is None:
+    if get_flag() is None:
+        return None
+    if schedule.get('support') == False:
+        print(f"** get_template_detail(), not supported on this device")
         return None
     if debug_setting > 1:
         print(f"getting template detail")
@@ -904,17 +940,17 @@ def get_template_detail(template):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        if errno == 40256:
-            print(f"** get_schedule(), not suported on this device")
-        else:
-            print(f"** get_schedule(), no result data, {errno_message(errno)}")
+        print(f"** get_schedule(), no result data, {errno_message(errno)}")
         return None
     return result
 
 # get the preset templates that contains periods
 def get_templates(template_type=[1,2]):
-    global token, device_id, schedule, debug_setting, messages, templates
-    if get_device() is None:
+    global token, device_id, flag, schedule, debug_setting, messages, templates
+    if get_flag() is None:
+        return None
+    if schedule.get('support') == False:
+        print(f"** get_templates(), not supported on this device")
         return None
     if templates is None:
         templates = {}
@@ -927,15 +963,12 @@ def get_templates(template_type=[1,2]):
     params = {'templateType': template_type, 'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/edit/list", params=params)
     if response.status_code != 200:
-        print(f"** get_schedule() got response code: {response.status_code}")
+        print(f"** get_templates() got response code: {response.status_code}")
         return None
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        if errno == 40256:
-            print(f"** get_schedule(), not suported on this device")
-        else:
-            print(f"** get_schedule(), no result data, {errno_message(errno)}")
+        print(f"** get_templates(), no result data, {errno_message(errno)}")
         return None
     for t in result['data']:
         id = t['templateID']
@@ -998,6 +1031,11 @@ def set_period(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0):
 # set a schedule from a period or list of periods
 def set_schedule(enable=1, periods=None, template=None):
     global token, device_sn, debug_setting, messages, schedule, templates
+    if get_flag() is None:
+        return None
+    if schedule.get('support') == False:
+        print(f"** set_schedule(), not supported on this device")
+        return None
     if schedule is None:
         schedule = get_schedule()
     if debug_setting > 1:
@@ -1068,7 +1106,7 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
-    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, flip_ct2, tariff, max_power_kw, messages
+    global token, device_id, debug_setting, raw_vars, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw, messages
     if station == 0 and get_device() is None:
         return None
     elif station == 1 and get_site() is None:
@@ -1124,6 +1162,10 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         file.close()
     for var in result:
         var['date'] = d[0:10]
+    if 'meterPower2' in v and invert_ct2 == 1:
+        ct2_index = v.index('meterPower2')
+        for y in result[ct2_index]['data']:
+            y['value'] = - y['value']
     if summary <= 0 or time_span == 'hour':
         if summary == -1:     # return last value only for each variable
             for v in result:
@@ -1146,6 +1188,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         for y in input_result['data']:
             y['value'] = -y['value'] if y['value'] < 0.0 else 0.0
         result.append(input_result)
+    # process results to generate summary
     for var in result:
         energy = var['unit'] == 'kW'
         hour = 0
@@ -2912,6 +2955,8 @@ max_pv_power = 100
 # data calibration settings compared with HA inverter data 
 pv_calibration = 0.98
 ct2_calibration = 0.92
+# CT2 needs to be +ve for generation
+invert_ct2 = 1
 
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
@@ -2951,10 +2996,9 @@ def get_pvoutput(d = None, tou = 0):
     pv_index = v.index('pvPower')
     ct2_index = v.index('meterPower2')
     for i, data in enumerate(raw_data[ct2_index]['data']):
-        # meterPower2 is -ve when generating
-        raw_data[pv_index]['data'][i]['value'] -= data['value'] / ct2_calibration if data['value'] <= 0.0 else 0
+        raw_data[pv_index]['data'][i]['value'] += data['value'] / ct2_calibration if data['value'] > 0.0 else 0
     # kwh is positive for generation
-    raw_data[pv_index]['kwh'] = raw_data[pv_index]['kwh'] / pv_calibration + raw_data[ct2_index]['kwh_neg'] / ct2_calibration
+    raw_data[pv_index]['kwh'] = raw_data[pv_index]['kwh'] / pv_calibration + raw_data[ct2_index]['kwh'] / ct2_calibration
     pv_max = max(data['value'] for data in raw_data[pv_index]['data'])
     max_index = [data['value'] for data in raw_data[pv_index]['data']].index(pv_max)
     raw_data[pv_index]['max'] = pv_max

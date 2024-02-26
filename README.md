@@ -128,9 +128,12 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 Real time data reports the latest values for inverter variables, collected every 5 minutes:
 
 ```
+f.invert_ct2 = 1
 f.get_vars()
 f.get_real(v)
 ```
+
+f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
 f.get_vars() returns the list of variables that can be queried. This also stores the information:
 + f.var_table: a table, indexed by variable that contains information such as the name and unit.
@@ -158,6 +161,8 @@ f.get_history(time_span, d, v, summary, save, load, plot)
 + save: set to the root part of a filename to save the results
 + load: set to the full filename to load previously saved results
 + plot is optional. 1 plots the results with a chart per unit and per day. 2 plots multiple days on the same chart. Default is 0, no plots
+
+The setting for invert_ct2 is applied to history data for meterPower2, so +ve values are returned for secondary generation. 
 
 Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -615,8 +620,9 @@ This setting can be:
 
 ## Version Info
 
-2.0.6<br>
-Updated condition where charge needed exceeds battery capacity
+2.0.7<br>
+Added invert_ct2 setting so the values for secondary generation can be configured so they are always +ve for secondary generation.
+Updated condition where charge needed exceeds battery capacity.
 Revised battery LiFePO4 calibration.
 Updated battery_info() to show more derrived battery data.
 Fix battery_monitor() logging to file.
