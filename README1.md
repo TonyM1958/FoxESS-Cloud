@@ -596,6 +596,11 @@ This setting can be:
 
 ## Version Info
 
+1.2.0<br>
+Added 60 second time-out and retry for http requests.
+Fix the history and report values returned by Fox that are null.
+
+
 1.1.9<br>
 Added invert_ct2 setting so the values for secondary generation can be configured so they are always +ve for secondary generation.
 Added get_flag() and added 'support' flag into schedule.

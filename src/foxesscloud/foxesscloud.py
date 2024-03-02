@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  26 February 2024
+Updated:  01 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.1.9"
+version = "1.2.0"
 debug_setting = 1
 
 # constants
@@ -72,6 +72,14 @@ def interpolate(f, v):
     return v[i] * (1-x) + v[i+1] * x
 
 # build request header with signing
+http_timeout = 59        # http request timeout in seconds
+http_tries = 2
+
+class MockResponse:
+    def __init__(self, status_code, reason):
+        self.status_code = status_code
+        self.reason = reason
+        self.json = None
 
 def signed_header(path, login = 0):
     global token_store, debug_setting
@@ -92,12 +100,32 @@ def signed_header(path, login = 0):
     return headers
 
 def signed_get(path, params = None, login = 0):
-    global fox_domain
-    return requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
+    global fox_domain, http_timeout, http_tries
+    message = None
+    for i in range(0, http_tries):
+        try:
+            response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params, timeout=http_timeout)
+            return response
+        except Exception as e:
+            message = str(e)
+            if debug_setting > 0:
+                print(f"** signed_get(): {message}")
+            continue
+    return MockResponse(999, message)
 
 def signed_post(path, data = None, login = 0):
-    global fox_domain
-    return requests.post(url=fox_domain + path, headers=signed_header(path, login), data=json.dumps(data))
+    global fox_domain, http_timeout, http_tries
+    message = None
+    for i in range(0, http_tries):
+        try:
+            response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=json.dumps(data), timeout=http_timeout)
+            return response
+        except Exception as e:
+            message = str(e)
+            if debug_setting > 0:
+                print(f"** signed_post(): {message}")
+            continue
+    return MockResponse(999, message)
 
 
 ##################################################################################################
@@ -1214,6 +1242,10 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         for y in var['data']:
             h = time_hours(y['time'][11:19]) # time
             value = y['value']
+            if value is None:
+                if debug_setting > 0:
+                    print(f"** get_raw(), warning: missing data for {var['variable']} at {y['time']}")
+                continue
             sum += value
             count += 1
             max = value if max is None or value > max else max
@@ -1307,7 +1339,7 @@ def plot_raw(result, plot=1, station=0):
                     h += 1 if new_minute < old_minute else 0
                     x.append(h + new_minute / 60)
                     old_minute = new_minute
-                y = [v['data'][i]['value'] for i in range(0, n)]
+                y = [v['data'][i]['value'] if v['data'][i]['value'] is not None else 0.0 for i in range(0, n)]
                 name = v['name']
                 label = f"{name} / {d}" if plot == 2 and len(dates) > 1 else name
                 plt.plot(x, y ,label=label)
@@ -1407,6 +1439,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             if fix_values == 1:
                 for var in side_result:
                     for data in var['data']:
+                        if data['value'] is None:
+                            continue
                         if data['value'] > fix_value_threshold:
                             data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
     if summary < 2:
@@ -1424,6 +1458,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         if fix_values == 1:
             for var in result:
                 for data in var['data']:
+                    if data['value'] is None:
+                        continue
                     if data['value'] > fix_value_threshold:
                         data['value'] = (int(data['value'] * 10) & fix_value_mask) / 10
         # prune results back to only valid, complete data for day, week, month or year
@@ -1470,8 +1506,12 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         sum = 0.0
         max = None
         min = None
-        for y in var['data']:
+        for j, y in enumerate(var['data']):
             value = y['value']
+            if value is None:
+                if debug_setting > 0:
+                    print(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}")
+                continue
             count += 1
             sum += value
             max = value if max is None or value > max else max
@@ -1538,7 +1578,7 @@ def plot_report(result, plot=1, station=0):
             d = v['date']
             n = len(v['data'])
             x = [i + align  for i in range(1, n+1)]
-            y = [v['data'][i]['value'] for i in range(0, n)]
+            y = [v['data'][i]['value'] if v['data'][i]['value'] is not None else 0.0 for i in range(0, n)]
             label = f"{d}" if len(dates) > 1 else f"{name}"
             plt.bar(x, y ,label=label, width=width)
             align += width
@@ -2114,9 +2154,11 @@ def report_value_profile(result):
     n = 0
     for day in result:
         hours = 0
+        value = 0.0
         # sum and count available values by hour
         for i in range(0, len(day['data'])):
-            data[i] = (data[i][0] + day['data'][i]['value'], data[i][1]+1)
+            value = day['data'][i]['value'] if day['data'][i]['value'] is not None else value
+            data[i] = (data[i][0] + value, data[i][1]+1)
             hours += 1
         totals += day['total'] * (24 / hours if hours >= 1 else 1)
         n += 1

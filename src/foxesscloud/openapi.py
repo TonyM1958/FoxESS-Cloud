@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  24 February 2024
+Updated:  01 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.0.7"
+version = "2.0.8"
 debug_setting = 1
 
 # constants
@@ -88,6 +88,14 @@ def avg(x):
 
 last_call = {}          # timestamp of the last call for a given path
 query_delay = 1         # minimum time between calls in seconds
+http_timeout = 59       # http request timeout in seconds
+http_tries = 2          # number of times to re-try requst
+
+class MockResponse:
+    def __init__(self, status_code, reason):
+        self.status_code = status_code
+        self.reason = reason
+        self.json = None
 
 def signed_header(path, login = 0):
     global api_key, user_agent, time_zone, lang, debug_setting, last_call, query_delay
@@ -116,19 +124,37 @@ def signed_header(path, login = 0):
     return headers
 
 def signed_get(path, params = None, login = 0):
-    global fox_domain, debug_setting
+    global fox_domain, debug_setting, http_timeout, http_tries
     if debug_setting > 2:
         print(f"params = {params}")
-    response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params)
-    return response
+    message = None
+    for i in range(0, http_tries):
+        try:
+            response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params, timeout=http_timeout)
+            return response
+        except Exception as e:
+            message = str(e)
+            if debug_setting > 0:
+                print(f"** signed_get(): {message}")
+            continue
+    return MockResponse(999, message)
 
 def signed_post(path, body = None, login = 0):
-    global fox_domain, debug_setting
+    global fox_domain, debug_setting, http_timeout, http_tries
     data = json.dumps(body)
     if debug_setting > 2:
         print(f"body = {data}")
-    response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data)
-    return response
+    message = None
+    for i in range(0, http_tries):
+        try:
+            response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data, timeout=http_timeout)
+            return response
+        except Exception as e:
+            message = str(e)
+            if debug_setting > 0:
+                print(f"** signed_post(): {message}")
+            continue
+    return MockResponse(999, message)
 
 
 ##################################################################################################
@@ -1099,6 +1125,10 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         for y in var['data']:
             h = time_hours(y['time'][11:19]) # time
             value = y['value']
+            if value is None:
+                if debug_setting > 0:
+                    print(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}")
+                continue
             sum += value
             count += 1
             max = value if max is None or value > max else max
@@ -1192,7 +1222,7 @@ def plot_history(result, plot=1):
                     h += 1 if new_minute < old_minute else 0
                     x.append(h + new_minute / 60)
                     old_minute = new_minute
-                y = [v['data'][i]['value'] for i in range(0, n)]
+                y = [v['data'][i]['value'] if v['data'][i]['value'] is not None else 0.0 for i in range(0, n)]
                 name = v['name']
                 label = f"{name} / {d}" if plot == 2 and len(dates) > 1 else name
                 plt.plot(x, y ,label=label)
@@ -1234,6 +1264,8 @@ fix_value_mask = 0x0000FFFF
 
 def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_sn, var_list, debug_setting, report_vars
+    if get_device() is None:
+        return None
     # process list of days
     if d is not None and type(d) is list:
         result_list = []
@@ -1285,6 +1317,8 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             if fix_values == 1:
                 for var in side_result:
                     for i, value in enumerate(var['values']):
+                        if value is None:
+                            continue
                         if value > fix_value_threshold:
                             var['values'][i] = (int(value * 10) & fix_value_mask) / 10
     if summary < 2:
@@ -1302,6 +1336,8 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         if fix_values == 1:
             for var in result:
                 for i, value in enumerate(var['values']):
+                    if value is None:
+                        continue
                     if value > fix_value_threshold:
                         var['values'][i] = (int(value * 10) & fix_value_mask) / 10
         # prune results back to only valid, complete data for day, week, month or year
@@ -1348,7 +1384,11 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         sum = 0.0
         max = None
         min = None
-        for value in var['values']:
+        for j, value in enumerate(var['values']):
+            if value is None:
+                if debug_setting > 0:
+                    print(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}")
+                continue
             count += 1
             sum += value
             max = value if max is None or value > max else max
@@ -1415,7 +1455,7 @@ def plot_report(result, plot=1, station=0):
             d = v['date']
             n = len(v['values'])
             x = [i + align  for i in range(1, n+1)]
-            y = [v['values'][i] for i in range(0, n)]
+            y = [v['values'][i] if v['values'][i] is not None else 0.0 for i in range(0, n)]
             label = f"{d}" if len(dates) > 1 else f"{name}"
             plt.bar(x, y ,label=label, width=width)
             align += width
@@ -1967,9 +2007,11 @@ def report_value_profile(result):
     n = 0
     for day in result:
         hours = 0
+        value = 0.0
         # sum and count available values by hour
         for i in range(0, len(day['values'])):
-            data[i] = (data[i][0] + day['values'][i], data[i][1]+1)
+            value = day['values'][i] if day['values'][i] is not None else value 
+            data[i] = (data[i][0] + value, data[i][1]+1)
             hours += 1
         totals += day['total'] * (24 / hours if hours >= 1 else 1)
         n += 1
