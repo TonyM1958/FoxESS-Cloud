@@ -13,7 +13,7 @@ Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/mai
 This module builds on the Fox Open API to provide a sample code and utilities that can be used with your inverter and batteries.
 
 + Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)
-+ A list of the error codes used by the API is available [here](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes).
++ A list of the error codes used by the API is available here: [Wiki/Error-Codes](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes).
 
 ## Setup
 To initialise a Jupyter Lab notebook to use the open API, copy the following text and edit the configuration variables needed to add your values:
