@@ -623,7 +623,8 @@ This setting can be:
 
 ## Version Info
 
-2.0.8<br>
+2.0.9<br>
+Added HTTP request reponse_time monitoring.
 Added 60 second time-out and retry for http requests.
 Fix to handle history and report values returned by Fox that are null.
 Added invert_ct2 setting so the values for secondary generation can be configured so they are always +ve for secondary generation.

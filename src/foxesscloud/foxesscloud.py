@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 March 2024
+Updated:  03 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.2.0"
+version = "1.2.1"
 debug_setting = 1
 
 # constants
@@ -72,8 +72,9 @@ def interpolate(f, v):
     return v[i] * (1-x) + v[i+1] * x
 
 # build request header with signing
-http_timeout = 59        # http request timeout in seconds
+http_timeout = 60        # http request timeout in seconds
 http_tries = 2
+response_time = {}
 
 class MockResponse:
     def __init__(self, status_code, reason):
@@ -100,11 +101,13 @@ def signed_header(path, login = 0):
     return headers
 
 def signed_get(path, params = None, login = 0):
-    global fox_domain, http_timeout, http_tries
+    global fox_domain, http_timeout, http_tries, response_time
     message = None
     for i in range(0, http_tries):
         try:
+            t_now = time.time()
             response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params, timeout=http_timeout)
+            response_time[path] = time.time() - t_now
             return response
         except Exception as e:
             message = str(e)
@@ -114,11 +117,13 @@ def signed_get(path, params = None, login = 0):
     return MockResponse(999, message)
 
 def signed_post(path, data = None, login = 0):
-    global fox_domain, http_timeout, http_tries
+    global fox_domain, http_timeout, http_tries, response_time
     message = None
     for i in range(0, http_tries):
         try:
+            t_now = time.time()
             response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=json.dumps(data), timeout=http_timeout)
+            response_time[path] = time.time() - t_now
             return response
         except Exception as e:
             message = str(e)
@@ -447,9 +452,9 @@ def get_device(sn=None):
     model_code = device['deviceType'].upper()
     # first 2 letters / numbers e.g. H1, H3, KH
     if model_code[:2] == 'KH':
-        mode_code = 'KH-' + model_code[2:]
+        model_code = 'KH-' + model_code[2:]
     elif model_code[:4] == 'AIO-':
-        mode_code = 'AIO' + model_code[4:]
+        model_code = 'AIO' + model_code[4:]
     device['eps'] = 'E' in model_code
     parts = model_code.split('-')
     model = parts[0]
@@ -2056,7 +2061,7 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
         return None
     use = found[0]
     if times is None:
-        times = [(start_at, end_by, duration)] if start_at is not None or end_by is not None or duration is not None else []
+        times = [(start_at, end_by, duration)] if start_at is not None or end_by is not None or duration is not None else [(None, None, 3)]
     elif type(times) is not list:
         times = [times]
     if len(times) > 2:

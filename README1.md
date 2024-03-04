@@ -596,7 +596,8 @@ This setting can be:
 
 ## Version Info
 
-1.2.0<br>
+1.2.1<br>
+Added HTTP request reponse_time monitoring.
 Added 60 second time-out and retry for http requests.
 Fix the history and report values returned by Fox that are null.
 
