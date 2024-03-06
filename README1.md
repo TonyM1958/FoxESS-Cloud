@@ -160,6 +160,8 @@ The list of variables that can be queried is stored in raw_vars. There is also a
 
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
+f.sample_time is set to the sample time in minutes for the data processed, rounded to f.sample_rounding samples per minute.
+
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
 ```
@@ -596,7 +598,8 @@ This setting can be:
 
 ## Version Info
 
-1.2.1<br>
+1.2.2<br>
+Fixed a problem where erratic sample times resulted in incorrect energy calculation.
 Added HTTP request reponse_time monitoring.
 Added 60 second time-out and retry for http requests.
 Fix the history and report values returned by Fox that are null.

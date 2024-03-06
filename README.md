@@ -165,7 +165,9 @@ f.get_history(time_span, d, v, summary, save, load, plot)
 + load: set to the full filename to load previously saved results
 + plot is optional. 1 plots the results with a chart per unit and per day. 2 plots multiple days on the same chart. Default is 0, no plots
 
-The setting for invert_ct2 is applied to history data for meterPower2, so +ve values are returned for secondary generation. 
+The setting for invert_ct2 is applied to history data for meterPower2, so +ve values are returned for secondary generation.
+
+f.sample_time is set to the sample time in minutes for the data processed, rounded to f.sample_rounding samples per minute.
 
 Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
@@ -622,6 +624,9 @@ This setting can be:
 
 
 ## Version Info
+
+2.1.0<br>
+Fixed a problem where erratic sample times resulted in incorrect energy calculation.
 
 2.0.9<br>
 Added HTTP request reponse_time monitoring.

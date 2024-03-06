@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  03 March 2024
+Updated:  06 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.0.9"
+version = "2.1.0"
 debug_setting = 1
 
 # constants
@@ -1024,8 +1024,12 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 #  names after integration of power to energy. List must be in the same order as above. input_daily must be last
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
+# sample rate setting and rounding in intervals per minute
+sample_time = 5.0
+sample_rounding = 4
+
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw
+    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -1114,11 +1118,11 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
             kwh_neg = 0.0
             if len(var['data']) > 1:
-                sample_time = round(60 * (time_hours(var['data'][1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])), 1)
+                sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])) / len(var['data']), 0) / sample_rounding
             else:
                 sample_time = 5.0
-            if debug_setting > 2:
-                print(f"sample_time = {sample_time} minutes")
+            if debug_setting > 1:
+                print(f"sample_time = {sample_time} minutes, samples = {len(var['data'])} for {var['variable']}")
         sum = 0.0
         count = 0
         max = None
@@ -2720,14 +2724,25 @@ def battery_info(log=0, plot=1, count=None):
     print(f"\nInfo by battery:")
     for i in range(0, nbat):
         print(f"  Battery {i+1}: {bat_volts[i]:.2f}V, Cell Imbalance = {imbalance(bat_cell_volts[i]):.2f}%, Average Cell Temperature = {bat_temps[i]:.1f}°C")
-    if plot == 1:
+    if plot >= 1:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
         x = range(1, len(bat_cell_volts[0]) + 1)
-        plt.xticks(ticks=x, labels=x, rotation=90, fontsize=8)
+        plt.xticks(ticks=x, labels=x, fontsize=8)
         for i in range(0, len(bat_volts)):
             plt.plot(x, bat_cell_volts[i], label = f"Battery {i+1}")
         plt.title(f"Cell Volts by battery", fontsize=12)
+        plt.legend(fontsize=8, loc='lower right')
+        plt.grid()
+        plt.show()
+    if plot >= 2:
+        print()
+        plt.figure(figsize=(figure_width, figure_width/3))
+        x = range(1, len(bat_cell_temps[0]) + 1)
+        plt.xticks(ticks=x, labels=x, fontsize=8)
+        for i in range(0, len(bat_tempss)):
+            plt.plot(x, bat_cell_temps[i], label = f"Battery {i+1}")
+        plt.title(f"Cell Temperature in °C by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
         plt.show()
