@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  06 March 2024
+Updated:  07 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.0"
+version = "2.1.1"
 debug_setting = 1
 
 # constants
@@ -130,15 +130,16 @@ def signed_get(path, params = None, login = 0):
         print(f"params = {params}")
     message = None
     for i in range(0, http_tries):
+        headers = signed_header(path, login)
         try:
             t_now = time.time()
-            response = requests.get(url=fox_domain + path, headers=signed_header(path, login), params=params, timeout=http_timeout)
+            response = requests.get(url=fox_domain + path, headers=headers, params=params, timeout=http_timeout)
             response_time[path] = time.time() - t_now
             return response
         except Exception as e:
             message = str(e)
             if debug_setting > 0:
-                print(f"** signed_get(): {message}")
+                print(f"** signed_get(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
@@ -149,15 +150,16 @@ def signed_post(path, body = None, login = 0):
         print(f"body = {data}")
     message = None
     for i in range(0, http_tries):
+        headers = signed_header(path, login)
         try:
             t_now = time.time()
-            response = requests.post(url=fox_domain + path, headers=signed_header(path, login), data=data, timeout=http_timeout)
+            response = requests.post(url=fox_domain + path, headers=headers, data=data, timeout=http_timeout)
             response_time[path] = time.time() - t_now
             return response
         except Exception as e:
             message = str(e)
             if debug_setting > 0:
-                print(f"** signed_post(): {message}")
+                print(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
@@ -553,10 +555,10 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings = {}
     if battery_settings.get('times') is None:
         battery_settings['times'] = {}
-        battery_settings['times']['enable1']    = False,
+        battery_settings['times']['enable1']    = False
         battery_settings['times']['startTime1'] = {'hour': 0, 'minute': 0}
         battery_settings['times']['endTime1']   = {'hour': 0, 'minute': 0}
-        battery_settings['times']['enable2']    = False,
+        battery_settings['times']['enable2']    = False
         battery_settings['times']['startTime2'] = {'hour': 0, 'minute': 0}
         battery_settings['times']['endTime2']   = {'hour': 0, 'minute': 0}
     if get_flag().get('enable') == 1:
@@ -1025,8 +1027,8 @@ power_vars = ['generationPower', 'feedinPower','loadsPower','gridConsumptionPowe
 energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_charge_daily', 'bat_discharge_daily', 'pv_energy_daily', 'ct2_daily', 'input_daily']
 
 # sample rate setting and rounding in intervals per minute
-sample_time = 5.0
-sample_rounding = 4
+sample_time = 5.0       # 5 minutes default
+sample_rounding = 2     # round to 30 seconds
 
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
     global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time
@@ -1118,11 +1120,11 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
             kwh_neg = 0.0
             if len(var['data']) > 1:
-                sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])) / len(var['data']), 0) / sample_rounding
+                sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])) / (len(var['data']) - 1), 0) / sample_rounding
             else:
                 sample_time = 5.0
             if debug_setting > 1:
-                print(f"sample_time = {sample_time} minutes, samples = {len(var['data'])} for {var['variable']}")
+                print(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes")
         sum = 0.0
         count = 0
         max = None

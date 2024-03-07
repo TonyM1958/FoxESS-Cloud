@@ -625,7 +625,9 @@ This setting can be:
 
 ## Version Info
 
-2.1.0<br>
+2.1.1<br>
+Fix problem setting charge times if values are not read before writing.
+Debug information added for HTTP timeout.
 Fixed a problem where erratic sample times resulted in incorrect energy calculation.
 
 2.0.9<br>

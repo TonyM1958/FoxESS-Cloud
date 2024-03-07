@@ -598,7 +598,8 @@ This setting can be:
 
 ## Version Info
 
-1.2.2<br>
+1.2.3<br>
+Debug information added for HTTP timeout.
 Fixed a problem where erratic sample times resulted in incorrect energy calculation.
 Added HTTP request reponse_time monitoring.
 Added 60 second time-out and retry for http requests.
