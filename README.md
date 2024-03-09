@@ -1,10 +1,12 @@
 # FoxESS-Cloud
 
-
+<a href="https://www.buymeacoffee.com/tonym1958" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174" align="right"></a>
 This site contains sample python code for accessing the Fox cloud data via the REST API used by the Fox ESS Cloud web site and app.
-There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
-**This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.**
+There is also a number of Jupyter Lab notebooks with examples of how to run the sample code.
+
+This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.
+
 Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
 
 
