@@ -33,13 +33,20 @@ f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
 
 f.solcast_api_key = "my.solcast_api_key"
+
+f.plot_file = "plot###.png"
 ```
+
+Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
 You don't have to configure all of the settings. Your Fox ESS Cloud api key is the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login). Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
 
 For example, replace _my.fox_api_key_ with the API key. Add you inverter serial number if you have more than 1 inverter linked to your account. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
-Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
+If a value is set for f.plot_file, any charts created will also be saved to an image file:
++ f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
++ f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
++ f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
 
 ## User info
 Return information about the current user:
@@ -610,7 +617,7 @@ Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hou
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
 
-## Troubleshooting
+# Troubleshooting
 
 If needed, you can add the following setting to increase the level of information reported by the foxesscloud module:
 
@@ -625,9 +632,10 @@ This setting can be:
 + 3: internal variables and values are displayed (verbose)
 
 
-## Version Info
+# Version Info
 
-2.1.1<br>
+2.1.2<br>
+Added saving plots to an image file.
 Fix problem setting charge times if values are not read before writing.
 Debug information added for HTTP timeout.
 Fixed a problem where erratic sample times resulted in incorrect energy calculation.

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  07 March 2024
+Updated:  09 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,18 +10,15 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.1"
+version = "2.1.2"
+print(f"FoxESS-Cloud Open API version {version}")
+
 debug_setting = 1
 
 # constants
 month_names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-# global plot parameters
-figure_width = 9       # width of plots
-legend_location = "upper right"
 
-
-print(f"FoxESS-Cloud Open API version {version}")
 
 import os.path
 import json
@@ -39,6 +36,25 @@ api_key = None
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 time_zone = 'Europe/London'
 lang = 'en'
+
+# global plot parameters
+figure_width = 9       # width of plots
+legend_location = "upper right"
+plot_file = None
+plot_no = 0
+plot_dpi = 150
+plot_bbox = 'tight'
+
+# show a plot and optionally save as an image to a file
+def plot_show():
+    global plot_file, plot_no, plot_dpi, plot_bbox
+    if plot_file is not None:
+        plt.savefig(plot_file.replace('###', f"{plot_no:03d}"), dpi=plot_dpi, bbox_inches=plot_bbox)
+        if '###' in plot_file:
+            plot_no += 1
+    plt.show()
+    return
+
 
 ##################################################################################################
 ##################################################################################################
@@ -1249,7 +1265,7 @@ def plot_history(result, plot=1):
                 title = f"{title}{unit} / {device_sn}"
                 plt.title(title, fontsize=12)
                 plt.grid()
-                plt.show()
+                plot_show()
                 lines = 0
     return
 
@@ -1490,7 +1506,7 @@ def plot_report(result, plot=1, station=0):
             title = f"{title}{site['name'] if station == 1 else device_sn}"
             plt.title(title, fontsize=12)
             plt.grid()
-            plt.show()
+            plot_show()
             lines = 0
             align = 0.0
     return
@@ -2597,7 +2613,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         plt.grid()
         if show_plot > 1:
             plt.legend(fontsize=8, loc="upper right")
-        plt.show()
+        plot_show()
     if test_charge is not None:
         return None
     # work out charge periods settings
@@ -2736,7 +2752,7 @@ def battery_info(log=0, plot=1, count=None):
         plt.title(f"Cell Volts by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
-        plt.show()
+        plot_show()
     if plot >= 2:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
@@ -2747,7 +2763,7 @@ def battery_info(log=0, plot=1, count=None):
         plt.title(f"Cell Temperature in °C by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
-        plt.show()
+        plot_show()
     return None
 
 # helper to write file / echo to screen
@@ -3171,7 +3187,7 @@ class Solcast :
         plt.grid()
 #        plt.legend(fontsize=14, loc=legend_location)
         plt.xticks(rotation=45, ha='right')
-        plt.show()
+        plot_show()
         return
 
     def plot_hourly(self, day = None) :
@@ -3206,7 +3222,7 @@ class Solcast :
         plt.title(title, fontsize=12)
         plt.grid()
         plt.xticks(rotation=45, ha='right')
-        plt.show()
+        plot_show()
         return
 
 
@@ -3361,7 +3377,7 @@ class Solar :
         plt.grid()
 #        plt.legend(fontsize=14, loc=legend_location)
         plt.xticks(rotation=45, ha='right')
-        plt.show()
+        plot_show()
         return
 
     def plot_hourly(self, day = None) :
@@ -3403,6 +3419,6 @@ class Solar :
         plt.title(title, fontsize=12)
         plt.grid()
         plt.xticks(rotation=45, ha='right')
-        plt.show()
+        plot_show()
         return
 

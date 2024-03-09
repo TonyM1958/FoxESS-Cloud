@@ -27,13 +27,21 @@ f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
 
 f.solcast_api_key = "my.solcast_api_key"
+
+f.plotfile="plot###.png"
 ```
+
+Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
 For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login) and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
-Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
+If a value is set for f.plot_file, any charts created will also be saved to an image file:
++ f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
++ f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
++ f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
+
 
 ## Information
 Load information about the user, site or device:
@@ -581,7 +589,7 @@ Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hou
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
 
-## Troubleshooting
+# Troubleshooting
 
 If needed, you can add the following setting to increase the level of information reported by the foxesscloud module:
 
@@ -596,9 +604,10 @@ This setting can be:
 + 3: lots of debug information
 
 
-## Version Info
+# Version Info
 
-1.2.3<br>
+1.2.4<br>
+Added saving plots to an image file.
 Debug information added for HTTP timeout.
 Fixed a problem where erratic sample times resulted in incorrect energy calculation.
 Added HTTP request reponse_time monitoring.
