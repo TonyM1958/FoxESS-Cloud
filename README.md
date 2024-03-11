@@ -35,6 +35,7 @@ f.pv_system_id = "my.pv_system_id"
 f.solcast_api_key = "my.solcast_api_key"
 
 f.plot_file = "plot###.png"
+f.pushover_user_key = "my.pushover_user_key"
 ```
 
 Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
@@ -47,6 +48,8 @@ If a value is set for f.plot_file, any charts created will also be saved to an i
 + f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
 + f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
 + f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
+
+If you set f.pushover_user_key to your user_key for pushover.net, output from set_tariff(), charge_needed() and battery_info() will be sent as messages to your pushover app.
 
 ## User info
 Return information about the current user:
@@ -634,7 +637,8 @@ This setting can be:
 
 # Version Info
 
-2.1.2<br>
+2.1.3<br>
+Added support for pushover notifications in set_tariff(), charge_needed() and battery_info().
 Added saving plots to an image file.
 Fix problem setting charge times if values are not read before writing.
 Debug information added for HTTP timeout.

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  09 March 2024
+Updated:  11 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.2"
+version = "2.1.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -44,12 +44,14 @@ plot_file = None
 plot_no = 0
 plot_dpi = 150
 plot_bbox = 'tight'
+last_plot_filename = None
 
 # show a plot and optionally save as an image to a file
 def plot_show():
-    global plot_file, plot_no, plot_dpi, plot_bbox
+    global plot_file, plot_no, plot_dpi, plot_bbox, last_plot_filename
     if plot_file is not None:
-        plt.savefig(plot_file.replace('###', f"{plot_no:03d}"), dpi=plot_dpi, bbox_inches=plot_bbox)
+        last_plot_filename = plot_file.replace('###', f"{plot_no:03d}")
+        plt.savefig(last_plot_filename, dpi=plot_dpi, bbox_inches=plot_bbox)
         if '###' in plot_file:
             plot_no += 1
     plt.show()
@@ -136,14 +138,14 @@ def signed_header(path, login = 0):
     if login == 0:
         headers['Signature'] = hashlib.md5(fr"{path}\r\n{headers['Token']}\r\n{headers['Timestamp']}".encode('UTF-8')).hexdigest()
     if debug_setting > 2:
-        print(f"path = {path}")
-        print(f"headers = {headers}")
+        output(f"path = {path}")
+        output(f"headers = {headers}")
     return headers
 
 def signed_get(path, params = None, login = 0):
     global fox_domain, debug_setting, http_timeout, http_tries, response_time
     if debug_setting > 2:
-        print(f"params = {params}")
+        output(f"params = {params}")
     message = None
     for i in range(0, http_tries):
         headers = signed_header(path, login)
@@ -155,7 +157,7 @@ def signed_get(path, params = None, login = 0):
         except Exception as e:
             message = str(e)
             if debug_setting > 0:
-                print(f"** signed_get(): {message}\n  path = {path}\n  headers = {headers}")
+                output(f"** signed_get(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
@@ -163,7 +165,7 @@ def signed_post(path, body = None, login = 0):
     global fox_domain, debug_setting, http_timeout, http_tries, response_time
     data = json.dumps(body)
     if debug_setting > 2:
-        print(f"body = {data}")
+        output(f"body = {data}")
     message = None
     for i in range(0, http_tries):
         headers = signed_header(path, login)
@@ -175,7 +177,7 @@ def signed_post(path, body = None, login = 0):
         except Exception as e:
             message = str(e)
             if debug_setting > 0:
-                print(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
+                output(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
@@ -189,16 +191,16 @@ messages = None
 def get_messages():
     global debug_setting, messages, user_agent
     if debug_setting > 1:
-        print(f"getting messages")
+        output(f"getting messages")
     headers = {'User-Agent': user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = signed_get(path="/c/v0/errors/message", login=1)
     if response.status_code != 200:
-        print(f"** get_messages() got response code {response.status_code}: {response.reason}")
+        output(f"** get_messages() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        print(f"** get_messages(), no result data, {errno}")
+        output(f"** get_messages(), no result data, {errno}")
         return None
     messages = result.get('messages')
     return messages
@@ -221,17 +223,17 @@ def errno_message(response):
 def get_access_count():
     global debug_setting, messages, lang
     if api_key is None:
-        print(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
+        output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
     if debug_setting > 1:
-        print(f"getting access info")
+        output(f"getting access info")
     response = signed_get(path="/op/v0/user/getAccessCount")
     if response.status_code != 200:
-        print(f"** get_access_count() got response code {response.status_code}: {response.reason}")
+        output(f"** get_access_count() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_access_count(), no result data, {errno_message(response)}")
+        output(f"** get_access_count(), no result data, {errno_message(response)}")
         return None
     return result
 
@@ -245,21 +247,21 @@ var_list = None
 def get_vars():
     global var_table, var_list, debug_setting, messages, lang, token
     if api_key is None:
-        print(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
+        output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
     if messages is None:
         get_messages()
     if var_list is not None:
         return var_list
     if debug_setting > 1:
-        print(f"getting variables")
+        output(f"getting variables")
     response = signed_get(path="/op/v0/device/variable/get")
     if response.status_code != 200:
-        print(f"** get_vars() got response code {response.status_code}: {response.reason}")
+        output(f"** get_vars() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_vars(), no result data, {errno_message(response)}")
+        output(f"** get_vars(), no result data, {errno_message(response)}")
         return None
     var_table = result
     var_list = []
@@ -283,21 +285,21 @@ def get_site(name=None):
     if site is not None and name is None:
         return site
     if debug_setting > 1:
-        print(f"getting sites")
+        output(f"getting sites")
     site = None
     station_id = None
     body = {'pageSize': 100, 'currentPage': 1 }
     response = signed_post(path="/op/v0/plant/list", body=body)
     if response.status_code != 200:
-        print(f"** get_sites() got list response code {response.status_code}: {response.reason}")
+        output(f"** get_sites() got list response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_site(), no list result data, {errno_message(response)}")
+        output(f"** get_site(), no list result data, {errno_message(response)}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
-        print(f"** invalid list of sites returned: {total}")
+        output(f"** invalid list of sites returned: {total}")
         return None
     site_list = result.get('data')
     n = None
@@ -308,9 +310,9 @@ def get_site(name=None):
                     n = i
                     break
         if n is None:
-            print(f"\nget_site(): please provide a name from the list:")
+            output(f"\nget_site(): please provide a name from the list:")
             for s in site_list:
-                print(f"Name={s['name']}")
+                output(f"Name={s['name']}")
             return None
     else:
         n = 0
@@ -318,11 +320,11 @@ def get_site(name=None):
     params = {'id': station_id }
     response = signed_get(path="/op/v0/plant/detail", params=params)
     if response.status_code != 200:
-        print(f"** get_sites() got detail response code {response.status_code}: {response.reason}")
+        output(f"** get_sites() got detail response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_site(), no detail result data, {errno_message(response)}")
+        output(f"** get_site(), no detail result data, {errno_message(response)}")
         return None
     site = result
     site['stationID'] = site_list[n]['stationID']
@@ -343,18 +345,18 @@ def get_logger(sn=None):
     if logger is not None and sn is None:
         return logger
     if debug_setting > 1:
-        print(f"getting loggers")
+        output(f"getting loggers")
     body = {'pageSize': 100, 'currentPage': 1}
     response = signed_post(path="/op/v0/module/list", body=body)
     if response.status_code != 200:
-        print(f"** get_logger() got list response code {response.status_code}: {response.reason}")
+        output(f"** get_logger() got list response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_logger(), no list result data, {errno_message(response)}")
+        output(f"** get_logger(), no list result data, {errno_message(response)}")
         return None
     if type(result) is not list or len(result) == 0 or len(result) > 100:
-        print(f"** invalid list of loggers returned: {total}")
+        output(f"** invalid list of loggers returned: {total}")
         return None
     logger_list = result
     n = None
@@ -365,9 +367,9 @@ def get_logger(sn=None):
                     n = i
                     break
         if n is None:
-            print(f"\nget_logger(): please provide a serial number from this list:")
+            output(f"\nget_logger(): please provide a serial number from this list:")
             for l in logger_list:
-                print(f"SN={l['moduleSN']}, Plant={l['plantName']}, StationID={l['stationID']}")
+                output(f"SN={l['moduleSN']}, Plant={l['plantName']}, StationID={l['stationID']}")
             return None
     else:
         n = 0
@@ -393,22 +395,22 @@ def get_device(sn=None):
         if device_sn[:len(sn)].upper() == sn.upper():
             return device
     if debug_setting > 1:
-        print(f"getting device")
+        output(f"getting device")
     if sn is None and device_sn is not None and len(device_sn) == 15:
         sn = device_sn
     # get device list
     body = {'pageSize': 100, 'currentPage': 1}
     response = signed_post(path="/op/v0/device/list", body=body)
     if response.status_code != 200:
-        print(f"** get_device() list got response code {response.status_code}: {response.reason}")
+        output(f"** get_device() list got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_device(), no list result data, {errno_message(response)}")
+        output(f"** get_device(), no list result data, {errno_message(response)}")
         return None
     total = result.get('total')
     if total is None or total == 0 or total > 100:
-        print(f"** invalid list of devices returned: {total}")
+        output(f"** invalid list of devices returned: {total}")
         return None
     device_list = result.get('data')
     # look for the device we want in the list
@@ -421,20 +423,20 @@ def get_device(sn=None):
                 n = i
                 break
         if n is None:
-            print(f"\nget_device(): please provide a serial number from this list:")
+            output(f"\nget_device(): please provide a serial number from this list:")
             for d in device_list:
-                print(f"SN={d['deviceSN']}, Type={d['deviceType']}")
+                output(f"SN={d['deviceSN']}, Type={d['deviceType']}")
             return None
     # load information for the device
     device_sn = device_list[n].get('deviceSN')
     params = {'sn': device_sn }
     response = signed_get(path="/op/v0/device/detail", params=params)
     if response.status_code != 200:
-        print(f"** get_device() got detail response code {response.status_code}: {response.reason}")
+        output(f"** get_device() got detail response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_device(), no detail result data, {errno_message(response)}")
+        output(f"** get_device(), no detail result data, {errno_message(response)}")
         return None
     device = result
     battery = None
@@ -452,7 +454,7 @@ def get_device(sn=None):
     parts = model_code.split('-')
     model = parts[0]
     if model not in ['KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
-        print(f"** device model not recognised for deviceType: {device['deviceType']}")
+        output(f"** device model not recognised for deviceType: {device['deviceType']}")
         return device
     device['model'] = model
     device['phase'] = 3 if model[-1:] == '3' else 1
@@ -463,7 +465,7 @@ def get_device(sn=None):
                 device['power'] = float(p)
             break
     if device.get('power') is None:
-        print(f"** device power not found for deviceType: {device['deviceType']}")
+        output(f"** device power not found for deviceType: {device['deviceType']}")
     # set max charge current
     if model in ['KH']:
         device['max_charge_current'] = 50
@@ -484,15 +486,15 @@ def get_generation(update=1):
     if get_device() is None:
         return None
     if debug_setting > 1:
-        print(f"getting generation")
+        output(f"getting generation")
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/generation", params=params)
     if response.status_code != 200:
-        print(f"** get_generation() got response code {response.status_code}: {response.reason}")
+        output(f"** get_generation() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_generation(), no result data, {errno_message(response)}")
+        output(f"** get_generation(), no result data, {errno_message(response)}")
         return None
     if result.get('today') is None:
         result['today'] = 0.0
@@ -516,7 +518,7 @@ def get_battery(v = None):
     if get_device() is None:
         return None
     if debug_setting > 1:
-        print(f"getting battery")
+        output(f"getting battery")
     if v is None:
         v = battery_vars
     result = get_real(v)
@@ -537,15 +539,15 @@ def get_charge():
     if battery_settings is None:
         battery_settings = {}
     if debug_setting > 1:
-        print(f"getting charge times")
+        output(f"getting charge times")
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/battery/forceChargeTime/get", params=params)
     if response.status_code != 200:
-        print(f"** get_charge() got response code {response.status_code}: {response.reason}")
+        output(f"** get_charge() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_charge(), no result data, {errno_message(response)}")
+        output(f"** get_charge(), no result data, {errno_message(response)}")
         return None
     battery_settings['times'] = result
     return battery_settings
@@ -579,7 +581,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times']['endTime2']   = {'hour': 0, 'minute': 0}
     if get_flag().get('enable') == 1:
         if force == 0:
-            print(f"** set_charge(): cannot set charge when a schedule is enabled")
+            output(f"** set_charge(): cannot set charge when a schedule is enabled")
             return None
         set_schedule(enable=0)
     # configure time period 1
@@ -611,26 +613,26 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times']['endTime2']['hour'] = int(en2)
         battery_settings['times']['endTime2']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
     if debug_setting > 0:
-        print(f"\nSetting time periods:")
-        print(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}")
-        print(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}")
+        output(f"\nSetting time periods:")
+        output(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}")
+        output(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}")
     # set charge times
     body = {'sn': device_sn}
     for k in ['enable1', 'startTime1', 'endTime1', 'enable2', 'startTime2', 'endTime2']:
         body[k] = battery_settings['times'][k]          # try forcing order of items?
     response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", body=body)
     if response.status_code != 200:
-        print(f"** set_charge() got response code {response.status_code}: {response.reason}")
+        output(f"** set_charge() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
         if errno == 44096:
-            print(f"** set_charge(), cannot update settings when schedule is active")
+            output(f"** set_charge(), cannot update settings when schedule is active")
         else:
-            print(f"** set_charge(), {errno_message(response)}")
+            output(f"** set_charge(), {errno_message(response)}")
         return None
     elif debug_setting > 1:
-        print(f"success") 
+        output(f"success") 
     return battery_settings
 
 ##################################################################################################
@@ -644,15 +646,15 @@ def get_min():
     if battery_settings is None:
         battery_settings = {}
     if debug_setting > 1:
-        print(f"getting min soc")
+        output(f"getting min soc")
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/battery/soc/get", params=params)
     if response.status_code != 200:
-        print(f"** get_min() got response code {response.status_code}: {response.reason}")
+        output(f"** get_min() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_min(), no result data, {errno_message(response)}")
+        output(f"** get_min(), no result data, {errno_message(response)}")
         return None
     battery_settings['minSoc'] = result.get('minSoc')
     battery_settings['minSocOnGrid'] = result.get('minSocOnGrid')
@@ -668,23 +670,23 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
         return None
     if get_schedule().get('enable'):
         if force == 0:
-            print(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
+            output(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
     if battery_settings is None:
         battery_settings = {}
     if minSocOnGrid is not None:
         if minSocOnGrid < 10 or minSocOnGrid > 100:
-            print(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 10 and 100")
+            output(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 10 and 100")
             return None
         battery_settings['minSocOnGrid'] = minSocOnGrid
     if minSoc is not None:
         if minSoc < 10 or minSoc > 100:
-            print(f"** set_min(): invalid minSoc = {minSoc}. Must be between 10 and 100")
+            output(f"** set_min(): invalid minSoc = {minSoc}. Must be between 10 and 100")
             return None
         battery_settings['minSoc'] = minSoc
     if debug_setting > 1:
-        print(f"set_min(): {battery_settings}")
+        output(f"set_min(): {battery_settings}")
         return None
     body = {'sn': device_sn}
     if battery_settings.get('minSocOnGrid') is not None:
@@ -692,17 +694,17 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
     if battery_settings.get('minSoc') is not None:
         body['minSoc'] = battery_settings['minSoc']
     if debug_setting > 0:
-        print(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}")
+        output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}")
     response = signed_post(path="/op/v0/device/battery/soc/set", body=body)
     if response.status_code != 200:
-        print(f"** set_min() got response code {response.status_code}: {response.reason}")
+        output(f"** set_min() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
         if errno == 44096:
-            print(f"** cannot update settings when schedule is active")
+            output(f"** cannot update settings when schedule is active")
         else:
-            print(f"** set_min(), {errno_message(response)}")
+            output(f"** set_min(), {errno_message(response)}")
         return None
     return battery_settings
 
@@ -725,7 +727,7 @@ def get_remote_settings(key='h115__17'):
     if get_device() is None:
         return None
     if debug_setting > 1:
-        print(f"getting remote settings")
+        output(f"getting remote settings")
     if type(key) is list:
         values = {}
         for k in key:
@@ -737,15 +739,15 @@ def get_remote_settings(key='h115__17'):
     params = {'sn': device_sn, 'key': key}
     response = signed_get(path="/op/v0/device/setting/get", params=params)
     if response.status_code != 200:
-        print(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
+        output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_remote_settings(), no result data, {errno_message(response)}")
+        output(f"** get_remote_settings(), no result data, {errno_message(response)}")
         return None
     values = result.get('values')
     if values is None:
-        print(f"** get_remote_settings(), no values data")
+        output(f"** get_remote_settings(), no values data")
         return None
     return values
 
@@ -778,27 +780,27 @@ def get_work_mode():
     if get_device() is None:
         return None
     if debug_setting > 1:
-        print(f"getting work mode")
+        output(f"getting work mode")
     params = {'sn': device_sn, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
     response = signed_get(path="/op/v0/device/setting/get", params=params)
     if response.status_code != 200:
-        print(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
+        output(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
         return None
     try:
         result = response.json().get('result')
     except:
         return None
     if result is None:
-        print(f"** get_work_mode(), no result data, {errno_message(response)}")
+        output(f"** get_work_mode(), no result data, {errno_message(response)}")
         return None
     return result
     values = result.get('values')
     if values is None:
-        print(f"** get_work_mode(), no work mode values data")
+        output(f"** get_work_mode(), no work mode values data")
         return None
     work_mode = values.get('operation_mode__work_mode')
     if work_mode is None:
-        print(f"** get_work_mode(), no work mode data")
+        output(f"** get_work_mode(), no work mode data")
         return None
     return work_mode
 
@@ -814,29 +816,29 @@ def set_work_mode(mode, force = 0):
     if get_device() is None:
         return None
     if mode not in settable_modes:
-        print(f"** work mode: must be one of {settable_modes}")
+        output(f"** work mode: must be one of {settable_modes}")
         return None
     if get_schedule().get('enable'):
         if force == 0:
-            print(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
+            output(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
     if debug_setting > 1:
-        print(f"set_work_mode(): {mode}")
+        output(f"set_work_mode(): {mode}")
         return None
     if debug_setting > 0:
-        print(f"\nSetting work mode: {mode}")
+        output(f"\nSetting work mode: {mode}")
     body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = signed_post(path="/op/v0/device/setting/set", body=body)
     if response.status_code != 200:
-        print(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
+        output(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
         if errno == 44096:
-            print(f"** cannot update settings when schedule is active")
+            output(f"** cannot update settings when schedule is active")
         else:
-            print(f"** set_work_mode(), {errno_message(response)}")
+            output(f"** set_work_mode(), {errno_message(response)}")
         return None
     work_mode = mode
     return work_mode
@@ -854,18 +856,18 @@ def get_flag():
     if get_device() is None:
         return None
     if device.get('function') is None or device['function'].get('scheduler') is None or device['function']['scheduler'] == False:
-        print(f"** get_schedule() schedules are not supported")
+        output(f"** get_schedule() schedules are not supported")
         return None
     if debug_setting > 1:
-        print(f"getting flag")
+        output(f"getting flag")
     body = {'deviceSN': device_sn}
     response = signed_post(path="/op/v0/device/scheduler/get/flag", body=body)
     if response.status_code != 200:
-        print(f"** get_flag() got response code {response.status_code}: {response.reason}")
+        output(f"** get_flag() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_flag(), no result data, {errno_message(response)}")
+        output(f"** get_flag(), no result data, {errno_message(response)}")
         return None
     if schedule is None:
         schedule = {'enable': None, 'support': None, 'groups': None}
@@ -883,15 +885,15 @@ def get_schedule():
     if get_flag() is None:
         return None
     if debug_setting > 1:
-        print(f"getting schedule")
+        output(f"getting schedule")
     body = {'deviceSN': device_sn}
     response = signed_post(path="/op/v0/device/scheduler/get", body=body)
     if response.status_code != 200:
-        print(f"** get_schedule() got response code {response.status_code}: {response.reason}")
+        output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_schedule(), no result data, {errno_message(response)}")
+        output(f"** get_schedule(), no result data, {errno_message(response)}")
         return None
     schedule['enable'] = result['enable']
     schedule['groups'] = []
@@ -912,16 +914,16 @@ def set_group(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0, enable=1):
     start = time_hours(start)
     end = time_hours(end)
     if mode not in work_modes:
-        print(f"** mode must be one of {work_modes}")
+        output(f"** mode must be one of {work_modes}")
         return None
     device_power = device.get('power')
     if device_power is None:
         device_power = 12000
     if fdpwr < 0 or fdpwr > 12000:
-        print(f"** fdpwr must be between 0 and {device_power}")
+        output(f"** fdpwr must be between 0 and {device_power}")
         return None
     if fdsoc < 10 or fdsoc > 100:
-        print(f"** fdsoc must between 10 and 100")
+        output(f"** fdsoc must between 10 and 100")
         return None
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
@@ -934,33 +936,33 @@ def set_schedule(enable=1, groups=None):
     if get_flag() is None:
         return None
     if debug_setting > 1:
-        print(f"set_schedule(): enable = {enable}, groups = {groups}")
+        output(f"set_schedule(): enable = {enable}, groups = {groups}")
         return None
     if groups is not None:
         if type(groups) is not list:
             groups = [groups]
         body = {'deviceSN': device_sn, 'groups': groups}
         if debug_setting > 0:
-            print(f"\nSaving schedule")
+            output(f"\nSaving schedule")
         response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
         if response.status_code != 200:
-            print(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
+            output(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
             return None
         errno = response.json().get('errno')
         if errno != 0:
-            print(f"** set_schedule(), enable, {errno_message(response)}")
+            output(f"** set_schedule(), enable, {errno_message(response)}")
             return None
         schedule['groups'] = groups
     if debug_setting > 0:
-        print(f"\nSetting schedule enable flag to {enable}")
+        output(f"\nSetting schedule enable flag to {enable}")
     body = {'deviceSN': device_sn, 'enable': enable}
     response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
-        print(f"** set_schedule() flag response code {response.status_code}: {response.reason}")
+        output(f"** set_schedule() flag response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
-        print(f"** set_schedule(), flag, {errno_message(response)}")
+        output(f"** set_schedule(), flag, {errno_message(response)}")
         return None
     schedule['enable'] = enable
     return schedule
@@ -992,25 +994,25 @@ def get_real(v = None):
     if device['status'] > 1:
         status_code = device['status']
         state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
-        print(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
+        output(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
         return None
     if debug_setting > 1:
-        print(f"getting real-time data")
+        output(f"getting real-time data")
     body = {'deviceSN': device_sn}
     if v is not None:
         body['variables'] = v if type(v) is list else [v]
     response = signed_post(path="/op/v0/device/real/query", body=body)
     if response.status_code != 200:
-        print(f"** get_real() got response code {response.status_code}: {response.reason}")
+        output(f"** get_real() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        print(f"** get_real(), no result data, {errno_message(response)}")
+        output(f"** get_real(), no result data, {errno_message(response)}")
         return None
     if len(result) < 1:
         return None
     elif len(result) > 1:
-        print(f"** get_real(), more than 1 value returned: {result}")
+        output(f"** get_real(), more than 1 value returned: {result}")
     result = result[0]['datas']
     for var in result:
         if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
@@ -1072,22 +1074,22 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         v = [v]
     for var in v:
         if var not in var_list:
-            print(f"** get_history(): invalid variable '{var}'")
-            print(f"var_list = {var_list}")
+            output(f"** get_history(): invalid variable '{var}'")
+            output(f"var_list = {var_list}")
             return None
     if debug_setting > 1:
-        print(f"getting history data")
+        output(f"getting history data")
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
         body = {'sn': device_sn, 'variables': v, 'begin': t_begin, 'end': t_end}
         response = signed_post(path="/op/v0/device/history/query", body=body)
         if response.status_code != 200:
-            print(f"** get_history() got response code {response.status_code}: {response.reason}")
+            output(f"** get_history() got response code {response.status_code}: {response.reason}")
             return None
         result = response.json().get('result')
         errno = response.json().get('errno')
         if errno > 0 or result is None or len(result) == 0:
-            print(f"** get_history(), no data, {errno_message(response)}")
+            output(f"** get_history(), no data, {errno_message(response)}")
             return None
         result = result[0].get('datas')
     else:
@@ -1117,7 +1119,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         return result
     # integrate kW to kWh based on 5 minute samples
     if debug_setting > 2:
-        print(f"calculating summary data")
+        output(f"calculating summary data")
     # copy generationPower to produce inputPower data
     input_name = None
     if 'generationPower' in v:
@@ -1140,7 +1142,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             else:
                 sample_time = 5.0
             if debug_setting > 1:
-                print(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes")
+                output(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes")
         sum = 0.0
         count = 0
         max = None
@@ -1154,7 +1156,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             value = y['value']
             if value is None:
                 if debug_setting > 0:
-                    print(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}")
+                    output(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}")
                 continue
             sum += value
             count += 1
@@ -1319,11 +1321,11 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         v = [v]
     for var in v:
         if var not in report_vars:
-            print(f"** get_report(): invalid variable '{var}'")
-            print(f"{report_vars}")
+            output(f"** get_report(): invalid variable '{var}'")
+            output(f"{report_vars}")
             return None
     if debug_setting > 1:
-        print(f"getting report data")
+        output(f"getting report data")
     current_date = query_date(None)
     main_date = query_date(d)
     side_result = None
@@ -1334,12 +1336,12 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             body = {'sn': device_sn, 'dimension': 'month', 'variables': v, 'year': side_date['year'], 'month': side_date['month'], 'day': side_date['day']}
             response = signed_post(path="/op/v0/device/report/query", body=body)
             if response.status_code != 200:
-                print(f"** get_report() side report got response code {response.status_code}: {response.reason}")
+                output(f"** get_report() side report got response code {response.status_code}: {response.reason}")
                 return None
             side_result = response.json().get('result')
             errno = response.json().get('errno')
             if errno > 0 or side_result is None or len(side_result) == 0:
-                print(f"** get_report(), no report data available, {errno_message(response)}")
+                output(f"** get_report(), no report data available, {errno_message(response)}")
                 return None
             if fix_values == 1:
                 for var in side_result:
@@ -1352,12 +1354,12 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         body = {'sn': device_sn, 'dimension': dimension.replace('week', 'month'), 'variables': v, 'year': main_date['year'], 'month': main_date['month'], 'day': main_date['day']}
         response = signed_post(path="/op/v0/device/report/query", body=body)
         if response.status_code != 200:
-            print(f"** get_report() main report got response code {response.status_code}: {response.reason}")
+            output(f"** get_report() main report got response code {response.status_code}: {response.reason}")
             return None
         result = response.json().get('result')
         errno = response.json().get('errno')
         if errno > 0 or result is None or len(result) == 0:
-            print(f"** get_report(), no report data available, {errno_message(response)}")
+            output(f"** get_report(), no report data available, {errno_message(response)}")
             return None
         # correct errors in report values:
         if fix_values == 1:
@@ -1414,7 +1416,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         for j, value in enumerate(var['values']):
             if value is None:
                 if debug_setting > 0:
-                    print(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}")
+                    output(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}")
                 continue
             count += 1
             sum += value
@@ -1459,7 +1461,7 @@ def plot_report(result, plot=1, station=0):
                 if i not in index:
                     index.append(i)
     if debug_setting > 2:
-        print(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+        output(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
     if len(vars) == 0:
         return
     # plot variables by date with the same units on the same charts
@@ -1556,7 +1558,7 @@ def time_hours(t, d = None):
     elif type(t) is str and t.replace(':', '').isnumeric() and t.count(':') <= 2:
         t += ':00' if t.count(':') == 1 else ''
         return sum(float(t) / x for x, t in zip([1, 60, 3600], t.split(":")))
-    print(f"** invalid time string {t}")
+    output(f"** invalid time string {t}")
     return None
 
 # convert decimal hours to time string HH:MM:SS
@@ -1770,27 +1772,27 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     today = datetime.strftime(now + timedelta(days=0 if hour_now >= update_time else -1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= update_time else 0), '%Y-%m-%d')
     if debug_setting > 1:
-        print(f"  datetime = {today} {hours_time(hour_now)}")
+        output(f"  datetime = {today} {hours_time(hour_now)}")
     # get product and region
     product = tariff_config['product'].upper()
     region = tariff_config['region'].upper()
     if region not in regions:
-        print(f"** region {region} not recognised, valid regions are {regions}")
+        output(f"** region {region} not recognised, valid regions are {regions}")
         return None
     # get prices from 11pm today to 11pm tomorrow
-    print(f"\nProduct: {product}")
-    print(f"Region:  {regions[region]}")
+    output(f"\nProduct: {product}")
+    output(f"Region:  {regions[region]}")
     zulu_hour = "T" + hours_time(23 - time_offset - time_shift, ss=True) + "Z"
     url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
     period_from = today + zulu_hour
     period_to = tomorrow + zulu_hour
     params = {'period_from': period_from, 'period_to': period_to }
     if debug_setting > 1:
-        print(f"time_offset = {time_offset}, time_shift = {time_shift}")
-        print(f"period_from = {period_from}, period_to = {period_to}")
+        output(f"time_offset = {time_offset}, time_shift = {time_shift}")
+        output(f"period_from = {period_from}, period_to = {period_to}")
     response = requests.get(url, params=params)
     if response.status_code != 200:
-        print(f"** get_agile_period() response code from Octopus API {response.status_code}: {response.reason}")
+        output(f"** get_agile_period() response code from Octopus API {response.status_code}: {response.reason}")
         return None
     # results are in reverse chronological order...
     results = response.json().get('results')[::-1]
@@ -1808,12 +1810,12 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     end_i = int(round_time(end_by - 23) * 2)
     end_i = 48 if end_i == 0 or end_i > 48 else end_i
     if debug_setting > 1:
-        print(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}, duration = {duration}, span = {span}")
+        output(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}, duration = {duration}, span = {span}")
     if (start_i + span) > 48 or start_i > end_i:
-        print(f"** get_agile_period(): invalid times {hours_time(start_at)} - {hours_time(end_by)}. Must start from 23:00 today and end by 23:00 tomorrow")
+        output(f"** get_agile_period(): invalid times {hours_time(start_at)} - {hours_time(end_by)}. Must start from 23:00 today and end by 23:00 tomorrow")
         return None
     if len(results) < (start_i + span):
-        print(f"** get_agile_period(): prices not available for {tomorrow}")
+        output(f"** get_agile_period(): prices not available for {tomorrow}")
         return None
     # work out weighted average for each period and track lowest price
     period = {}
@@ -1847,42 +1849,45 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
 # set AM/PM charge time period based on pricing for Agile Octopus
 def set_agile_period(period=None, tariff=agile_octopus, d=None):
     global debug_setting, agile_octopus
+    output_spool()
     start_at = 23 if period.get('start') is None else time_hours(period['start'])
     end_by = 8 if period.get('end') is None else time_hours(period['end'])
     duration = 3 if period.get('duration') is None else period['duration']
     if duration > 0:
         agile_period = get_agile_period(start_at=start_at, end_by=end_by, duration=duration, d=d)
         if agile_period is None:
+            output_close()
             return None
         tomorrow = agile_period['date']
         s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
         for i in range(0, len(agile_period['times'])):
             s += "\n" if i % 6 == 2 else ""
             s += f"  {agile_period['times'][i]} = {agile_period['prices'][i]:5.2f}"
-        print(s)
+        output(s)
         weighting = tariff_config['weighting']
         if weighting is not None:
-            print(f"\nWeighting: {weighting}")
+            output(f"\nWeighting: {weighting}")
         start = time_hours(agile_period['start'])
         end = time_hours(agile_period['end'])
         price = agile_period['price']
         charge_pm = start >= tariff_config['pm_start'] and end < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
-        print(f"\nBest {duration} hour {am_pm} charging period for {tariff['name']} between {hours_time(start_at)} and {hours_time((end_by))}:")
-        print(f"  Price: {price:.2f} p/kWh inc VAT")
+        output(f"\nBest {duration} hour {am_pm} charging period for {tariff['name']} between {hours_time(start_at)} and {hours_time((end_by))}:")
+        output(f"  Price: {price:.2f} p/kWh inc VAT")
     else:
         charge_pm = start_at >= tariff_config['pm_start'] and start_at < tariff_config['am_start']
         am_pm = 'PM' if charge_pm else 'AM'
         start = 0.0
         end = 0.0
-        print(f"\nDisabled {am_pm} charging period")
+        output(f"\nDisabled {am_pm} charging period")
     if charge_pm:
         tariff['off_peak2']['start'] = start
         tariff['off_peak2']['end'] = end
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"  Charging period: {hours_time(start)} to {hours_time(end)}")
+    output(f"  Charging period: {hours_time(start)} to {hours_time(end)}")
+    output_close()
     return 1
 
 # set AM/PM charge time for any tariff
@@ -2104,6 +2109,9 @@ charge_config = {
     'force': 1                        # 0 = don't over-ride schedule, 1 = disable schedule
 }
 
+# app key for charge_needed (used to send output via pushover)
+charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
+
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
 #  update_settings: 0 no updates, 1 update charge settings, 2 update work mode, 3 update both. The default is 0
@@ -2115,7 +2123,7 @@ charge_config = {
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=None, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, default_min_soc
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, default_min_soc, charge_needed_app_key
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2401,6 +2409,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         generation = pv_sum / gen_days
         print(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
+    output_spool(charge_needed_app_key)
     quarter = now.month // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
     sun_profile = seasonal_sun[quarter]['sun']
@@ -2409,24 +2418,25 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing manual forecast for {forecast_day}: {expected:.1f}kWh with {sun_name} sun profile")
+        output(f"\nUsing manual forecast for {forecast_day}: {expected:.1f}kWh with {sun_name} sun profile")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        print(f"\nUsing Solcast forecast for {forecast_day}: {expected:.1f}kWh")
+        output(f"\nUsing Solcast forecast for {forecast_day}: {expected:.1f}kWh")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        print(f"\nUsing Solar forecast for {forecast_day}: {expected:.1f}kWh")
+        output(f"\nUsing Solar forecast for {forecast_day}: {expected:.1f}kWh")
     elif generation is None or generation == 0.0:
-        print(f"\nNo generation data available")
+        output(f"\nNo generation data available")
+        output_close()
         return None
     else:
         expected = generation
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        print(f"\nUsing generation of {expected:.1f}kWh with {sun_name} sun profile")
+        output(f"\nUsing generation of {expected:.1f}kWh with {sun_name} sun profile")
         if charge_config['forecast_selection'] == 1 and update_settings > 0:
-            print(f"  Settings will not be updated when forecast is not available")
+            output(f"  Settings will not be updated when forecast is not available")
             update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] for x in generation_timed]
@@ -2438,8 +2448,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # get work mode and check for changes
         new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
         if new_work_mode is not None and new_work_mode != work_mode:
-            if debug_setting > 0:
-                print(f"  {hours_time(h)}: {new_work_mode} work mode")
+            if debug_setting > 1:
+                output(f"  {hours_time(h)}: {new_work_mode} work mode")
             work_mode = new_work_mode
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
@@ -2487,8 +2497,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
     start_residual = interpolate(time_to_start, bat_timed)      # residual when charging starts
     if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
-        print(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
-        print(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
+        output(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
+        output(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
@@ -2497,9 +2507,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "with charge added"
         if test_charge is None:
             min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
-            print(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
+            output(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
         else:
-            print(f"\nTest charge of {test_charge}kWh")
+            output(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
             kwh_needed = test_charge
         # work out time to add kwh_needed to battery
@@ -2511,10 +2521,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             hours = round_time(kwh_needed / (charge_limit * charge_loss + discharge_timed[time_to_next]) + taper_time)
             if full_charge is not None or force_charge == 2 or hours > charge_time:
                 hours = charge_time
-                print(f"  Full charge time used")
+                output(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
-            print(f"  Minimum charge time used")
+            output(f"  Minimum charge time used")
         end1 = round_time(start_at + hours)
         # rework charge and discharge and work out grid consumption
         start_timed = time_to_start      # relative start and end time 
@@ -2535,7 +2545,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             else:
                 t = 0.0                             # complete hour before start or after end
             if debug_setting > 2:
-                print(f"i = {i}, j = {j}, t = {t}")
+                output(f"i = {i}, j = {j}, t = {t}")
             charge_added = charge_limit * t
             charge_timed[i] = charge_timed[i] + charge_added if charge_timed[i] + charge_added < charge_limit else charge_limit
             discharge_timed[i] *= (1-t)
@@ -2568,19 +2578,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        print(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
-        print(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-        print(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
+        output(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
+        output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
+        output(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
-        print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
+        output(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
         for i in range(0, run_time):
             h = base_hour + i
-            print(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed[i]:6.3f}, {bat_timed[i]:6.3f}")
+            output(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed[i]:6.3f}, {bat_timed[i]:6.3f}")
         if kwh_needed > 0 and show_data > 3:
-            print(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh (before charging)")
+            output(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh (before charging)")
             for i in range(0, run_time):
                 h = base_hour + i
-                print(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed_old[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed_old[i]:6.3f}, {bat_timed_old[i]:6.3f}")
+                output(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed_old[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed_old[i]:6.3f}, {bat_timed_old[i]:6.3f}")
     if show_data > 0:
         s = f"\nBattery Energy kWh ({charge_message}):\n" if show_data == 2 else f"\nBattery SoC % ({charge_message}):\n"
         s += " " * (18 if show_data == 2 else 17) * (base_hour % 6)
@@ -2590,7 +2600,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             s += f"  {hours_time(h - (hour_adjustment if h >= change_hour else 0), day=True)}"
             s += f" = {r:5.2f}," if show_data == 2 else f" = {r / capacity * 100:3.0f}%,"
             h += 1
-        print(s[:-1])
+        output(s[:-1])
     if show_plot > 0:
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
@@ -2626,19 +2636,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if update_settings in [1,3]:
         # adjust times for clock changes
         adjust = hour_adjustment if hour_adjustment != 0 and start_hour > change_hour else 0
-
         set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust, force = charge_config['force'])
     else:
-        print(f"\nNo changes made to charge settings")
-    # timed work mode change
-    if update_settings in [0,1] or timed_mode == 0:
-        return None
-    if current_mode is None:
-        return None
-    target_mode = timed_work_mode(hour_now) if timed_mode == 1 else current_mode
-    if update_settings in [2,3] and current_mode != target_mode:
-        if set_work_mode(target_mode) == target_mode:
-            print(f"  Changed work mode from '{current_mode}' to '{target_mode}'")
+        output(f"\nNo changes made to charge settings")
+    output_close(plot=show_plot)
     return None
 
 
@@ -2674,9 +2675,13 @@ def bat_count(cell_count):
         return None
     return int(cell_count / n + 0.5)
 
+# battery monitor app key
+battery_info_app_key = "attkoji15eugb4a153viok2isi3p2w"
+
 # show information about the current state of the batteries
 def battery_info(log=0, plot=1, count=None):
-    global debug_setting
+    global debug_setting, battery_info_app_key
+    output_spool(battery_info_app_key)
     bat = get_battery()
     if bat is None:
         return None
@@ -2689,15 +2694,18 @@ def battery_info(log=0, plot=1, count=None):
     capacity = residual / current_soc * 100
     cell_volts = get_cell_volts()
     if cell_volts is None:
+        output_close()
         return None
     nv = len(cell_volts)
     nbat = bat_count(nv) if count is None else count
     if nbat is None:
-        print(f"** battery_info(): unable to match cells_per_battery for {nv}")
+        output(f"** battery_info(): unable to match cells_per_battery for {nv}")
+        output_close()
         return None
     nv_cell = int(nv / nbat + 0.5)
     cell_temps = get_cell_temps()
     if cell_temps is None:
+        output_close()
         return None
     nt = len(cell_temps)
     nt_cell = int(nt / nbat + 0.5)
@@ -2727,21 +2735,21 @@ def battery_info(log=0, plot=1, count=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    print(f"Current SoC:         {current_soc}%")
-    print(f"Residual:            {residual:.1f}kWh")
-    print(f"Est. Capacity:       {capacity:.1f}kWh")
-    print(f"InvBatVolt:          {bat_volt:.1f}V")
-    print(f"InvBatCurrent:       {bat_current:.1f}A")
-    print(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    print(f"Battery Count:       {nbat} batteries with {nv_cell} cells each")
-    print(f"Battery Volts:       {sum(bat_volts):.1f}V total, {avg(bat_volts):.2f}V average, {max(bat_volts):.2f}V maximum, {min(bat_volts):.2f}V minimum")
-    print(f"Cell Volts:          {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
-    print(f"Cell Imbalance:      {imbalance(cell_volts):.2f}%:")
-    print(f"BMS Temperature:     {bms_temperature:.1f}°C")
-    print(f"Battery Temperature: {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
-    print(f"\nInfo by battery:")
+    output(f"Current SoC:         {current_soc}%")
+    output(f"Residual:            {residual:.1f}kWh")
+    output(f"Est. Capacity:       {capacity:.1f}kWh")
+    output(f"InvBatVolt:          {bat_volt:.1f}V")
+    output(f"InvBatCurrent:       {bat_current:.1f}A")
+    output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
+    output(f"Battery Count:       {nbat} batteries with {nv_cell} cells each")
+    output(f"Battery Volts:       {sum(bat_volts):.1f}V total, {avg(bat_volts):.2f}V average, {max(bat_volts):.2f}V maximum, {min(bat_volts):.2f}V minimum")
+    output(f"Cell Volts:          {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
+    output(f"Cell Imbalance:      {imbalance(cell_volts):.2f}%:")
+    output(f"BMS Temperature:     {bms_temperature:.1f}°C")
+    output(f"Battery Temperature: {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
+    output(f"\nInfo by battery:")
     for i in range(0, nbat):
-        print(f"  Battery {i+1}: {bat_volts[i]:.2f}V, Cell Imbalance = {imbalance(bat_cell_volts[i]):.2f}%, Average Cell Temperature = {bat_temps[i]:.1f}°C")
+        output(f"  Battery {i+1}: {bat_volts[i]:.2f}V, Cell Imbalance = {imbalance(bat_cell_volts[i]):.2f}%, Average Cell Temperature = {bat_temps[i]:.1f}°C")
     if plot >= 1:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
@@ -2753,6 +2761,7 @@ def battery_info(log=0, plot=1, count=None):
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
         plot_show()
+    output_close(plot=plot)
     if plot >= 2:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
@@ -2768,7 +2777,7 @@ def battery_info(log=0, plot=1, count=None):
 
 # helper to write file / echo to screen
 def write(f, s, m='a'):
-    print(s)
+    output(s)
     if f is None or s is None:
         return
     file = open(f, m)
@@ -2783,7 +2792,7 @@ def battery_monitor(interval=30, run=48, log=1, count=None, save=None, overwrite
     print(f"\n---------------- battery_monitor ------------------")
     print(f"Expected runtime = {hours_time(run_time, day=True)} (hh:mm/days)")
     if save is not None:
-        print(f"Saving data to {save} ")
+        output(f"Saving data to {save} ")
     print()
     s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,ncell,ntemp,volts*,imbalance*,temps*"
     s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
@@ -2860,7 +2869,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
             last = first + timedelta(days=days) if first is not None else last
             first = last - timedelta(days=days) if first is None else first
         else:
-            print(f"** span '{span}' was not recognised")
+            output(f"** span '{span}' was not recognised")
             return None
     else:
         limit = 200 if limit is None or limit < 1 else limit
@@ -2897,7 +2906,7 @@ invert_ct2 = 1
 # tou: 0 = no time of use, 1 = use time of use periods if available
 
 def get_pvoutput(d = None, tou = 0):
-    global tariff, pv_calibration, ct2_calibration
+    global tariff, pv_calibration, ct2_calibration, pvoutput_app_key
     if d is None:
         d = date_list()[0]
     tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
@@ -2982,9 +2991,12 @@ pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
 pv_api_key = None
 pv_system_id = None
 
+# set_pvoutput app key for pushover (not currently used)
+pvoutput_app_key = "a32i66pnyp9d8awshj5a4exypndzan"
+
 # upload data for a day using pvoutput api
 def set_pvoutput(d = None, tou = 0):
-    global pv_url, pv_api_key, pv_system_id, tariff
+    global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key
     if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
         print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
@@ -3422,3 +3434,71 @@ class Solar :
         plot_show()
         return
 
+##################################################################################################
+##################################################################################################
+# Pushover API
+##################################################################################################
+##################################################################################################
+
+pushover_user_key = None
+pushover_url = "https://api.pushover.net/1/messages.json"
+
+# generic app key for foxess cloud
+foxesscloud_app_key = "aqj8up6jeg9hu4zr1pgir3368vda4q"
+
+def pushover_post(message, file=None, app_key=None):
+    global pushover_user_key, pushover_url, foxesscloud_app_key, debug_setting
+    if pushover_user_key is None or message is None:
+        return None
+    if app_key is None:
+        app_key = foxesscloud_app_key
+    if len(message) > 1024:
+        message = message[-1024:]
+    body = {'token': app_key, 'user': pushover_user_key, 'message': message}
+    files = {'attachment': open(file, 'rb')} if file is not None else None
+    response = requests.post(pushover_url, data=body, files=files)
+    if response.status_code != 200:
+        print(f"** pushover_post() got response code {response.status_code}: {response.reason}")
+        return None
+    if debug_setting > 1:
+        print(f"---- pushover message sent ----")
+    return 200
+
+spool_mode = None
+spooled_output = None
+
+# start spooling output for pushover
+def output_spool(app_key=None):
+    global spool_mode, spooled_output, pushover_user_key, foxesscloud_app_key
+    output_close()
+    if pushover_user_key is None:
+        return None
+    spool_mode = app_key if app_key is not None else foxesscloud_app_key
+    return spool_mode
+
+# stop spooling output and post with optional file attachment
+def output_close(plot=0, file=None):
+    global spool_mode, spooled_output, pushover_user_key, last_plot_filename
+    if pushover_user_key is not None and spool_mode is not None and spooled_output is not None:
+        if plot > 0 and file is None:
+            file = last_plot_filename
+        pushover_post(spooled_output, file=file, app_key=spool_mode)
+    spool_mode = None
+    spooled_output = None
+    return None
+
+# add to spooled_output
+def output(s=""):
+    global spool_mode, spooled_output
+    # keep output stream up to date in case of problem / exception
+    print(s)
+    # spool output for pushover if needed
+    if spool_mode is not None:
+        if ((len(spooled_output) if spooled_output is not None else 0) + len(s)) > 1024:
+            # more than 1024 chars, re-start spooling to avoid data loss
+            output_spool(spool_mode)
+        if spooled_output is None:
+            spooled_output = s + "\n"
+        else:
+            spooled_output += s + "\n"
+    return
