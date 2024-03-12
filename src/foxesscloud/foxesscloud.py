@@ -2041,8 +2041,8 @@ def set_agile_period(period=None, tariff=agile_octopus, d=None):
 # set AM/PM charge time for any tariff
 def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     global debug_setting
-    start_at = 2 if period.get('start') is None else time_hours(period['start'])
-    end_by = 5 if period.get('end') is None else time_hours(period['end'])
+    start_at = time_hours(period.get('start'), tariff['off_peak1']['start'])
+    end_by = time_hours(period.get('end'), tariff['off_peak1']['end'])
     duration = 3 if period.get('duration') is None else period['duration']
     charge_pm = start_at >= tariff_config['pm_start'] and end_by < tariff_config['am_start']
     am_pm = 'PM' if charge_pm else 'AM'
