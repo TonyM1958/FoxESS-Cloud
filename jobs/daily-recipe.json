@@ -24,6 +24,7 @@ spec:
     f.pv_api_key = ${PV_API_KEY:-None}
     f.pv_system_id = ${PV_SYSTEM_ID:-None}
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
+    f.pushover_user_key = ${PUSHOVER_USER_KEY:-None}
 
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)
@@ -32,6 +33,11 @@ spec:
     EOF
   git_repositories: []
   secrets:
+    - location: PUSHOVER_USER_KEY
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: PUSHOVER_USER_KEY
     - location: FOX_API_KEY
       type: environment_variable
       description: ''

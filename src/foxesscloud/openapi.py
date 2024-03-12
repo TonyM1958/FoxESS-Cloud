@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  11 March 2024
+Updated:  12 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.3"
+version = "2.1.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1845,11 +1845,13 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     period['price'] = price
     return period
 
+# pushover app key for set_tariff()
+set_tariff_app_key = "apx24dswzinhrbeb62sdensvt42aqe"
 
 # set AM/PM charge time period based on pricing for Agile Octopus
 def set_agile_period(period=None, tariff=agile_octopus, d=None):
-    global debug_setting, agile_octopus
-    output_spool()
+    global debug_setting, agile_octopus, set_tariff_app_key
+    output_spool(set_tariff_app_key)
     start_at = 23 if period.get('start') is None else time_hours(period['start'])
     end_by = 8 if period.get('end') is None else time_hours(period['end'])
     duration = 3 if period.get('duration') is None else period['duration']
@@ -2232,7 +2234,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         residual = battery['residual']
         if charge_config.get('capacity') is not None:
             capacity = charge_config['capacity']
-        elif residual is not None and residual > 0.0 and current_soc is not None and current_soc > 0.0:
+        elif residual is not None and residual > 0.1 and current_soc is not None and current_soc > 0.0:
             capacity = residual * 100 / current_soc
         else:
             print(f"Battery capacity is not available. Please provide kWh via 'capacity' parameter")
@@ -2266,9 +2268,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
+    model = device.get('deviceType') if device.get('deviceType') is not None else 'unknown'
     if device_power is None or device_current is None:
-        model = device.get('deviceType') if device.get('deviceType') is not None else 'deviceType?'
-        print(f"** could not get parameters for {model}")
+        print(f"** could not get parameters for {model} inverter, using default rating of 3.68kW")
         device_power = 3.68
         device_current = 26
     # charge times are derated based on temperature
@@ -2316,6 +2318,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if debug_setting > 2:
         print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
     print(f"\nDevice Info:")
+    print(f"  Model:     {model}")
     print(f"  Rating:    {device_power:.2f}kW")
     print(f"  Export:    {export_power:.2f}kW")
     print(f"  Charge:    {charge_current:.1f}A, {charge_limit:.2f}kW, {charge_loss * 100:.1f}% efficient")
@@ -2409,7 +2412,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         generation = pv_sum / gen_days
         print(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
-    output_spool(charge_needed_app_key)
     quarter = now.month // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
     sun_profile = seasonal_sun[quarter]['sun']
@@ -2418,15 +2420,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        output(f"\nUsing manual forecast for {forecast_day}: {expected:.1f}kWh with {sun_name} sun profile")
+        output(f"\nUsing {expected:.1f}kWh manual forecast with {sun_name} sun and {consumption:.1f}kWh consumption")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        output(f"\nUsing Solcast forecast for {forecast_day}: {expected:.1f}kWh")
+        output(f"\nUsing {expected:.1f}kWh Solcast forecast and {consumption:.1f}kWh consumption for {forecast_day}")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        output(f"\nUsing Solar forecast for {forecast_day}: {expected:.1f}kWh")
+        output(f"\nUsing {expected:.1f}kWh Solar forecast and {consumption:.1f}kWh consumption for {forecast_day}")
     elif generation is None or generation == 0.0:
         output(f"\nNo generation data available")
         output_close()
@@ -2434,7 +2436,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     else:
         expected = generation
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        output(f"\nUsing generation of {expected:.1f}kWh with {sun_name} sun profile")
+        output(f"\nUsing {expected:.1f}kWh generation with {sun_name} sun and {consumption:.1f}kWh consumption")
         if charge_config['forecast_selection'] == 1 and update_settings > 0:
             output(f"  Settings will not be updated when forecast is not available")
             update_settings = 2 if update_settings == 3 else 0
@@ -2491,6 +2493,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_current += kwh_timed[i]
         h += 1
     # work out what we need to add to stay above reserve and provide contingency
+    output_spool(charge_needed_app_key)
     contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
@@ -2592,7 +2595,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 h = base_hour + i
                 output(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed_old[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed_old[i]:6.3f}, {bat_timed_old[i]:6.3f}")
     if show_data > 0:
-        s = f"\nBattery Energy kWh ({charge_message}):\n" if show_data == 2 else f"\nBattery SoC % ({charge_message}):\n"
+        s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
         s += " " * (18 if show_data == 2 else 17) * (base_hour % 6)
         h = base_hour
         for r in bat_timed:
@@ -2607,10 +2610,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         x_timed = [i for i in range(0, run_time)]
         plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=False) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
-            title = f"Battery SoC % ({charge_message})"
+            title = f"Battery SoC % ({charge_message}, forecast={expected:.1f}kWh, consumption={consumption:.1f}kWh)"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
         else:
-            title = f"Energy Flow kWh ({charge_message})"
+            title = f"Energy Flow kWh ({charge_message}, forecast={expected:.1f}kWh, consumption={consumption:.1f}kWh)"
             plt.plot(x_timed, bat_timed, label='Battery', color='blue')
             plt.plot(x_timed, generation_timed, label='Generation', color='green')
             plt.plot(x_timed, consumption_timed, label='Consumption', color='red')
@@ -2676,7 +2679,7 @@ def bat_count(cell_count):
     return int(cell_count / n + 0.5)
 
 # battery monitor app key
-battery_info_app_key = "attkoji15eugb4a153viok2isi3p2w"
+battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
 def battery_info(log=0, plot=1, count=None):
@@ -2987,6 +2990,16 @@ def get_pvoutput(d = None, tou = 0):
     csv = generate + export + power + ',,,,' + grid + consume + export_tou
     return csv
 
+# helper to format CSV output data for display
+def pvoutput_str(csv):
+    field = csv.split(',')
+    s =  f"Upload data for {field[0][0:4]}-{field[0][4:6]}-{field[0][6:8]}:\n"
+    s += f"  {int(field[1])/1000:.1f}kWh generated\n"
+    s += f"  {int(field[2])/1000:.1f}kWh exported\n"
+    s += f"  {int(field[13])/1000:.1f}kWh consumed\n"
+    s += f"  {int(field[3])/1000:.1f}kW peak generation at {field[4]}"
+    return s
+
 pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
 pv_api_key = None
 pv_system_id = None
@@ -2995,8 +3008,8 @@ pv_system_id = None
 pvoutput_app_key = "a32i66pnyp9d8awshj5a4exypndzan"
 
 # upload data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 0):
-    global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key
+def set_pvoutput(d = None, tou = 0, push = 1):
+    global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key, pushover_user_key
     if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
         print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
@@ -3010,7 +3023,8 @@ def set_pvoutput(d = None, tou = 0):
             print(f"Time of use: {tariff['name']}\n")
         print(f"------------------------------------------------")
         for x in d[:10]:
-            csv = set_pvoutput(x, tou)
+            csv = set_pvoutput(x, tou, push)
+            push = 0
             if csv is None:
                 return None
             print(f"{csv}  # uploaded OK")
@@ -3021,6 +3035,8 @@ def set_pvoutput(d = None, tou = 0):
         return None
     if csv[0] == '#':
         return csv
+    if pushover_user_key is not None and push == 1:
+        output_message(pvoutput_app_key, pvoutput_str(csv))
     try:
         response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     except Exception as e:
@@ -3461,19 +3477,26 @@ def pushover_post(message, file=None, app_key=None):
         print(f"** pushover_post() got response code {response.status_code}: {response.reason}")
         return None
     if debug_setting > 1:
-        print(f"---- pushover message sent ----")
+        print(f"\n---- pushover message sent ----")
     return 200
 
 spool_mode = None
 spooled_output = None
 
-# start spooling output for pushover
-def output_spool(app_key=None):
+# start spooling output for pushover messaging
+# h is an optional message header
+def output_spool(app_key=None, h=None):
     global spool_mode, spooled_output, pushover_user_key, foxesscloud_app_key
     output_close()
     if pushover_user_key is None:
         return None
     spool_mode = app_key if app_key is not None else foxesscloud_app_key
+    if h is not None:
+        dt_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        h = h.replace("<time>", dt_now[11:19])
+        h = h.replace("<date>", dt_now[0:10])
+        h = h.replace("<datetime>", dt_now)
+        spooled_output = h + "\n"
     return spool_mode
 
 # stop spooling output and post with optional file attachment
@@ -3485,6 +3508,12 @@ def output_close(plot=0, file=None):
         pushover_post(spooled_output, file=file, app_key=spool_mode)
     spool_mode = None
     spooled_output = None
+    return None
+
+# simple push message
+def output_message(app_key=None, message=None, plot=0):
+    output_spool(app_key, message)
+    output_close(plot=plot)
     return None
 
 # add to spooled_output

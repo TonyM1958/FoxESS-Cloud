@@ -43,7 +43,7 @@ If a value is set for f.plot_file, any charts created will also be saved to an i
 + f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
 + f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
 
-If you set f.pushover_user_key to your user_key for pushover.net, output from set_tariff(), charge_needed() and battery_info() will be sent as messages to your pushover app.
+If you set f.pushover_user_key to your user_key for pushover.net, a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
 
 ## Information
 Load information about the user, site or device:
@@ -590,6 +590,25 @@ fcast.plot_hourly(day)
 Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately.
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
+# Pushover
+
+Send messages to a pushover user account:
+
+```
+f.output_spool(app_key, h)
+f.output(s)
+f.output_close(plot, file)
+f.output_message(app_key, message, plot)
+```
+
+Calling f.output_spool() with an app key will start the system spooling output to send to pushover. h is an optional header to add as the first line of the message. H may include \<time\>, \<date\> or \<datetime\> and these will be set to current system time and date respectively.
+
+When spooling is active, any calls to f.output() add lines to the spooled message. If appending to the message would exceed 1024 characters, the existing spooled message is sent and a new message spool is started.
+
+Calling f.output_close() will send the spooled message and optionally attach a binary image file. You can set plot=1 to attach the last plot file created (when f.plot_file is set) or specify a file.
+
+f.output_message() is a shorcut to send a message without spooling output.
+
 
 # Troubleshooting
 
@@ -608,7 +627,11 @@ This setting can be:
 
 # Version Info
 
-1.2.5<br>
+1.2.6<br>
+Show inverter model info and flag error in charge_needed() if residual is less than 0.1 kWh.
+Updated output text to work better with pushover limit of 1024 bytes.
+Fixed incorrect pushover app key for battery info.
+Added pushover summary to set_pvoutout().
 Added support for pushover notifications in set_tariff(), charge_needed() and battery_info().
 Added saving plots to an image file.
 Debug information added for HTTP timeout.
