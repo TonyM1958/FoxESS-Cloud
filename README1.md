@@ -627,7 +627,9 @@ This setting can be:
 
 # Version Info
 
-1.2.6<br>
+1.2.7<br>
+Improve handling of date / time for queries.
+Comments added to pvoutput data when exported exceeds generated.
 Fixed charge times being set incorrectly in set_tariff() when tariff is not Agile or Flux.
 Show inverter model info and flag error in charge_needed() if residual is less than 0.1 kWh.
 Updated output text to work better with pushover limit of 1024 bytes.

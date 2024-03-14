@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 March 2024
+Updated:  14 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.4"
+version = "2.1.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -67,8 +67,17 @@ def plot_show():
 # return query date as a dictionary with year, month, day, hour, minute, second
 def query_date(d, offset = None):
     if d is not None and len(d) < 18:
-        d += ' 00:00:00'
-    t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+        if len(d) == 10:
+            d += ' 00:00:00'
+        elif len(d) == 13:
+            d += ':00:00'
+        else:
+            d += ':00'
+    try:
+        t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        output(f"** query_date(): {str(e)}")
+        return None
     if offset is not None:
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
@@ -76,13 +85,22 @@ def query_date(d, offset = None):
 # return query date as begin and end timestamps in milliseconds
 def query_time(d, time_span):
     if d is not None and len(d) < 18:
-        d += ' 00:00:00'
-    t = datetime.now().replace(minute=0, second=0, microsecond=0) if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+        if len(d) == 10:
+            d += ' 00:00:00'
+        elif len(d) == 13:
+            d += ':00:00'
+        else:
+            d += ':00'
+    try:
+        t = datetime.now().replace(minute=0, second=0, microsecond=0) if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        output(f"** query_time(): {str(e)}")
+        return (None, None)
     t_begin = round(t.timestamp())
     if time_span == 'hour':
         t_end = round(t_begin + 3600)
     else:
-        t_end = round((t + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        t_end = round(t.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp())
     return (t_begin * 1000, t_end * 1000)
 
 # interpolate a result from a list of values
@@ -972,23 +990,12 @@ def set_schedule(enable=1, groups=None):
 # get real time data
 ##################################################################################################
 
-# parse the unit and return unit and scale
-def split_unit(u):
-    n = ''
-    s = '0.01kWh' if u == '10Wh' else u
-    for c in s:
-        if c in '0123456789.':
-            n += c
-        else:
-            break
-    unit = s[len(n):]
-    scale = float(n) if len(n) > 0 else 1
-    return (unit, scale)
-
+# residual scaling can be erratic, adjust if needed
+residual_scale = 0.01
 
 # get real time data
 def get_real(v = None):
-    global device_sn, debug_setting, device, power_vars, invert_ct2
+    global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale
     if get_device() is None:
         return None
     if device['status'] > 1:
@@ -1017,12 +1024,11 @@ def get_real(v = None):
     for var in result:
         if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
             var['value'] *= -1
-        if var.get('unit') is None:
+        elif var.get('variable') == 'ResidualEnergy':
+            var['unit'] = 'kWh'
+            var['value'] = var['value'] * residual_scale
+        elif var.get('unit') is None:
             var['unit'] = ''
-        elif var['unit'][0] in '0123456789':
-            (unit, scale) = split_unit(var['unit'])
-            var['unit'] = unit
-            var['value'] *= scale
     return result
 
 
@@ -1049,7 +1055,7 @@ sample_time = 5.0       # 5 minutes default
 sample_rounding = 2     # round to 30 seconds
 
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time
+    global token, device_sn, debug_setting, var_list, off_peak1, off_peak2, peak, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time, residual_scale
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -1081,6 +1087,8 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         output(f"getting history data")
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
+        if t_begin is None:
+            return None
         body = {'sn': device_sn, 'variables': v, 'begin': t_begin, 'end': t_end}
         response = signed_post(path="/op/v0/device/history/query", body=body)
         if response.status_code != 200:
@@ -1106,13 +1114,12 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
             for y in var['data']:
                 y['value'] = -y['value']
-        if var.get('unit') is None:
+        elif var['variable'] == 'ResidualEnergy':
+            var['unit'] = 'kWh'
+            for y in var['data']:
+                 y['value'] *= residual_scale
+        elif var.get('unit') is None:
             var['unit'] = ''
-        elif var['unit'][0] in '0123456789':
-            (unit, scale) = split_unit(var['unit'])
-            var['unit'] = unit
-            for x in var['data']:
-                x['value'] *= scale
     if summary <= 0 or time_span == 'hour':
         if plot > 0:
             plot_history(result, plot)
@@ -1328,6 +1335,8 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         output(f"getting report data")
     current_date = query_date(None)
     main_date = query_date(d)
+    if main_date is None:
+        return None
     side_result = None
     if dimension in ('day', 'week') and summary > 0:
         # side report needed
@@ -2234,10 +2243,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         residual = battery['residual']
         if charge_config.get('capacity') is not None:
             capacity = charge_config['capacity']
-        elif residual is not None and residual > 0.1 and current_soc is not None and current_soc > 0.0:
+        elif residual is not None and residual > 0.2 and current_soc is not None and current_soc > 1:
             capacity = residual * 100 / current_soc
         else:
-            print(f"Battery capacity is not available. Please provide kWh via 'capacity' parameter")
+            print(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
     else:
         current_soc = test_soc
@@ -2926,7 +2935,7 @@ def get_pvoutput(d = None, tou = 0):
             print(csv)
         return
     # get quick report of totals for the day
-    v = ['loads'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
+    v = ['loads', 'feedin'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
     report_data = get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
@@ -2956,6 +2965,7 @@ def get_pvoutput(d = None, tou = 0):
     export_tou = ',,,'
     consume = ','
     grid = ',,,,'
+    comment = ','
     for var in raw_data:     # process list of raw_data values (with TOU)
         wh = int(var['kwh'] * 1000)
         peak = int(var['kwh_peak'] * 1000)
@@ -2977,17 +2987,18 @@ def get_pvoutput(d = None, tou = 0):
         if var['variable'] == 'feedin':
             # check exported is less than generated
             if wh > generation:
-                print(f"# warning: {date} Exported {wh}Wh is more than Generation")
+                comment = f"Exported {wh/1000:.1f}kwh (more than Generated),"
                 wh = generation
-            export = f"{wh},"
-            export_tou = f",,,"
+            if tou == 0:
+                export = f"{wh},"
+                export_tou = f",,,"
         elif var['variable'] == 'loads':
             consume = f"{wh},"
         elif var['variable'] == 'gridConsumption':
             grid = f"0,0,{wh},0,"
     if generate == '':
         return None
-    csv = generate + export + power + ',,,,' + grid + consume + export_tou
+    csv = generate + export + power + ',,,' + comment + grid + consume + export_tou
     return csv
 
 # helper to format CSV output data for display

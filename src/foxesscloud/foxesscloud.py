@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  12 March 2024
+Updated:  14 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.2.6"
+version = "1.2.7"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -69,8 +69,17 @@ time_zone = 'Europe/London'
 
 def query_date(d, offset = None):
     if d is not None and len(d) < 18:
-        d += ' 00:00:00'
-    t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+        if len(d) == 10:
+            d += ' 00:00:00'
+        elif len(d) == 13:
+            d += ':00:00'
+        else:
+            d += ':00'
+    try:
+        t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        output(f"** query_date(): {str(e)}")
+        return None
     if offset is not None:
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
@@ -1196,7 +1205,10 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
     if debug_setting > 1:
         output(f"getting raw data")
     if load is None:
-        query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': query_date(d)}
+        d_begin = query_date(d)
+        if d_begin is None:
+            return None
+        query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': d_begin}
         response = signed_post(path="/c/v0/device/history/raw", data=query)
         if response.status_code != 200:
             output(f"** get_raw() got response code: {response.status_code}")
@@ -1399,8 +1411,8 @@ def plot_raw(result, plot=1, station=0):
 # station = 0: use device_id, 1 = use station_id
 ##################################################################################################
 
-report_vars = ['input','generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
-report_names = ['PV Yield', 'Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
+report_vars = ['solar', 'input','generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
+report_names = ['PV Yield', 'Input', 'Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
 
 # fix power values after fox corrupts high word of 32-bit energy total
 fix_values = 1
@@ -1449,6 +1461,8 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         output(f"getting report data")
     current_date = query_date(None)
     main_date = query_date(d)
+    if main_date is None:
+        return None
     side_result = None
     if report_type in ('day', 'week') and summary > 0:
         # side report needed
@@ -2383,10 +2397,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         residual = battery['residual']
         if charge_config.get('capacity') is not None:
             capacity = charge_config['capacity']
-        elif residual is not None and residual > 0.1 and current_soc is not None and current_soc > 0.0:
+        elif residual is not None and residual > 0.2 and current_soc is not None and current_soc > 1:
             capacity = residual * 100 / current_soc
         else:
-            print(f"Battery capacity is not available. Please provide kWh via 'capacity' parameter")
+            print(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
     else:
         current_soc = test_soc
@@ -3077,7 +3091,7 @@ def get_pvoutput(d = None, tou = 0):
             print(csv)
         return
     # get quick report of totals for the day
-    v = ['loads'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
+    v = ['loads','feedin'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
     report_data = get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
@@ -3107,6 +3121,7 @@ def get_pvoutput(d = None, tou = 0):
     export_tou = ',,,'
     consume = ','
     grid = ',,,,'
+    comment = ','
     for var in raw_data:     # process list of raw_data values (with TOU)
         wh = int(var['kwh'] * 1000)
         peak = int(var['kwh_peak'] * 1000)
@@ -3128,17 +3143,18 @@ def get_pvoutput(d = None, tou = 0):
         if var['variable'] == 'feedin':
             # check exported is less than generated
             if wh > generation:
-                print(f"# warning: {date} Exported {wh}Wh is more than Generation")
+                comment = f"Exported {wh/1000:.1f}kWh (more than Generated),"
                 wh = generation
-            export = f"{wh},"
-            export_tou = f",,,"
+            if tou == 0:
+                export = f"{wh},"
+                export_tou = f",,,"
         elif var['variable'] == 'loads':
             consume = f"{wh},"
         elif var['variable'] == 'gridConsumption':
             grid = f"0,0,{wh},0,"
     if generate == '':
         return None
-    csv = generate + export + power + ',,,,' + grid + consume + export_tou
+    csv = generate + export + power + ',,,' + comment + grid + consume + export_tou
     return csv
 
 # helper to format CSV output data for display

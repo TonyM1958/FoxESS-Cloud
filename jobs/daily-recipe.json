@@ -10,6 +10,7 @@ spec:
   environment_variables:
     TARIFF_PARAMS: '''flux'',region=''H'''
     CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0,force_charge=0
+    PVOUTPUT_PARAMS: tou=1
   working_directory: /home/jovyan/workspace
   extra_packages:
     pip:
@@ -28,7 +29,7 @@ spec:
 
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)
-    f.set_pvoutput()
+    f.set_pvoutput($PVOUTPUT_PARAMS)
 
     EOF
   git_repositories: []
