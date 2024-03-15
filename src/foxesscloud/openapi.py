@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  14 March 2024
+Updated:  15 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.5"
+version = "2.1.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2631,7 +2631,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             if show_plot == 3:
                 plt.plot(x_timed, charge_timed, label='Charge', color='orange', linestyle='dotted')
                 plt.plot(x_timed, discharge_timed, label='Discharge', color='brown', linestyle='dotted')
-        plt.title(title, fontsize=12)
+        plt.title(title, fontsize=10)
         plt.grid()
         if show_plot > 1:
             plt.legend(fontsize=8, loc="upper right")
@@ -2935,7 +2935,7 @@ def get_pvoutput(d = None, tou = 0):
             print(csv)
         return
     # get quick report of totals for the day
-    v = ['loads', 'feedin'] if tou == 1 else ['loads', 'feedin', 'gridConsumption']
+    v = ['loads', 'feedin', 'gridConsumption']
     report_data = get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
@@ -2959,56 +2959,65 @@ def get_pvoutput(d = None, tou = 0):
     if pv_max > max_pv_power:
         return(f"# error: {d.replace('-','')} PV power ({pv_max}kWh) exceeds max_pv_power ({max_pv_power}kWh)")
     # generate output
-    generate = ''
-    export = ','
-    power = ',,'
-    export_tou = ',,,'
-    consume = ','
-    grid = ',,,,'
+    date = None
+    generate = None
+    export = None
+    power = None
     comment = ','
-    for var in raw_data:     # process list of raw_data values (with TOU)
+    grid = None
+    consume = None
+    export_tou = ',,,'
+    # process list of report_data values (no TOU)
+    for var in report_data:
+        wh = int(var['total'] * 1000)
+        if var['variable'] == 'feedin':
+            export_wh = wh 
+            export = f"{wh},"
+        elif var['variable'] == 'loads':
+            consume = f"{wh},"
+        elif var['variable'] == 'gridConsumption':
+            grid_wh = wh
+            grid = f"0,0,{wh},0,"
+    # process list of raw_data values (with TOU)
+    for var in raw_data:
         wh = int(var['kwh'] * 1000)
         peak = int(var['kwh_peak'] * 1000)
         off_peak = int(var['kwh_off'] * 1000)
         if var['variable'] == 'pvPower':
-            generation = wh
-            date = var['date'].replace('-','')
-            generate = f"{date},{generation},"
+            generate_wh = wh
+            date = var['date'].replace('-','') + ','
+            generate = f"{wh},"
             power = f"{int(var['max'] * 1000)},{var['max_time']},"
         elif var['variable'] == 'feedinPower':
-            export = f"{wh}," if tou == 0 else f","
-            export_tou = f",,," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0"
-        elif var['variable'] == 'loadsPower':
-            consume = f"{wh},"
+            calibrate = export_wh / wh if wh > 0.0 else 1.0
+            export = f","
+            export_tou = f"{int(peak * calibrate)},{int(off_peak * calibrate)},{int((wh - peak - off_peak) * calibrate)},0"
         elif var['variable'] == 'gridConsumptionPower':
-            grid = f"0,0,{wh},0," if tou == 0 else f"{peak},{off_peak},{wh - peak - off_peak},0,"
-    for var in report_data:     # process list of report_data values (no TOU)
-        wh = int(var['total'] * 1000)
-        if var['variable'] == 'feedin':
-            # check exported is less than generated
-            if wh > generation:
-                comment = f"Exported {wh/1000:.1f}kwh (more than Generated),"
-                wh = generation
-            if tou == 0:
-                export = f"{wh},"
-                export_tou = f",,,"
-        elif var['variable'] == 'loads':
-            consume = f"{wh},"
-        elif var['variable'] == 'gridConsumption':
-            grid = f"0,0,{wh},0,"
-    if generate == '':
+            calibrate = grid_wh / wh if wh > 0.0 else 1.0
+            grid = f"{int(peak * calibrate)},{int(off_peak * calibrate)},{int((wh - peak - off_peak) * calibrate)},0,"
+    if date is None or generate is None or export is None or power is None or grid is None or consume is None:
         return None
-    csv = generate + export + power + ',,,' + comment + grid + consume + export_tou
+    # check exported is less than generated
+    if export_wh > generate_wh:
+        comment = f"Export {export_wh/1000:.1f}kWh was more than Generated,"
+        if tou == 0:
+            export = f"{generate_wh},"
+    csv = date + generate + export + power + ',,,' + comment + grid + consume + export_tou
     return csv
 
 # helper to format CSV output data for display
-def pvoutput_str(csv):
+def pvoutput_str(csv, tou=0):
     field = csv.split(',')
     s =  f"Upload data for {field[0][0:4]}-{field[0][4:6]}-{field[0][6:8]}:\n"
-    s += f"  {int(field[1])/1000:.1f}kWh generated\n"
-    s += f"  {int(field[2])/1000:.1f}kWh exported\n"
-    s += f"  {int(field[13])/1000:.1f}kWh consumed\n"
-    s += f"  {int(field[3])/1000:.1f}kW peak generation at {field[4]}"
+    imported = int(field[9]) + int(field[10]) + int(field[11]) + int(field[12])
+    s += f"  Peak Solar: {int(field[3])/1000:.1f}kW at {field[4]}\n"
+    s += f"  From Solar: {int(field[1])/1000:.1f}kWh\n"
+    exported = int(field[2]) if tou == 0 else sum(int(x) for x in field[14:18])
+    s += f"  From Grid: {imported/1000:.1f}kWh\n"
+    s += f"  To Export: {exported/1000:.1f}kWh\n"
+    s += f"  To House: {int(field[13])/1000:.1f}kWh"
+    if len(field[8]) > 0:
+        s += f"\n  ** {field[8]}" 
     return s
 
 pv_url = "https://pvoutput.org/service/r2/addoutput.jsp"
@@ -3047,7 +3056,7 @@ def set_pvoutput(d = None, tou = 0, push = 1):
     if csv[0] == '#':
         return csv
     if pushover_user_key is not None and push == 1:
-        output_message(pvoutput_app_key, pvoutput_str(csv))
+        output_message(pvoutput_app_key, pvoutput_str(csv, tou))
     try:
         response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     except Exception as e:

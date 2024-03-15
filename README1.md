@@ -627,7 +627,9 @@ This setting can be:
 
 # Version Info
 
-1.2.7<br>
+1.2.8<br>
+Fix problem in set_pvoutput() sending summary to pushover when tou=1.
+Improve accuracy of time of use data in get_pvoutput().
 Improve handling of date / time for queries.
 Comments added to pvoutput data when exported exceeds generated.
 Fixed charge times being set incorrectly in set_tariff() when tariff is not Agile or Flux.
