@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  15 March 2024
+Updated:  18 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.2.8"
+version = "1.2.9"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -801,19 +801,23 @@ def get_ui():
         return None
     return result
 
-def get_remote_settings(key='h115__17'):
+def get_remote_settings(key):
     global token, device_id, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
         output(f"getting remote settings")
+    if key is None:
+        output(f"** get_remote_settings() no key")
+        return None
     if type(key) is list:
         values = {}
         for k in key:
             v = get_remote_settings(k)
-            if v is not None:
-                for x in v.keys():
-                    values[x] = v[x]
+            if v is None:
+                return
+            for x in v.keys():
+                values[x] = v[x]
         return values
     params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
     response = signed_get(path="/c/v0/device/setting/get", params=params)
@@ -832,7 +836,9 @@ def get_remote_settings(key='h115__17'):
     return values
 
 def get_cell_temps():
-    values = get_remote_settings('h115__17')
+    values = get_remote_settings('h116__18')
+    if values is None:
+        return None
     cell_temps = []
     for k in sorted(values.keys()):
         t = c_float(values[k])
@@ -841,7 +847,9 @@ def get_cell_temps():
     return cell_temps
 
 def get_cell_volts():
-    values = get_remote_settings(['h115__14', 'h115__15', 'h115__16'])
+    values = get_remote_settings(['h116__15', 'h116__16', 'h116__17'])
+    if values is None:
+        return None
     cell_volts = []
     for k in sorted(values.keys()):
         v = c_float(values[k])
@@ -3162,9 +3170,9 @@ def get_pvoutput(d = None, tou = 0):
     return csv
 
 # helper to format CSV output data for display
-def pvoutput_str(csv, tou=0):
+def pvoutput_str(system_id, csv, tou=0):
     field = csv.split(',')
-    s =  f"Upload data for {field[0][0:4]}-{field[0][4:6]}-{field[0][6:8]}:\n"
+    s =  f"Upload data for {system_id} on {field[0][0:4]}-{field[0][4:6]}-{field[0][6:8]}:\n"
     imported = int(field[9]) + int(field[10]) + int(field[11]) + int(field[12])
     s += f"  Peak Solar: {int(field[3])/1000:.1f}kW at {field[4]}\n"
     s += f"  From Solar: {int(field[1])/1000:.1f}kWh\n"
@@ -3184,35 +3192,36 @@ pv_system_id = None
 pvoutput_app_key = "a32i66pnyp9d8awshj5a4exypndzan"
 
 # upload data for a day using pvoutput api
-def set_pvoutput(d = None, tou = 0, push=1):
+def set_pvoutput(d = None, system_id=None, tou = 0, push=2):
     global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key, pushover_user_key
-    if pv_api_key is None or pv_system_id is None or pv_api_key == 'my.pv_api_key' or pv_system_id == 'my.pv_system_id':
+    sytem_id = pv_system_id if system_id is None else system_id
+    if pv_api_key is None or system_id is None or pv_api_key == 'my.pv_api_key' or system_id == 'my.pv_system_id':
         print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
     if d is None:
         d = date_list(span='2days', today = 1)
     tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
     if type(d) is list:
-        print(f"\n--------------- set_pvoutput -----------------")
+        print(f"\n------------ set_pvoutput ({system_id}) -------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1 :
-            print(f"Time of use: {tariff['name']}\n")
+            print(f"Time of use: {tariff['name']}")
         print(f"------------------------------------------------")
         for x in d[:10]:
-            csv = set_pvoutput(x, tou, push)
-            push = 0
+            csv = set_pvoutput(x, system_id, tou, push)
+            push = 0 if push == 2 else push
             if csv is None:
                 return None
             print(f"{csv}  # uploaded OK")
         return
-    headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': pv_system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
+    headers = {'X-Pvoutput-Apikey': pv_api_key, 'X-Pvoutput-SystemId': system_id, 'Content-Type': 'application/x-www-form-urlencoded'}
     csv = get_pvoutput(d, tou)
     if csv is None:
         return None
     if csv[0] == '#':
         return csv
-    if pushover_user_key is not None and push == 1:
-        output_message(pvoutput_app_key, pvoutput_str(csv))
+    if pushover_user_key is not None and push > 0:
+        output_message(pvoutput_app_key, pvoutput_str(system_id, csv, tou))
     try:
         response = requests.post(url=pv_url, headers=headers, data='data=' + csv)
     except Exception as e:

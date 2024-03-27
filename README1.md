@@ -512,13 +512,14 @@ f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'))
 Loads CSV data directly using the PV Ouput API:
 
 ```
-f.set_pvoutput(d, system_id, today, tou)
+f.set_pvoutput(d, system_id, tou, push)
 ```
 
-+ d is optional and is the date, or a list of dates, to upload. For default, see today below
++ d is optional and is the date, or a list of dates, to upload
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
-+ today = True is optional and sets the default day to today. The default is False and sets the default day to yesterday 
-+ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
++ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate
++ push: optional. 0 = do not sent to pushover, 1 = send summary to pushover, 2 = send first day summary only
+
 
 # Solar Forecasting
 
@@ -627,7 +628,9 @@ This setting can be:
 
 # Version Info
 
-1.2.8<br>
+1.2.9<br>
+Update keys used to retrieve cell volts and temps following protocol update by Fox.
+Update set_pvoutput() to allow push=2.
 Fix problem in set_pvoutput() sending summary to pushover when tou=1.
 Improve accuracy of time of use data in get_pvoutput().
 Improve handling of date / time for queries.
