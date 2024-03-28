@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  18 March 2024
+Updated:  28 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.7"
+version = "2.1.8"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -306,7 +306,7 @@ def get_site(name=None):
         output(f"getting sites")
     site = None
     station_id = None
-    body = {'pageSize': 100, 'currentPage': 1 }
+    body = {'currentPage': 1, 'pageSize': 100 }
     response = signed_post(path="/op/v0/plant/list", body=body)
     if response.status_code != 200:
         output(f"** get_sites() got list response code {response.status_code}: {response.reason}")
@@ -404,7 +404,7 @@ device = None
 device_sn = None
 
 def get_device(sn=None):
-    global device_list, device, device_sn, firmware, battery, debug_setting, schedule
+    global device_list, device, device_sn, battery, debug_setting, schedule
     if get_vars() is None:
         return None
     if device is not None:
@@ -461,6 +461,7 @@ def get_device(sn=None):
     battery_settings = None
     schedule = None
     get_generation()
+    device['key'] = None
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper()
     # first 2 letters / numbers e.g. H1, H3, KH
@@ -740,21 +741,42 @@ def get_settings():
 # get remote settings
 ##################################################################################################
 
-def get_remote_settings(key='h115__17'):
-    global token, device_sn, debug_setting
+# ui is locked for end user
+def get_ui():
+    global token, device_id, debug_setting, messages
+    if get_device() is None:
+        return None
+    if debug_setting > 1:
+        output(f"getting ui settings")
+    params = {'deviceID': device_id}
+    response = signed_get(path="/op/v0/device/setting/ui", params=params)
+    if response.status_code != 200:
+        output(f"** get_ui() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        output(f"** get_ui(), no result data, {errno_message(response)}")
+        return None
+    return result
+
+def get_remote_settings(key):
+    global token, device_id, debug_setting, messages
     if get_device() is None:
         return None
     if debug_setting > 1:
         output(f"getting remote settings")
+    if key is None:
+        return None
     if type(key) is list:
         values = {}
         for k in key:
             v = get_remote_settings(k)
-            if v is not None:
-                for x in v.keys():
-                    values[x] = v[x]
+            if v is None:
+                return
+            for x in v.keys():
+                values[x] = v[x]
         return values
-    params = {'sn': device_sn, 'key': key}
+    params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
     response = signed_get(path="/op/v0/device/setting/get", params=params)
     if response.status_code != 200:
         output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
@@ -769,8 +791,58 @@ def get_remote_settings(key='h115__17'):
         return None
     return values
 
+# table of protocol specific keys for different settings
+named_settings = {
+    'cell_volts': {'convert': 'float', 'units': 'V', 'rw': False,
+        'h115': ['h115__14', 'h115__15', 'h115__16'],
+        'h116': ['h116__15', 'h116__16', 'h116__17']},
+    'cell_temps': {'convert': 'float', 'units': '°C', 'rw': False,
+        'h115': 'h115__17',
+        'h116': 'h116__18'},
+    'work_mode': {'rw': True,
+        'h115': 'operation_mode__work_mode',
+        'h116': 'operation_mode__work_mode'},
+    'max_soc': {'convert': 'int', 'units': '%', 'rw': True,
+        'h116': 'h116__basic2__03'},
+    'export_limit': {'convert': 'int', 'units': 'W', 'rw': True,
+        'h116': 'h116__basic2__05'}
+}
+
+def get_keys(name):
+    global device, named_settings
+    info = named_settings.get(name)
+    if info is None:
+        output(f"** get_keys() unknown setting name {name}")
+        return None
+    if get_device() is None:
+        return None
+    protocol = device.get('key')
+    if protocol is None:
+        output(f"** get_keys() no protocol key for device")
+        return None
+    keys = info.get(protocol)
+    if keys is None:
+        output(f"** get_keys() unknown protocol key: {protocol}")
+        return None
+    return keys
+
+def get_cell_volts():
+    keys = get_keys('cell_volts')
+    values = get_remote_settings(keys)
+    if values is None:
+        return None
+    cell_volts = []
+    for k in sorted(values.keys()):
+        v = c_float(values[k])
+        if v != 0:
+            cell_volts.append(v)
+    return cell_volts
+
 def get_cell_temps():
-    values = get_remote_settings('h115__17')
+    keys = get_keys('cell_temps')
+    values = get_remote_settings(keys)
+    if values is None:
+        return None
     cell_temps = []
     for k in sorted(values.keys()):
         t = c_float(values[k])
@@ -778,14 +850,29 @@ def get_cell_temps():
             cell_temps.append(t)
     return cell_temps
 
-def get_cell_volts():
-    values = get_remote_settings(['h115__14', 'h115__15', 'h115__16'])
-    cell_volts = []
+def get_named_settings(name):
+    global named_settings
+    keys = get_keys(name)
+    if keys is None:
+        return None
+    values = get_remote_settings(keys)
+    if values is None:
+        return None
+    result = []
+    convert = named_settings[name].get('convert')
     for k in sorted(values.keys()):
-        v = c_float(values[k])
-        if v != 0:
-            cell_volts.append(v)
-    return cell_volts
+        v = values[k]
+        if convert is None:
+            result.append(v)
+        elif convert == 'int':
+            result.append(c_int(v))
+        elif convert == 'float':
+            result.append(c_float(v))
+        else:
+            result.append(v)
+    if len(result) == 1:
+        return result[0]
+    return result
 
 ##################################################################################################
 # get work mode
@@ -794,32 +881,10 @@ def get_cell_volts():
 work_mode = None
 
 def get_work_mode():
-    global token, device_sn, work_mode, debug_setting
-    if get_device() is None:
-        return None
-    if debug_setting > 1:
-        output(f"getting work mode")
-    params = {'sn': device_sn, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
-    response = signed_get(path="/op/v0/device/setting/get", params=params)
-    if response.status_code != 200:
-        output(f"** get_work_mode() got response code {response.status_code}: {response.reason}")
-        return None
-    try:
-        result = response.json().get('result')
-    except:
-        return None
-    if result is None:
-        output(f"** get_work_mode(), no result data, {errno_message(response)}")
-        return None
-    return result
-    values = result.get('values')
-    if values is None:
-        output(f"** get_work_mode(), no work mode values data")
-        return None
-    work_mode = values.get('operation_mode__work_mode')
-    if work_mode is None:
-        output(f"** get_work_mode(), no work mode data")
-        return None
+    global work_mode
+    ## settings not available
+    return None
+    work_mode = get_named_settings('work_mode')
     return work_mode
 
 ##################################################################################################
@@ -3068,7 +3133,7 @@ def set_pvoutput(d = None, system_id=None, tou = 0, push = 2):
         if result == 401:
             print(f"** access denied for pvoutput.org. Check 'pv_api_key' and 'pv_system_id' are correct")
             return None
-        print(f"** set_pvoutput got response code: {result}")
+        print(f"** set_pvoutput got response code {result}: {response.reason}")
         return None
     return csv
 
@@ -3083,13 +3148,21 @@ def c_int(i):
     # handle None in integer conversion
     if i is None :
         return None
-    return int(i)
+    try:
+        result = int(i)
+    except:
+        return 0
+    return result
 
 def c_float(n):
     # handle None in float conversion
     if n is None :
         return float(0)
-    return float(n)
+    try:
+        result = float(n)
+    except:
+        return 0
+    return result
 
 ##################################################################################################
 # Code for loading and displaying yield forecasts from Solcast.com.au.
@@ -3148,7 +3221,7 @@ class Solcast :
                 if response.status_code == 429:
                     print(f"\nSolcast API call limit reached for today")
                 else:
-                    print(f"Solcast: response code getting rooftop_sites was {response.status_code}")
+                    print(f"Solcast: response code getting rooftop_sites was {response.status_code}: {response.reason}")
                 return
             sites = response.json().get('sites')
             if debug_setting > 0 and not quiet:

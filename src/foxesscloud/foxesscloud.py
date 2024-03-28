@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 March 2024
+Updated:  28 March 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.2.9"
+version = "1.3.0"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -174,7 +174,7 @@ def get_messages():
     headers = {'User-Agent': fox_user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = signed_get(path="/c/v0/errors/message", login=1)
     if response.status_code != 200:
-        output(f"** get_messages() got response code: {response.status_code}")
+        output(f"** get_messages() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -236,7 +236,7 @@ def get_token():
     credentials = {'user': username, 'password': hashlib.md5(password.encode()).hexdigest()}
     response = signed_post(path="/c/v0/user/login", data=credentials, login=1)
     if response.status_code != 200:
-        output(f"** could not login to Fox ESS Cloud - check your username and password - got response code: {response.status_code}")
+        output(f"** could not login to Fox ESS Cloud - check your username and password - got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -267,7 +267,7 @@ def get_info():
         output(f"getting access")
     response = signed_get(path="/c/v0/user/info")
     if response.status_code != 200:
-        output(f"** get_info() got info response code: {response.status_code}")
+        output(f"** get_info() got info response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -277,7 +277,7 @@ def get_info():
     info = result
     response = signed_get(path="/c/v0/user/access")
     if response.status_code != 200:
-        output(f"** get_info() got access response code: {response.status_code}")
+        output(f"** get_info() got access response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -301,7 +301,7 @@ def get_status(station=0):
     path = "/c/v0/device/status/all" if station == 0 else "/c/v0/plant/status/all"
     response = signed_get(path=path)
     if response.status_code != 200:
-        output(f"** get_status() got response code: {response.status_code}")
+        output(f"** get_status() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -334,7 +334,7 @@ def get_site(name=None):
     query = {'pageSize': 10, 'currentPage': 1, 'total': 0, 'condition': {'status': 0, 'contentType': 2, 'content': ''} }
     response = signed_post(path="/c/v1/plant/list", data=query)
     if response.status_code != 200:
-        output(f"** get_sites() got response code: {response.status_code}")
+        output(f"** get_sites() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -382,7 +382,7 @@ def get_logger(sn=None):
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'communication': 0, 'moduleSN': '', 'moduleType': ''} }
     response = signed_post(path="/c/v0/module/list", data=query)
     if response.status_code != 200:
-        output(f"** get_logger() got response code: {response.status_code}")
+        output(f"** get_logger() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -439,7 +439,7 @@ def get_device(sn=None):
     query = {'pageSize': 100, 'currentPage': 1, 'total': 0, 'condition': {'queryDate': {'begin': 0, 'end':0}}}
     response = signed_post(path="/c/v0/device/list", data=query)
     if response.status_code != 200:
-        output(f"** get_device() got response code: {response.status_code}")
+        output(f"** get_device() get device list, got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -469,12 +469,13 @@ def get_device(sn=None):
     device = device_list[n]
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
-    firmware = None
     battery = None
     battery_settings = None
     schedule = None
     templates = None
     raw_vars = get_vars()
+    firmware = get_firmware()
+    device['key'] = firmware.get('key') if firmware is not None else None
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper()
     # first 2 letters / numbers e.g. H1, H3, KH
@@ -523,7 +524,7 @@ def get_vars():
     # v1 api required for full list with {name, variable, unit}
     response = signed_get(path="/c/v1/device/variables", params=params)
     if response.status_code != 200:
-        output(f"** get_vars() got response code: {response.status_code}")
+        output(f"** get_vars() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -537,7 +538,7 @@ def get_vars():
     return vars
 
 ##################################################################################################
-# get current firmware versions for selected device
+# get current firmware and protocol versions for selected device
 ##################################################################################################
 
 firmware = None
@@ -551,7 +552,7 @@ def get_firmware():
     params = {'deviceID': device_id}
     response = signed_get(path="/c/v0/device/addressbook", params=params)
     if response.status_code != 200:
-        output(f"** get_firmware() got response code: {response.status_code}")
+        output(f"** get_firmware() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -562,6 +563,11 @@ def get_firmware():
     if firmware is None:
         output(f"** no firmware data")
         return None
+    protocol = result.get('protocolVersion')
+    firmware['protocol'] = protocol
+    if protocol is not None:
+        part = protocol.split('.')
+        firmware['key'] = part[0].lower() + part[1] if len(part) >= 2 else None
     return firmware
 
 ##################################################################################################
@@ -580,7 +586,7 @@ def get_battery():
     params = {'id': device_id}
     response = signed_get(path="/c/v0/device/battery/info", params=params)
     if response.status_code != 200:
-        output(f"** get_battery() got response code: {response.status_code}")
+        output(f"** get_battery() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -607,7 +613,7 @@ def get_charge():
     params = {'sn': device_sn}
     response = signed_get(path="/c/v0/device/battery/time/get", params=params)
     if response.status_code != 200:
-        output(f"** get_charge() got response code: {response.status_code}")
+        output(f"** get_charge() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -689,7 +695,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
     response = signed_post(path="/c/v0/device/battery/time/set", data=data)
     if response.status_code != 200:
-        output(f"** set_charge() got response code: {response.status_code}")
+        output(f"** set_charge() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
@@ -717,7 +723,7 @@ def get_min():
     params = {'sn': device_sn}
     response = signed_get(path="/c/v0/device/battery/soc/get", params=params)
     if response.status_code != 200:
-        output(f"** get_min() got response code: {response.status_code}")
+        output(f"** get_min() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -757,7 +763,7 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
         output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minGridSoc = {battery_settings.get('minGridSoc')}")
     response = signed_post(path="/c/v0/device/battery/soc/set", data=data)
     if response.status_code != 200:
-        output(f"** set_min() got response code: {response.status_code}")
+        output(f"** set_min() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
@@ -792,7 +798,7 @@ def get_ui():
     params = {'deviceID': device_id}
     response = signed_get(path="/c/v0/device/setting/ui", params=params)
     if response.status_code != 200:
-        output(f"** get_ui() got response code: {response.status_code}")
+        output(f"** get_ui() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -808,7 +814,6 @@ def get_remote_settings(key):
     if debug_setting > 1:
         output(f"getting remote settings")
     if key is None:
-        output(f"** get_remote_settings() no key")
         return None
     if type(key) is list:
         values = {}
@@ -822,7 +827,7 @@ def get_remote_settings(key):
     params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
     response = signed_get(path="/c/v0/device/setting/get", params=params)
     if response.status_code != 200:
-        output(f"** get_remote_settings() got response code: {response.status_code}")
+        output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -835,19 +840,45 @@ def get_remote_settings(key):
         return None
     return values
 
-def get_cell_temps():
-    values = get_remote_settings('h116__18')
-    if values is None:
+# table of protocol specific keys for different named settings
+named_settings = {
+    'cell_volts': {'convert': 'float', 'units': 'V', 'rw': False,
+        'h115': ['h115__14', 'h115__15', 'h115__16'],
+        'h116': ['h116__15', 'h116__16', 'h116__17']},
+    'cell_temps': {'convert': 'float', 'units': '°C', 'rw': False,
+        'h115': 'h115__17',
+        'h116': 'h116__18'},
+    'work_mode': {'rw': True,
+        'h115': 'operation_mode__work_mode',
+        'h116': 'operation_mode__work_mode'},
+    'max_soc': {'convert': 'int', 'units': '%', 'rw': True,
+        'h116': 'h116__basic2__03'},
+    'export_limit': {'convert': 'int', 'units': 'W', 'rw': True,
+        'h116': 'h116__basic2__05'}
+}
+
+def get_keys(name):
+    global device, named_settings
+    info = named_settings.get(name)
+    if info is None:
+        output(f"** get_keys() unknown setting name {name}")
         return None
-    cell_temps = []
-    for k in sorted(values.keys()):
-        t = c_float(values[k])
-        if t > -50:
-            cell_temps.append(t)
-    return cell_temps
+    if get_device() is None:
+        return None
+    protocol = device.get('key')
+    if protocol is None:
+        output(f"** get_keys() no protocol key for device")
+        return None
+    keys = info.get(protocol)
+    if keys is None:
+        output(f"** get_keys() unknown protocol key: {protocol}")
+        return None
+    return keys
+
 
 def get_cell_volts():
-    values = get_remote_settings(['h116__15', 'h116__16', 'h116__17'])
+    keys = get_keys('cell_volts')
+    values = get_remote_settings(keys)
     if values is None:
         return None
     cell_volts = []
@@ -857,6 +888,45 @@ def get_cell_volts():
             cell_volts.append(v)
     return cell_volts
 
+
+def get_cell_temps():
+    keys = get_keys('cell_temps')
+    values = get_remote_settings(keys)
+    if values is None:
+        return None
+    cell_temps = []
+    for k in sorted(values.keys()):
+        t = c_float(values[k])
+        if t > -50:
+            cell_temps.append(t)
+    return cell_temps
+
+
+def get_named_settings(name):
+    global named_settings
+    keys = get_keys(name)
+    if keys is None:
+        return None
+    values = get_remote_settings(keys)
+    if values is None:
+        return None
+    result = []
+    convert = named_settings[name].get('convert')
+    for k in sorted(values.keys()):
+        v = values[k]
+        if convert is None:
+            result.append(v)
+        elif convert == 'int':
+            result.append(c_int(v))
+        elif convert == 'float':
+            result.append(c_float(v))
+        else:
+            result.append(v)
+    if len(result) == 1:
+        return result[0]
+    return result
+
+
 ##################################################################################################
 # get work mode
 ##################################################################################################
@@ -864,29 +934,8 @@ def get_cell_volts():
 work_mode = None
 
 def get_work_mode():
-    global token, device_id, work_mode, debug_setting, messages
-    if get_device() is None:
-        return None
-    if debug_setting > 1:
-        output(f"getting work mode")
-    params = {'id': device_id, 'hasVersionHead': 1, 'key': 'operation_mode__work_mode'}
-    response = signed_get(path="/c/v0/device/setting/get", params=params)
-    if response.status_code != 200:
-        output(f"** get_work_mode() got response code: {response.status_code}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        errno = response.json().get('errno')
-        output(f"** get_work_mode(), no result data, {errno_message(errno)}")
-        return None
-    values = result.get('values')
-    if values is None:
-        output(f"** get_work_mode(), no work mode values data")
-        return None
-    work_mode = values.get('operation_mode__work_mode')
-    if work_mode is None:
-        output(f"** get_work_mode(), no work mode data")
-        return None
+    global work_mode
+    work_mode = get_named_settings('work_mode')
     return work_mode
 
 ##################################################################################################
@@ -918,7 +967,7 @@ def set_work_mode(mode, force = 0):
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = signed_post(path="/c/v0/device/setting/set", data=data)
     if response.status_code != 200:
-        output(f"** set_work_mode() got response code: {response.status_code}")
+        output(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
     if errno != 0:
@@ -950,7 +999,7 @@ def get_flag():
     params = {'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/get/flag", params=params)
     if response.status_code != 200:
-        output(f"** get_flag() got response code: {response.status_code}")
+        output(f"** get_flag() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -980,7 +1029,7 @@ def get_schedule():
     params = {'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/list", params=params)
     if response.status_code != 200:
-        output(f"** get_schedule() got response code: {response.status_code}")
+        output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -1003,7 +1052,7 @@ def get_template_detail(template):
     params = {'templateID': template, 'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/detail", params=params)
     if response.status_code != 200:
-        output(f"** get_schedule() got response code: {response.status_code}")
+        output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -1031,7 +1080,7 @@ def get_templates(template_type=[1,2]):
     params = {'templateType': template_type, 'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/edit/list", params=params)
     if response.status_code != 200:
-        output(f"** get_templates() got response code: {response.status_code}")
+        output(f"** get_templates() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
@@ -1115,7 +1164,7 @@ def set_schedule(enable=1, periods=None, template=None):
             output(f"\nDisabling schedule")
         response = signed_get(path="/generic/v0/device/scheduler/disable", params=params)
         if response.status_code != 200:
-            output(f"** set_schedule() got disable response code: {response.status_code}")
+            output(f"** set_schedule() got disable response code {response.status_code}: {response.reason}")
             return None
         errno = response.json().get('errno')
         if errno != 0:
@@ -1142,7 +1191,7 @@ def set_schedule(enable=1, periods=None, template=None):
             output(f"\nEnabling schedule")
         response = signed_post(path="/generic/v0/device/scheduler/enable", data=data)
         if response.status_code != 200:
-            output(f"** set_schedule() got enable response code: {response.status_code}")
+            output(f"** set_schedule() got enable response code {response.status_code}: {response.reason}")
             return None
         errno = response.json().get('errno')
         if errno != 0:
@@ -1219,7 +1268,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         query = {id_name: id_code, 'variables': v, 'timespan': time_span, 'beginDate': d_begin}
         response = signed_post(path="/c/v0/device/history/raw", data=query)
         if response.status_code != 200:
-            output(f"** get_raw() got response code: {response.status_code}")
+            output(f"** get_raw() got response code {response.status_code}: {response.reason}")
             return None
         result = response.json().get('result')
         errno = response.json().get('errno')
@@ -1479,7 +1528,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
             query = {id_name: id_code, 'reportType': 'month', 'variables': v, 'queryDate': side_date}
             response = signed_post(path=query_path, data=query)
             if response.status_code != 200:
-                output(f"** get_report() side report got response code: {response.status_code}")
+                output(f"** get_report() side report got response code {response.status_code}: {response.reason}")
                 return None
             side_result = response.json().get('result')
             errno = response.json().get('errno')
@@ -1497,7 +1546,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         query = {id_name: id_code, 'reportType': report_type.replace('week', 'month'), 'variables': v, 'queryDate': main_date}
         response = signed_post(path=query_path, data=query)
         if response.status_code != 200:
-            output(f"** get_report() main report got response code: {response.status_code}")
+            output(f"** get_report() main report got response code {response.status_code}: {response.reason}")
             return None
         result = response.json().get('result')
         errno = response.json().get('errno')
@@ -1672,7 +1721,7 @@ def get_earnings():
     params = {id_name: id_code}
     response = signed_get(path="/c/v0/device/earnings", params=params)
     if response.status_code != 200:
-        output(f"** get_earnings() got response code: {response.status_code}")
+        output(f"** get_earnings() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json()
     if result is None:
@@ -3232,7 +3281,7 @@ def set_pvoutput(d = None, system_id=None, tou = 0, push=2):
         if result == 401:
             print(f"** access denied for pvoutput.org. Check 'pv_api_key' and 'pv_system_id' are correct")
             return None
-        print(f"** set_pvoutput got response code: {result}")
+        print(f"** set_pvoutput got response code {result}: {response.reason}")
         return None
     return csv
 
@@ -3247,13 +3296,21 @@ def c_int(i):
     # handle None in integer conversion
     if i is None :
         return None
-    return int(i)
+    try:
+        result = int(i)
+    except:
+        return 0
+    return result
 
 def c_float(n):
     # handle None in float conversion
     if n is None :
         return float(0)
-    return float(n)
+    try:
+        result = float(n)
+    except:
+        return 0
+    return result
 
 ##################################################################################################
 # Code for loading and displaying yield forecasts from Solcast.com.au.
@@ -3312,7 +3369,7 @@ class Solcast :
                 if response.status_code == 429:
                     print(f"\nSolcast API call limit reached for today")
                 else:
-                    print(f"Solcast: response code getting rooftop_sites was {response.status_code}")
+                    print(f"Solcast: response code getting rooftop_sites was {response.status_code}: {response.reason}")
                 return
             sites = response.json().get('sites')
             if debug_setting > 0 and not quiet:
@@ -3327,7 +3384,7 @@ class Solcast :
                         if response.status_code == 429:
                             print(f"\nSolcast: API call limit reached for today")
                         else:
-                            print(f"Solcast: response code getting {t} was {response.status_code}")
+                            print(f"Solcast: response code getting {t} was {response.status_code}: {response.reason}")
                         return
                     self.data[t][rid] = response.json().get(t)
             if self.save is not None :
@@ -3514,7 +3571,7 @@ class Solar :
                     if response.status_code == 429:
                         print(f"\nSolar: forecast.solar API call limit reached for today")
                     else:
-                        print(f"** Solar() got response code: {response.status_code}")
+                        print(f"** Solar() got response code {response.status_code}: {response.reason}")
                     return
                 self.results[name] = response.json().get('result')
             if self.save is not None :

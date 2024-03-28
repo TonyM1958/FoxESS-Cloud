@@ -81,9 +81,9 @@ f.get_battery()
 f.get_settings()
 f.get_charge()
 f.get_min()
-f.get_remote_settings()
 f.get_cell_temps()
-f.get_cell_volts
+f.get_cell_volts()
+f.get_named_settings(name)
 f.get_work_mode()
 f.get_flag()
 f.get_templates()
@@ -99,9 +99,9 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 + get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
-+ get_remote_settings() will return a dictionary of settings given a query key
++ get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
 
-+ get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings()
++ get_named_setings(), get the value for a setting. Details for a limited number of settings are held in the dictionary f.named_settings. Includes: 'cell_volts', 'cell_temps', 'wokr_mode', 'max_soc', 'export_limit'
 
 + get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
@@ -626,7 +626,12 @@ This setting can be:
 + 3: lots of debug information
 
 
-# Version Info
+# Version 
+
+1.3.0<br>
+Add get_named_settings() with details for cell_temps, cell_volts, work_mode, max_soc and export_limit for H1.16 protocols.
+Add get_named_settings() with details for cell_temps, cell_volts and work_mode for H1.15 protocols.
+Update get_firmware() and add 'key' to device details, based on protocolVersion.
 
 1.2.9<br>
 Update keys used to retrieve cell volts and temps following protocol update by Fox.

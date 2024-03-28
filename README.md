@@ -656,7 +656,9 @@ This setting can be:
 
 # Version Info
 
-2.1.7<br>
+2.1.8<br>
+Better reporting of reason for http error code.
+Template code for get_named_settings() added - not functional in this version due to Open API limitations.
 Update set_pvoutput() to allow push=2.
 Fix problem in set_pvoutput() sending summary to pushover when tou=1.
 Improve accuracy of time of use data in get_pvoutput().
