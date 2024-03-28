@@ -9,8 +9,8 @@ spec:
   instance_type: medium
   environment_variables:
     TARIFF_PARAMS: '''flux'',region=''H'''
-    CHARGE_PARAMS: update_settings=1,charge_current=16,timed_mode=0,force_charge=0
-    PVOUTPUT_PARAMS: tou=1
+    CHARGE_PARAMS: update_settings=1,charge_current=25,timed_mode=0,force_charge=0
+    PVOUTPUT_PARAMS: tou=1,push=2
   working_directory: /home/jovyan/workspace
   extra_packages:
     pip:
@@ -26,6 +26,7 @@ spec:
     f.pv_system_id = ${PV_SYSTEM_ID:-None}
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
     f.pushover_user_key = ${PUSHOVER_USER_KEY:-None}
+    f.plot_file = "plot###.png"
 
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)
@@ -67,6 +68,6 @@ spec:
   shared_folders: []
   command: python script.py
   scale: 1
-  schedule: 1 22,23 * * *
+  schedule: 1 22 * * *
   concurrency_policy: Allow
   retries: 0
