@@ -3247,7 +3247,7 @@ pvoutput_app_key = "a32i66pnyp9d8awshj5a4exypndzan"
 # upload data for a day using pvoutput api
 def set_pvoutput(d = None, system_id=None, tou = 0, push=2):
     global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key, pushover_user_key
-    sytem_id = pv_system_id if system_id is None else system_id
+    system_id = pv_system_id if system_id is None else system_id
     if pv_api_key is None or system_id is None or pv_api_key == 'my.pv_api_key' or system_id == 'my.pv_system_id':
         print(f"** set_pvoutput: 'pv_api_key' / 'pv_system_id' not configured")
         return None
