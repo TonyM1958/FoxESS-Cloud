@@ -629,6 +629,7 @@ This setting can be:
 # Version 
 
 1.3.0<br>
+Updated charge / discharge profiles for charge_needed() to show power flow in relation to work mode
 Add get_named_settings() with details for cell_temps, cell_volts, work_mode, max_soc and export_limit for H1.16 protocols.
 Add get_named_settings() with details for cell_temps, cell_volts and work_mode for H1.15 protocols.
 Update get_firmware() and add 'key' to device details, based on protocolVersion.

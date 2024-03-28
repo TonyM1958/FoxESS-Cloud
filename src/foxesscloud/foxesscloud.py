@@ -2520,11 +2520,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_limit = charge_power
     # work out losses when charging / force discharging
     inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 20
+    operating_loss = inverter_power / 1000
     bms_power = charge_config['bms_power']
+    bms_loss = bms_power / 1000
     charge_loss = charge_config.get('charge_loss')
     if charge_loss is None:
-        charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2 - bms_power / charge_limit / 1000
-    operating_loss = inverter_power / 1000
+        charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2 - bms_loss / charge_limit
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_loss = charge_config['discharge_loss']
     discharge_limit = device_power
@@ -2662,7 +2663,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] for x in generation_timed]
-    discharge_timed = [x / charge_config['discharge_loss'] + charge_config['bms_power'] / 1000 for x in consumption_timed]
+    discharge_timed = [x / charge_config['discharge_loss'] for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     work_mode = current_mode
     for i in range(0, run_time):
@@ -2683,8 +2684,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         elif timed_mode > 0 and work_mode == 'Backup':
             discharge_timed[i] = operating_loss if charge_timed[i] == 0.0 else 0.0
         elif timed_mode > 0 and work_mode == 'Feedin':
-            (discharge_timed[i], charge_timed[i]) = (0.0 if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
+            (discharge_timed[i], charge_timed[i]) = (bms_loss if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
                 0.0 if (charge_timed[i] <= export_limit + discharge_timed[i]) else (charge_timed[i] - export_limit - discharge_timed[i]))
+        else: # work_mode == 'SelfUse'
+            (discharge_timed[i], charge_timed[i]) = (bms_loss if (charge_timed[i] >= discharge_timed[i]) else (discharge_timed[i] - charge_timed[i]),
+                0.0 if (charge_timed[i] <= discharge_timed[i]) else (charge_timed[i] - discharge_timed[i]))
     # track the battery residual over the run time (if we don't add any charge)
     # adjust residual from hour_now to what it was at the start of current hour
     h = base_hour
@@ -2700,7 +2704,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             if reserve_drain < (capacity * 6 / 100):
                 reserve_drain = reserve           # force charge to restore reserve
             kwh_current = reserve_drain           # stop discharge below reserve
-            reserve_drain -= bms_power / 1000     # allow for BMS drain
+            reserve_drain -= bms_loss             # allow for BMS drain
         else:
             reserve_drain = reserve                # reset drain
         if kwh_current > capacity:
@@ -2786,7 +2790,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 if reserve_drain < (capacity * 6 / 100):
                     reserve_drain = reserve           # force charge by BMS
                 kwh_current = reserve_drain           # stop discharge below reserve
-                reserve_drain -= bms_power / 1000     # BMS drain
+                reserve_drain -= bms_loss             # BMS drain
             else:
                 reserve_drain = reserve                # reset drain
             if kwh_current > capacity:

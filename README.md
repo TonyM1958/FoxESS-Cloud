@@ -657,6 +657,7 @@ This setting can be:
 # Version Info
 
 2.1.8<br>
+Updated charge / discharge profiles for charge_needed() to show power flow in relation to work mode
 Better reporting of reason for http error code.
 Template code for get_named_settings() added - not functional in this version due to Open API limitations.
 Update set_pvoutput() to allow push=2.
