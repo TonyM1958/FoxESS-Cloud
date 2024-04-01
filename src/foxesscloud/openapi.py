@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  28 March 2024
+Updated:  01 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.1.8"
+version = "2.1.9"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -404,7 +404,7 @@ device = None
 device_sn = None
 
 def get_device(sn=None):
-    global device_list, device, device_sn, battery, debug_setting, schedule
+    global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings
     if get_vars() is None:
         return None
     if device is not None:
@@ -461,7 +461,7 @@ def get_device(sn=None):
     battery_settings = None
     schedule = None
     get_generation()
-    device['key'] = None
+#    remote_settings = get_ui()
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper()
     # first 2 letters / numbers e.g. H1, H3, KH
@@ -519,7 +519,6 @@ def get_generation(update=1):
         result['today'] = 0.0
     if update == 1:
         device['generationToday'] = result['today']
-        device['generationMonth'] = result['month']
         device['generationTotal'] = result['cumulative'] 
     return result
 
@@ -741,23 +740,90 @@ def get_settings():
 # get remote settings
 ##################################################################################################
 
-# ui is locked for end user
+remote_settings = None              # raw UI info
+named_settings = None               # processed UI info
+merge_settings = {                  # keys to add
+    'WorkMode': {'keys': {
+        'h115__': 'operation_mode__work_mode',
+        'h116__': 'operation_mode__work_mode',
+        },
+        'values': ['SelfUse', 'Feedin', 'Backup']},
+    'BatteryVolt': {'keys': {
+        'h115__': ['h115__14', 'h115__15', 'h115__16'],
+        'h116__': ['h116__15', 'h116__16', 'h116__17'],
+        },
+        'type': 'list',
+        'valueType': 'float',
+        'unit': 'V'},
+    'BatteryTemp': {'keys': {
+        'h115__': 'h115__17',
+        'h116__': 'h116__18',
+        },
+        'type': 'list',
+        'valueType': 'int',
+        'unit': '℃'},
+}
+
 def get_ui():
-    global token, device_id, debug_setting, messages
+    global device_id, debug_setting, messages, remote_settings, named_settings, merge_settings
     if get_device() is None:
         return None
-    if debug_setting > 1:
-        output(f"getting ui settings")
-    params = {'deviceID': device_id}
-    response = signed_get(path="/op/v0/device/setting/ui", params=params)
-    if response.status_code != 200:
-        output(f"** get_ui() got response code {response.status_code}: {response.reason}")
-        return None
-    result = response.json().get('result')
-    if result is None:
-        output(f"** get_ui(), no result data, {errno_message(response)}")
-        return None
-    return result
+    if remote_settings is None:
+        if debug_setting > 1:
+            output(f"getting ui settings")
+        params = {'id': device_id}
+        response = signed_get(path="/generic/v0/device/setting/ui", params=params)
+        if response.status_code != 200:
+            output(f"** get_ui() got response code {response.status_code}: {response.reason}")
+            return None
+        result = response.json().get('result')
+        if result is None:
+            errno = response.json().get('errno')
+            output(f"** get_ui(), no result data, {errno_message(errno)}")
+            return None
+        remote_settings = result
+        protocol = remote_settings['protocol'].lower().replace('xx','__')
+        named_settings = {'_protocol': protocol}
+        volt_n = 0
+        volt_keys = []
+        for p in remote_settings['parameters']:
+            if p['name'][:11] == 'BatteryVolt':    # merge BatteryVolts
+                volt_n += 1
+                volt_keys.append(p['key'])
+                if volt_n == 3:
+                    named_settings['BatteryVolt'] = {'key': volt_keys, 'type': 'list', 'valueType': 'float', 'unit': p['properties'][0]['unit']}
+                elif volt_n > 3:
+                    print(f"** get_ui(): more than 3 groups found for BatteryVolt")
+            elif p['name'][:11] == 'BatteryTemp':
+                named_settings['BatteryTemp'] = {'key': p['key'], 'type': 'list', 'valueType': 'int', 'unit': p['properties'][0]['unit']}
+            else:
+                items = []
+                block = p['block'] and len(p['properties']) > 1
+                for e in p['properties']:
+                    valueType = e['elemType']['valueType']
+                    item = {'name': e['key'].replace(protocol,'')} if block else {'key': e['key']} #, 'group': p['name']}
+                    if e['elemType'].get('uiItems') is not None:
+                        item['values'] = e['elemType']['uiItems']
+                    elif e.get('range') is not None:
+                        item['range'] = e['range']
+                        item['valueType'] = 'float' if type(e['range']['hi']) is float else 'int'
+                    else:
+                        item['type'] = valueType
+                    if e.get('unit') is not None and len(e['unit']) > 0:
+                        item['unit'] = e['unit']
+                    if block:
+                        items.append(item)
+                    else:
+                        named_settings[e['name']] = item
+                if block:
+                    named_settings[p['name']] = {'key': p['key'], 'type': 'block', 'items': items}
+        for name in merge_settings.keys():
+            if named_settings.get(name) is None and merge_settings[name]['keys'].get(protocol) is not None:
+                named_settings[name] = {'keys': merge_settings[name]['keys'][protocol]}
+                for k in merge_settings[name].keys():
+                    if k != 'keys':
+                        named_settings[name][k] = merge_settings[name][k]
+    return remote_settings
 
 def get_remote_settings(key):
     global token, device_id, debug_setting, messages
@@ -777,13 +843,14 @@ def get_remote_settings(key):
                 values[x] = v[x]
         return values
     params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
-    response = signed_get(path="/op/v0/device/setting/get", params=params)
+    response = signed_get(path="/c/v0/device/setting/get", params=params)
     if response.status_code != 200:
         output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
-        output(f"** get_remote_settings(), no result data, {errno_message(response)}")
+        errno = response.json().get('errno')
+        output(f"** get_remote_settings(), no result data, {errno_message(errno)}")
         return None
     values = result.get('values')
     if values is None:
@@ -791,101 +858,65 @@ def get_remote_settings(key):
         return None
     return values
 
-# table of protocol specific keys for different settings
-named_settings = {
-    'cell_volts': {'convert': 'float', 'units': 'V', 'rw': False,
-        'h115': ['h115__14', 'h115__15', 'h115__16'],
-        'h116': ['h116__15', 'h116__16', 'h116__17']},
-    'cell_temps': {'convert': 'float', 'units': '°C', 'rw': False,
-        'h115': 'h115__17',
-        'h116': 'h116__18'},
-    'work_mode': {'rw': True,
-        'h115': 'operation_mode__work_mode',
-        'h116': 'operation_mode__work_mode'},
-    'max_soc': {'convert': 'int', 'units': '%', 'rw': True,
-        'h116': 'h116__basic2__03'},
-    'export_limit': {'convert': 'int', 'units': 'W', 'rw': True,
-        'h116': 'h116__basic2__05'}
-}
-
-def get_keys(name):
-    global device, named_settings
-    info = named_settings.get(name)
-    if info is None:
-        output(f"** get_keys() unknown setting name {name}")
-        return None
-    if get_device() is None:
-        return None
-    protocol = device.get('key')
-    if protocol is None:
-        output(f"** get_keys() no protocol key for device")
-        return None
-    keys = info.get(protocol)
-    if keys is None:
-        output(f"** get_keys() unknown protocol key: {protocol}")
-        return None
-    return keys
-
-def get_cell_volts():
-    keys = get_keys('cell_volts')
-    values = get_remote_settings(keys)
-    if values is None:
-        return None
-    cell_volts = []
-    for k in sorted(values.keys()):
-        v = c_float(values[k])
-        if v != 0:
-            cell_volts.append(v)
-    return cell_volts
-
-def get_cell_temps():
-    keys = get_keys('cell_temps')
-    values = get_remote_settings(keys)
-    if values is None:
-        return None
-    cell_temps = []
-    for k in sorted(values.keys()):
-        t = c_float(values[k])
-        if t > -50:
-            cell_temps.append(t)
-    return cell_temps
-
 def get_named_settings(name):
     global named_settings
-    keys = get_keys(name)
+    if type(name) is list:
+        result = []
+        for n in name:
+            result.append(get_named_settings(n))
+        return result
+    if named_settings is None or named_settings.get(name) is None:
+        output(f"** get_named_settings(): {name} was not recognised")
+        return None
+    keys = named_settings[name].get('keys')
     if keys is None:
         return None
-    values = get_remote_settings(keys)
-    if values is None:
+    result = get_remote_settings(keys)
+    if result is None:
         return None
-    result = []
-    convert = named_settings[name].get('convert')
-    for k in sorted(values.keys()):
-        v = values[k]
-        if convert is None:
-            result.append(v)
-        elif convert == 'int':
-            result.append(c_int(v))
-        elif convert == 'float':
-            result.append(c_float(v))
-        else:
-            result.append(v)
-    if len(result) == 1:
-        return result[0]
+    result_type = named_settings[name].get('type')
+    value_type = named_settings[name].get('valueType')
+    if result_type is None:
+        v = result.get([k for k in result.keys()][0])
+        return v if value_type is None else c_float(v) if value_type == 'float' else c_int(v)
+    if result_type == 'list':
+        values = []
+        for k in sorted(result.keys()):
+            values.append(result[k] if value_type is None else c_float(result[k]) if value_type == 'float' else c_int(result[k]))
+        return values
     return result
 
 ##################################################################################################
-# get work mode
+# wrappers for named settings
 ##################################################################################################
 
 work_mode = None
 
 def get_work_mode():
     global work_mode
-    ## settings not available
+#    print(f"** get_work_mode(): not available via Open API")
     return None
-    work_mode = get_named_settings('work_mode')
+    if get_device() is None:
+        return None
+    work_mode = get_named_settings('WorkMode')
     return work_mode
+
+def get_cell_volts():
+    print(f"** get_cell_volts(): not available via Open API")
+    return None
+    values = get_named_settings('BatteryVolt')
+    if values is None:
+        return None
+    return [v for v in values if v > 0]
+
+def get_cell_temps():
+    print(f"** get_cell_temps(): not available via Open API")
+    return None
+    values = get_named_settings('BatteryTemp')
+    if values is None:
+        return None
+    return [v for v in values if v > -50]
+
 
 ##################################################################################################
 # set work mode
@@ -896,6 +927,8 @@ settable_modes = work_modes[:3]
 
 def set_work_mode(mode, force = 0):
     global token, device_sn, work_modes, work_mode, debug_setting
+    printf("** set_work_mode(): not available via Open API")
+    return None
     if get_device() is None:
         return None
     if mode not in settable_modes:
@@ -1176,6 +1209,9 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         file.close()
     for var in result:
         var['date'] = d[0:10]
+        # remove 1 hour over-run when clocks go forward 1 hour
+        while len(var['data']) > 0 and var['data'][-1]['time'][0:10] != d[0:10]:
+            var['data'].pop()
         if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
             for y in var['data']:
                 y['value'] = -y['value']
@@ -1277,7 +1313,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
 
 # plot raw results data
 def plot_history(result, plot=1):
-    global site, device_sn, legend_location
+    global site, device_sn, legend_location, sample_time
     if result is None:
         return
     # work out what we have
@@ -1301,34 +1337,22 @@ def plot_history(result, plot=1):
         for d in dates:
             # get time labels for X axix
             if lines == 0:
-                labels = []
-                for v in [v for v in result if v['unit'] == unit and v['date'] == d]:
-                    h = 0
-                    i = 0
-                    while h < 24:
-                        h = int(v['data'][i]['time'][11:13]) if i < len(v['data']) else h + 1
-                        labels.append(f"{h:02d}:00")
-                        i += 12
-                    break
                 plt.figure(figsize=(figure_width, figure_width/3))
-                plt.xticks(ticks=range(0, len(labels)), labels=labels, rotation=90, fontsize=8)
-                plt.xlim(-1, len(labels))
+                all_x = []
             for v in [v for v in result if v['unit'] == unit and v['date'] == d]:
                 n = len(v['data'])
-                x =[]
-                h = 0
-                old_minute = 0
-                for i in range(0,n):
-                    new_minute = int(v['data'][i]['time'][14:16])
-                    h += 1 if new_minute < old_minute else 0
-                    x.append(h + new_minute / 60)
-                    old_minute = new_minute
+                x = [time_hours(v['data'][i]['time'][11:]) for i in range(0,n)]
+                all_x += x
                 y = [v['data'][i]['value'] if v['data'][i]['value'] is not None else 0.0 for i in range(0, n)]
                 name = v['name']
                 label = f"{name} / {d}" if plot == 2 and len(dates) > 1 else name
                 plt.plot(x, y ,label=label)
                 lines += 1
             if lines >= 1 and (plot == 1 or d == dates[-1]) :
+                bst = 1 if min(all_x) < 0 else 0
+                labels = [f"{h:02d}:00" for h in range(0, 25)]
+                plt.xticks(ticks=range(0 - bst, 25 - bst), labels=labels, rotation=90, fontsize=8)
+                plt.xlim(-1 - bst, 25 - bst)
                 if lines > 1:
                     plt.legend(fontsize=6, loc=legend_location)
                 title = ""
@@ -1337,6 +1361,7 @@ def plot_history(result, plot=1):
                 if len(vars) == 1 or lines == 1:
                     title = f"{name} / {title}"
                 title = f"{title}{unit} / {device_sn}"
+                title += '' if bst == 0 else ' (BST)'
                 plt.title(title, fontsize=12)
                 plt.grid()
                 plot_show()
@@ -1627,11 +1652,13 @@ def time_hours(t, d = None):
         t = d
     if type(t) is float:
         return t
-    elif type(t) is int:
+    if type(t) is int:
         return float(t)
-    elif type(t) is str and t.replace(':', '').isnumeric() and t.count(':') <= 2:
+    offset = 1 if 'BST' in t else 0
+    t = t[0:8]
+    if type(t) is str and t.replace(':', '').isnumeric() and t.count(':') <= 2:
         t += ':00' if t.count(':') == 1 else ''
-        return sum(float(t) / x for x, t in zip([1, 60, 3600], t.split(":")))
+        return sum(float(t) / x for x, t in zip([1, 60, 3600], t.split(":"))) - offset
     output(f"** invalid time string {t}")
     return None
 
@@ -1787,6 +1814,16 @@ bg_driver = {
     'forecast_times': [22, 23]
     }
 
+# time periods for Economy 7
+economy_7 = {
+    'name': 'Eco 7',
+    'off_peak1': {'start': 0.5, 'end': 7.5, 'force': 1, 'gmt': 1},
+    'off_peak2': {'start': 0.0, 'end': 0.0, 'force': 0},
+    'peak': {'start': 0.0, 'end': 0.0 },
+    'peak2': {'start': 0.0, 'end': 0.0 },
+    'forecast_times': [22, 23]
+    }
+
 # custom time periods / template
 custom_periods = {'name': 'Custom',
     'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
@@ -1796,7 +1833,7 @@ custom_periods = {'name': 'Custom',
     'forecast_times': [22, 23]
     }
 
-tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, custom_periods]
+tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, economy_7, custom_periods]
 tariff = octopus_flux
 
 ##################################################################################################
@@ -1976,13 +2013,15 @@ def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     am_pm = 'PM' if charge_pm else 'AM'
     start = start_at if duration > 0 else 0.0
     end = end_by if duration > 0 else 0.0
+    gmt = ""
     if charge_pm:
         tariff['off_peak2']['start'] = start
         tariff['off_peak2']['end'] = end
     else:
         tariff['off_peak1']['start'] = start
         tariff['off_peak1']['end'] = end
-    print(f"\n{tariff['name']} {am_pm} charging period: {hours_time(start)} to {hours_time(end)}")
+        gmt = " GMT" if tariff['off_peak1'].get('gmt') is not None else ""
+    print(f"\n{tariff['name']} {am_pm} charging period: {hours_time(start)} to {hours_time(end)}{gmt}")
     return 1
 
 # set tariff and AM/PM charge time period
@@ -2249,6 +2288,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     force_charge = 0 if force_charge is None else force_charge
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
     end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
+    # adjust times for Economy 7 in BST
+    if time_offset > 0 and tariff is not None and tariff['off_peak1'].get('gmt') is not None:
+        start_am += 1
+        end_am += 1
     force_charge_am = 0 if tariff is not None and tariff['off_peak1']['force'] == 0 or force_charge == 0 else force_charge
     time_to_am = round_time(start_am - base_hour)
     start_pm = time_hours(tariff['off_peak2']['start'] if tariff is not None else 0.0)
@@ -2400,7 +2443,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     print(f"  Discharge: {discharge_current:.1f}A, {discharge_limit:.2f}kW, {discharge_loss * 100:.1f}% efficient")
     print(f"  Inverter:  {inverter_power:.0f}W power consumption")
     print(f"  BMS:       {bms_power:.0f}W power consumption")
-    print(f"  Work Mode: {current_mode}")
+    if current_mode is not None:
+        print(f"  Work Mode: {current_mode}")
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:

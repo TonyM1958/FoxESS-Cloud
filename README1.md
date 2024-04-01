@@ -415,6 +415,7 @@ There are a number of different pre-configured tariffs:
 + Octopus Go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
 + Agile Octopus: off-peak from 02:30 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
 + British Gas Electric Driver: off-peak from 00:00 to 05:00, forecasts from 22:00 to 23:59
++ Eco 7: Economy 7: off-peak from 00:30 to 07:30 GMT (01:30 to 08:30 during BST)
 
 Custom periods can be configured for specific times if required:
 + Custom: charging from 02:00 to 05:00, no off-peak or peak times, forecasts from 22:00 to 23:59
@@ -628,7 +629,11 @@ This setting can be:
 
 # Version 
 
-1.3.0<br>
+1.3.1<br>
+Update get_history() to use GMT or BST when plotting instead of mixed time zones.
+Fixed problem where get_raw() returns extra data for the next day when the clocks go forward.
+Added 'economy_7' tariff that charges using GMT when clocks change.
+Updated get_ui(), 'f.remote_settings' and 'f.named_settings' and updated get_cell_volts() and get_cell_temps() to use these.
 Updated charge / discharge profiles for charge_needed() to show power flow in relation to work mode
 Add get_named_settings() with details for cell_temps, cell_volts, work_mode, max_soc and export_limit for H1.16 protocols.
 Add get_named_settings() with details for cell_temps, cell_volts and work_mode for H1.15 protocols.
