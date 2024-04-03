@@ -101,7 +101,7 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 + get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
 
-+ get_named_setings(), get the value for a setting. Details for a limited number of settings are held in the dictionary f.named_settings. Includes: 'cell_volts', 'cell_temps', 'wokr_mode', 'max_soc', 'export_limit'
++ get_named_setings(), get the value for a setting. Details of settings are held in the dictionary f.named_settings.
 
 + get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 

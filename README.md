@@ -105,7 +105,6 @@ You can change inverter settings using:
 ```
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
-f.set_work_mode(mode)
 f.set_group(start, end, mode, min_soc, fdsoc, fdpwr)
 f.get_flag()
 f.set_schedule(enable, groups, template)
@@ -122,8 +121,6 @@ set_charge() takes the charge times from the battery_settings and applies these 
 + ch2: enable charge from grid for period 2 (True or False)
 + st2: the start time for period 2
 + en2: the end time for period 2
-
-set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
 set_flag() returns the current settings for strategy periods: 'supported' and 'enable'
 
