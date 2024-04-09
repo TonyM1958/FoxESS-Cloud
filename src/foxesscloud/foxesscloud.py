@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 April 2024
+Updated:  09 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.3.1"
+version = "1.3.2"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1342,7 +1342,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             kwh_peak = 0.0  # kwh during peak time (16:00-19:00)
             kwh_neg = 0.0
             if len(var['data']) > 1:
-                sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:19]) - time_hours(var['data'][0]['time'][11:19])) / (len(var['data']) - 1), 0) / sample_rounding
+                sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:]) - time_hours(var['data'][0]['time'][11:])) / (len(var['data']) - 1), 0) / sample_rounding
             else:
                 sample_time = 5.0
             if debug_setting > 1:
@@ -1773,7 +1773,8 @@ def split_hours(h):
     minutes = int (h % 1 * 60 + 0.5)
     return (hours, minutes)
 
-# convert time string HH:MM:SS to decimal hours
+# convert time string HH:MM:SS to decimal hours (range 0 to 24)
+# If BST time zone is included, convert to GMT (range -1 to 23)
 def time_hours(t, d = None):
     if t is None:
         t = d
@@ -2348,7 +2349,8 @@ charge_config = {
     'derate_temp': 22,                # battery temperature where cold derating starts to be applied
     'derate_step': 5,                 # scale for derating factors in C
     'derating': [24, 15, 10, 2],      # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
-    'force': 1                        # 0 = don't over-ride schedule, 1 = disable schedule
+    'force': 1,                       # 0 = don't over-ride schedule, 1 = disable schedule
+    'data_wrap': 6                    # data to show per line
 }
 
 # app key for charge_needed (used to send output via pushover)
@@ -2847,11 +2849,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 h = base_hour + i
                 output(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed_old[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed_old[i]:6.3f}, {bat_timed_old[i]:6.3f}")
     if show_data > 0:
+        data_wrap = charge_config['data_wrap']
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
-        s += " " * (18 if show_data == 2 else 17) * (base_hour % 6)
+        s += " " * (18 if show_data == 2 else 17) * (base_hour % data_wrap)
         h = base_hour
         for r in bat_timed:
-            s += "\n" if h > hour_now and h % 6 == 0 else ""
+            s += "\n" if h > hour_now and h % data_wrap == 0 else ""
             s += f"  {hours_time(h - (hour_adjustment if h >= change_hour else 0), day=True)}"
             s += f" = {r:5.2f}," if show_data == 2 else f" = {r / capacity * 100:3.0f}%,"
             h += 1

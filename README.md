@@ -356,6 +356,7 @@ derate_temp: 21               # battery temperature in C when derating charge cu
 derate_step: 5                # step size for derating e.g. 21, 16, 11
 derating: [24, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C
 force: 1                      # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
+data_wrap: 6                  # data items to show per line
 ```
 These values are stored / available in f.charge_config.
 
@@ -653,6 +654,10 @@ This setting can be:
 
 
 # Version Info
+
+2.20.<br>
+Added 'data_wrap' to charge_config.
+
 
 2.1.9<br>
 Update get_history() to use GMT or BST when plotting instead of mixed time zones.
