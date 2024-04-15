@@ -655,7 +655,8 @@ This setting can be:
 
 # Version Info
 
-2.2.1.<br>
+2.2.2.<br>
+Fix key error when accessing cell volts and temps using an agent / installer account.
 Ensure output is generated if get_battery() fails using battery_info().
 Update f.avg() to include calculation of averages in lists containng None values.
 Added 'data_wrap' to charge_config.

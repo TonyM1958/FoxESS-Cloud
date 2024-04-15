@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.1"
+version = "2.2.2"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -791,11 +791,11 @@ def get_ui():
                 volt_n += 1
                 volt_keys.append(p['key'])
                 if volt_n == 3:
-                    named_settings['BatteryVolt'] = {'key': volt_keys, 'type': 'list', 'valueType': 'float', 'unit': p['properties'][0]['unit']}
+                    named_settings['BatteryVolt'] = {'keys': volt_keys, 'type': 'list', 'valueType': 'float', 'unit': p['properties'][0]['unit']}
                 elif volt_n > 3:
                     print(f"** get_ui(): more than 3 groups found for BatteryVolt")
             elif p['name'][:11] == 'BatteryTemp':
-                named_settings['BatteryTemp'] = {'key': p['key'], 'type': 'list', 'valueType': 'int', 'unit': p['properties'][0]['unit']}
+                named_settings['BatteryTemp'] = {'keys': p['key'], 'type': 'list', 'valueType': 'int', 'unit': p['properties'][0]['unit']}
             else:
                 items = []
                 block = p['block'] and len(p['properties']) > 1
@@ -870,9 +870,11 @@ def get_named_settings(name):
         return None
     keys = named_settings[name].get('keys')
     if keys is None:
+        output(f"** get_named_settings(): no keys for name: {name}")
         return None
     result = get_remote_settings(keys)
     if result is None:
+        output(f"** get_named_settings(): no result for {name} using key: {keys}")
         return None
     result_type = named_settings[name].get('type')
     value_type = named_settings[name].get('valueType')
