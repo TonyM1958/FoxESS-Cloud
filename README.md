@@ -380,8 +380,8 @@ f.battery_monitor(interval, run, log, save, count)
 ```
 
 battery_info() prints information on the battery and cells:
-+ count: optional over-ride. The default is based on rounding the battery voltage divided by 53
-+ plot: 1 plot the cell voltages for each battery, 0 don't plot. The default is 1
++ count: optional over-ride. The default is based on factorising the number of cells reported by 16 or 18 to work out the number of batteries.
++ plot: 1 plot the cell voltages for each battery, 2 plot the cell temperatueres, 0 don't plot. The default is 1
 + log: see below. Default is 0
 
 battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
@@ -655,7 +655,9 @@ This setting can be:
 
 # Version Info
 
-2.20.<br>
+2.2.1.<br>
+Ensure output is generated if get_battery() fails using battery_info().
+Update f.avg() to include calculation of averages in lists containng None values.
 Added 'data_wrap' to charge_config.
 
 

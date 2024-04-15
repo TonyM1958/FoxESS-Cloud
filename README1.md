@@ -358,8 +358,8 @@ f.battery_monitor(interval, run, log, save, count)
 ```
 
 battery_info() prints information on the battery and cells:
-+ count: optional over-ride. The default is based on rounding the battery voltage divided by 53
-+ plot: 1 plot the cell voltages for each battery, 0 don't plot. The default is 1
++ count: optional over-ride. The default is based on factorising the number of cells reported by 16 or 18 to work out the number of batteries.
++ plot: 1 plot the cell voltages for each battery, 2 also plot the cell temperatueres, 0 don't plot. The default is 1
 + log: see below. Default is 0
 
 battery_monitor() runs battery_info() in log mode on a schedule to provide information on the battery status over a period of time:
@@ -368,6 +368,10 @@ battery_monitor() runs battery_info() in log mode on a schedule to provide infor
 + log: 0 = display, 1 = log battery info, 2 = add cell volts, 3 = add cell temps. The default is 1
 + save: name of a CSV file to write log data to
 + count: optional over-ride for the number of batteries
+
+This is an example of the output from battery_info():
+
+![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/a8eb52b6-ce3f-4b58-bb76-5483d5e40fa7)
 
 
 ## Date Ranges
@@ -630,7 +634,9 @@ This setting can be:
 
 # Version 
 
-1.3.2<br>
+1.3.3<br>
+Ensure output is generated if get_battery() fails using battery_info().
+Update f.avg() to include calculation of averages in lists containng None values.
 Add 'data_wrap' to charge_config.
 Update get_history() to use GMT or BST when plotting instead of mixed time zones.
 Fixed problem where get_raw() returns extra data for the next day when the clocks go forward.

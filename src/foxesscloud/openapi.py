@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  09 April 2024
+Updated:  15 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.0"
+version = "2.2.1"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2779,7 +2779,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
 def avg(x):
     if len(x) == 0:
         return None
-    return sum(x) / len(x)
+    count = 0
+    total = 0.0
+    for y in x:
+        if y is not None:
+            total += y
+            count += 1
+    return total / count if count > 0 else None
 
 # calculate the % imbalance in a list of values
 def imbalance(v):
@@ -2793,7 +2799,7 @@ cells_per_battery = [16,18,15]      # allowed number of cells per battery
 
 # deduce the number of batteries from the number of cells
 def bat_count(cell_count):
-    global cell_per_battery
+    global cells_per_battery
     n = None
     for i in cells_per_battery:
         if cell_count % i == 0:
@@ -2812,6 +2818,7 @@ def battery_info(log=0, plot=1, count=None):
     output_spool(battery_info_app_key)
     bat = get_battery()
     if bat is None:
+        output_close()
         return None
     bat_volt = bat['volt']
     current_soc = bat['soc']
@@ -2836,7 +2843,7 @@ def battery_info(log=0, plot=1, count=None):
         output_close()
         return None
     nt = len(cell_temps)
-    nt_cell = int(nt / nbat + 0.5)
+    nt_cell = int(nt / nbat)
     bat_cell_volts = []
     bat_cell_temps = []
     bat_volts = []
