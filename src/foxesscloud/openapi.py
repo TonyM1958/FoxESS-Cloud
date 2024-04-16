@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  15 April 2024
+Updated:  16 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.2"
+version = "2.2.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -911,14 +911,26 @@ def get_cell_volts():
         return None
     return [v for v in values if v > 0]
 
-def get_cell_temps():
-    print(f"** get_cell_temps(): not available via Open API")
-    return None
+temp_slots_per_battery = 8
+
+def get_cell_temps(nbat=8):
+    global temp_slots_per_battery
     values = get_named_settings('BatteryTemp')
     if values is None:
         return None
-    return [v for v in values if v > -50]
-
+    cell_temps = []
+    bat_temps = []
+    n = 0
+    for v in values:
+        if v > -50:
+            cell_temps.append(v)
+        n += 1
+        if n % temp_slots_per_battery == 0:
+            bat_temps.append(cell_temps)
+            cell_temps = []
+        if n > nbat * temp_slots_per_battery:
+            break
+    return bat_temps
 
 ##################################################################################################
 # set work mode
@@ -2840,25 +2852,24 @@ def battery_info(log=0, plot=1, count=None):
         output_close()
         return None
     nv_cell = int(nv / nbat + 0.5)
-    cell_temps = get_cell_temps()
-    if cell_temps is None:
+    bat_cell_temps = get_cell_temps()
+    if bat_cell_temps is None:
         output_close()
         return None
-    nt = len(cell_temps)
-    nt_cell = int(nt / nbat)
     bat_cell_volts = []
-    bat_cell_temps = []
     bat_volts = []
     bat_temps = []
+    cell_temps = []
     for i in range(0, nbat):
         bat_cell_volts.append(cell_volts[i * nv_cell : (i + 1) * nv_cell])
-        bat_cell_temps.append(cell_temps[i * nt_cell : (i + 1) * nt_cell])
         bat_volts.append(sum(bat_cell_volts[i]))
         bat_temps.append(avg(bat_cell_temps[i]))
+        for t in bat_cell_temps[i]:
+            cell_temps.append(t)
     if log > 0:
         now = datetime.now()
         s = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')
-        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{nbat},{nv_cell},{nt_cell}"
+        s += f",{current_soc},{residual},{bat_volt},{bat_current},{bms_temperature},{nbat},{nv_cell}"
         for i in range(0, nbat):
             s +=f",{bat_volts[i]:.2f}"
         for i in range(0, nbat):
@@ -2890,10 +2901,13 @@ def battery_info(log=0, plot=1, count=None):
     if plot >= 1:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
-        x = range(1, len(bat_cell_volts[0]) + 1)
+        x_scale = 0
+        for i in range(0, len(bat_cell_volts)):
+            n = len(bat_cell_volts[i])
+            x_scale = max([x_scale, n])
+            plt.plot(range(1, n + 1), bat_cell_volts[i], label = f"Battery {i+1}")
+        x = range(1, x_scale + 1)
         plt.xticks(ticks=x, labels=x, fontsize=8)
-        for i in range(0, len(bat_volts)):
-            plt.plot(x, bat_cell_volts[i], label = f"Battery {i+1}")
         plt.title(f"Cell Volts by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
@@ -2902,11 +2916,14 @@ def battery_info(log=0, plot=1, count=None):
     if plot >= 2:
         print()
         plt.figure(figsize=(figure_width, figure_width/3))
-        x = range(1, len(bat_cell_temps[0]) + 1)
+        x_scale = 0
+        for i in range(0, len(bat_cell_temps)):
+            n = len(bat_cell_temps[i])
+            x_scale = max([x_scale, n])
+            plt.plot(range(1, n + 1), bat_cell_temps[i], label = f"Battery {i+1}")
+        x = range(1, x_scale + 1)
         plt.xticks(ticks=x, labels=x, fontsize=8)
-        for i in range(0, len(bat_tempss)):
-            plt.plot(x, bat_cell_temps[i], label = f"Battery {i+1}")
-        plt.title(f"Cell Temperature in °C by battery", fontsize=12)
+        plt.title(f"Cell Temperatures in °C by battery", fontsize=12)
         plt.legend(fontsize=8, loc='lower right')
         plt.grid()
         plot_show()
