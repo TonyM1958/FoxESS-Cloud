@@ -340,6 +340,7 @@ derate_step: 5                # step size for derating e.g. 21, 16, 11
 derating: [24, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C
 force: 1                      # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
 data_wrap: 6                  # data items to show per line
+target_soc: None              # target soc for charging
 ```
 These values are stored / available in f.charge_config.
 
@@ -634,7 +635,8 @@ This setting can be:
 
 # Version 
 
-1.3.5<br>
+1.3.6<br>
+Added 'target_soc' to charge_needed() settings
 Fix bat_info() giving incorrect temperatures when API returns 0 instead of -50 where there is no battery
 Fix key error when accessing cell volts and temps using agent / installer account.
 Ensure output is generated if get_battery() fails using battery_info().

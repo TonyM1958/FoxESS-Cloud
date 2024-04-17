@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  16 April 2024
+Updated:  17 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.3.5"
+version = "1.3.6"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2367,7 +2367,8 @@ charge_config = {
     'derate_step': 5,                 # scale for derating factors in C
     'derating': [24, 15, 10, 2],      # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
     'force': 1,                       # 0 = don't over-ride schedule, 1 = disable schedule
-    'data_wrap': 6                    # data to show per line
+    'data_wrap': 6,                   # data items to show per line
+    'target_soc': None                # set the target SoC for charging
 }
 
 # app key for charge_needed (used to send output via pushover)
@@ -2763,16 +2764,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             min_hour = h
         kwh_current += kwh_timed[i]
         h += 1
-    # work out what we need to add to stay above reserve and provide contingency
+    # work out what we need to add to stay above reserve and provide contingency or to hit target_soc
     output_spool(charge_needed_app_key)
     contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
-    day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
     start_residual = interpolate(time_to_start, bat_timed)      # residual when charging starts
+    target_soc = charge_config['target_soc'] if charge_config.get('target_soc') is not None else 0
+    target_kwh = capacity if target_soc > 100 else target_soc / 100 * capacity
+    if target_kwh > (start_residual + kwh_needed):
+        kwh_needed = target_kwh - start_residual
+    day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
     if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
-        output(f"\nNo charging is needed, lowest forecast SoC = {kwh_min / capacity * 100:3.0f}% (Residual = {kwh_min:.2f}kWh)")
-        output(f"  Contingency of {kwh_contingency:.2f}kWh ({contingency}%) is available at {hours_time(min_hour)} {day_when}")
+        output(f"\nNo charging is needed")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
@@ -2781,7 +2785,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "with charge added"
         if test_charge is None:
             min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
-            output(f"\nCharge of {kwh_needed:.2f} kWh is needed for a contingency of {kwh_contingency:.2f} kWh ({contingency}%) at {hours_time(min_hour_adjust)} {day_when}")
+            output(f"\nCharge of {kwh_needed:.2f}kWh is needed")
         else:
             output(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
