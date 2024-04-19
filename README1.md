@@ -635,7 +635,9 @@ This setting can be:
 
 # Version 
 
-1.3.6<br>
+1.3.7<br>
+Refactor debug messaging.
+Simplify charge_needed() output.
 Added 'target_soc' to charge_needed() settings
 Fix bat_info() giving incorrect temperatures when API returns 0 instead of -50 where there is no battery
 Fix key error when accessing cell volts and temps using agent / installer account.

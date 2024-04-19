@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  17 April 2024
+Updated:  19 April 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.4"
+version = "2.2.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -155,15 +155,13 @@ def signed_header(path, login = 0):
     headers['Content-Type'] = 'application/json'
     if login == 0:
         headers['Signature'] = hashlib.md5(fr"{path}\r\n{headers['Token']}\r\n{headers['Timestamp']}".encode('UTF-8')).hexdigest()
-    if debug_setting > 2:
-        output(f"path = {path}")
-        output(f"headers = {headers}")
+    output(f"path = {path}", 3)
+    output(f"headers = {headers}", 3)
     return headers
 
 def signed_get(path, params = None, login = 0):
     global fox_domain, debug_setting, http_timeout, http_tries, response_time
-    if debug_setting > 2:
-        output(f"params = {params}")
+    output(f"params = {params}", 3)
     message = None
     for i in range(0, http_tries):
         headers = signed_header(path, login)
@@ -174,16 +172,14 @@ def signed_get(path, params = None, login = 0):
             return response
         except Exception as e:
             message = str(e)
-            if debug_setting > 0:
-                output(f"** signed_get(): {message}\n  path = {path}\n  headers = {headers}")
+            output(f"** signed_get(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
 def signed_post(path, body = None, login = 0):
     global fox_domain, debug_setting, http_timeout, http_tries, response_time
     data = json.dumps(body)
-    if debug_setting > 2:
-        output(f"body = {data}")
+    output(f"body = {data}", 3)
     message = None
     for i in range(0, http_tries):
         headers = signed_header(path, login)
@@ -194,8 +190,7 @@ def signed_post(path, body = None, login = 0):
             return response
         except Exception as e:
             message = str(e)
-            if debug_setting > 0:
-                output(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
+            output(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
 
@@ -208,8 +203,7 @@ messages = None
 
 def get_messages():
     global debug_setting, messages, user_agent
-    if debug_setting > 1:
-        output(f"getting messages")
+    output(f"getting messages", 2)
     headers = {'User-Agent': user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = signed_get(path="/c/v0/errors/message", login=1)
     if response.status_code != 200:
@@ -243,8 +237,7 @@ def get_access_count():
     if api_key is None:
         output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
-    if debug_setting > 1:
-        output(f"getting access info")
+    output(f"getting access info", 2)
     response = signed_get(path="/op/v0/user/getAccessCount")
     if response.status_code != 200:
         output(f"** get_access_count() got response code {response.status_code}: {response.reason}")
@@ -271,8 +264,7 @@ def get_vars():
         get_messages()
     if var_list is not None:
         return var_list
-    if debug_setting > 1:
-        output(f"getting variables")
+    output(f"getting variables", 2)
     response = signed_get(path="/op/v0/device/variable/get")
     if response.status_code != 200:
         output(f"** get_vars() got response code {response.status_code}: {response.reason}")
@@ -302,8 +294,7 @@ def get_site(name=None):
         return None
     if site is not None and name is None:
         return site
-    if debug_setting > 1:
-        output(f"getting sites")
+    output(f"getting sites", 2)
     site = None
     station_id = None
     body = {'currentPage': 1, 'pageSize': 100 }
@@ -362,8 +353,7 @@ def get_logger(sn=None):
         return None
     if logger is not None and sn is None:
         return logger
-    if debug_setting > 1:
-        output(f"getting loggers")
+    output(f"getting loggers", 2)
     body = {'pageSize': 100, 'currentPage': 1}
     response = signed_post(path="/op/v0/module/list", body=body)
     if response.status_code != 200:
@@ -412,8 +402,7 @@ def get_device(sn=None):
             return device
         if device_sn[:len(sn)].upper() == sn.upper():
             return device
-    if debug_setting > 1:
-        output(f"getting device")
+    output(f"getting device", 2)
     if sn is None and device_sn is not None and len(device_sn) == 15:
         sn = device_sn
     # get device list
@@ -504,8 +493,7 @@ def get_generation(update=1):
     global device_sn, device
     if get_device() is None:
         return None
-    if debug_setting > 1:
-        output(f"getting generation")
+    output(f"getting generation", 2)
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/generation", params=params)
     if response.status_code != 200:
@@ -535,8 +523,7 @@ def get_battery(v = None):
     global device_sn, battery, debug_setting, residual_scaling
     if get_device() is None:
         return None
-    if debug_setting > 1:
-        output(f"getting battery")
+    output(f"getting battery", 2)
     if v is None:
         v = battery_vars
     result = get_real(v)
@@ -556,8 +543,7 @@ def get_charge():
         return None
     if battery_settings is None:
         battery_settings = {}
-    if debug_setting > 1:
-        output(f"getting charge times")
+    output(f"getting charge times", 2)
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/battery/forceChargeTime/get", params=params)
     if response.status_code != 200:
@@ -630,10 +616,9 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         battery_settings['times']['startTime2']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
         battery_settings['times']['endTime2']['hour'] = int(en2)
         battery_settings['times']['endTime2']['minute'] = int(60 * (en2 - int(en2)) + 0.5)
-    if debug_setting > 0:
-        output(f"\nSetting time periods:")
-        output(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}")
-        output(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}")
+    output(f"\nSetting time periods:", 1)
+    output(f"   Time Period 1 = {time_period(battery_settings['times'], 1)}", 1)
+    output(f"   Time Period 2 = {time_period(battery_settings['times'], 2)}", 1)
     # set charge times
     body = {'sn': device_sn}
     for k in ['enable1', 'startTime1', 'endTime1', 'enable2', 'startTime2', 'endTime2']:
@@ -649,8 +634,8 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         else:
             output(f"** set_charge(), {errno_message(response)}")
         return None
-    elif debug_setting > 1:
-        output(f"success") 
+    else:
+        output(f"success", 2) 
     return battery_settings
 
 ##################################################################################################
@@ -663,8 +648,7 @@ def get_min():
         return None
     if battery_settings is None:
         battery_settings = {}
-    if debug_setting > 1:
-        output(f"getting min soc")
+    output(f"getting min soc", 2)
     params = {'sn': device_sn}
     response = signed_get(path="/op/v0/device/battery/soc/get", params=params)
     if response.status_code != 200:
@@ -711,8 +695,7 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
         body['minSocOnGrid'] = battery_settings['minSocOnGrid']
     if battery_settings.get('minSoc') is not None:
         body['minSoc'] = battery_settings['minSoc']
-    if debug_setting > 0:
-        output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}")
+    output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}", 1)
     response = signed_post(path="/op/v0/device/battery/soc/set", body=body)
     if response.status_code != 200:
         output(f"** set_min() got response code {response.status_code}: {response.reason}")
@@ -769,8 +752,7 @@ def get_ui():
     if get_device() is None:
         return None
     if remote_settings is None:
-        if debug_setting > 1:
-            output(f"getting ui settings")
+        output(f"getting ui settings", 2)
         params = {'id': device_id}
         response = signed_get(path="/generic/v0/device/setting/ui", params=params)
         if response.status_code != 200:
@@ -788,13 +770,15 @@ def get_ui():
         volt_keys = []
         for p in remote_settings['parameters']:
             if p['name'][:11] == 'BatteryVolt':    # merge BatteryVolts
+                output(f"  found {p['name']} with key {p['key']}", 2)
                 volt_n += 1
                 volt_keys.append(p['key'])
                 if volt_n == 3:
                     named_settings['BatteryVolt'] = {'keys': volt_keys, 'type': 'list', 'valueType': 'float', 'unit': p['properties'][0]['unit']}
                 elif volt_n > 3:
-                    print(f"** get_ui(): more than 3 groups found for BatteryVolt")
+                    print(f"** get_ui(): more than 3 groups found for BatteryVolt, n={volt_n}")
             elif p['name'][:11] == 'BatteryTemp':
+                output(f"  found {p['name']} with key {p['key']}", 2)
                 named_settings['BatteryTemp'] = {'keys': p['key'], 'type': 'list', 'valueType': 'int', 'unit': p['properties'][0]['unit']}
             else:
                 items = []
@@ -829,8 +813,7 @@ def get_remote_settings(key):
     global token, device_id, debug_setting, messages
     if get_device() is None:
         return None
-    if debug_setting > 1:
-        output(f"getting remote settings")
+    output(f"getting remote settings", 2)
     if key is None:
         return None
     if type(key) is list:
@@ -872,6 +855,7 @@ def get_named_settings(name):
     if keys is None:
         output(f"** get_named_settings(): no keys for name: {name}")
         return None
+    output(f"getting named_settings for {name} using {keys}", 2)
     result = get_remote_settings(keys)
     if result is None:
         output(f"** get_named_settings(): no result for {name} using key: {keys}")
@@ -956,8 +940,7 @@ def set_work_mode(mode, force = 0):
     if debug_setting > 1:
         output(f"set_work_mode(): {mode}")
         return None
-    if debug_setting > 0:
-        output(f"\nSetting work mode: {mode}")
+    output(f"\nSetting work mode: {mode}", 1)
     body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
     response = signed_post(path="/op/v0/device/setting/set", body=body)
     if response.status_code != 200:
@@ -988,8 +971,7 @@ def get_flag():
     if device.get('function') is None or device['function'].get('scheduler') is None or device['function']['scheduler'] == False:
         output(f"** get_schedule() schedules are not supported")
         return None
-    if debug_setting > 1:
-        output(f"getting flag")
+    output(f"getting flag", 2)
     body = {'deviceSN': device_sn}
     response = signed_post(path="/op/v0/device/scheduler/get/flag", body=body)
     if response.status_code != 200:
@@ -1014,8 +996,7 @@ def get_schedule():
     global device_sn, schedule, debug_setting, work_modes
     if get_flag() is None:
         return None
-    if debug_setting > 1:
-        output(f"getting schedule")
+    output(f"getting schedule", 2)
     body = {'deviceSN': device_sn}
     response = signed_post(path="/op/v0/device/scheduler/get", body=body)
     if response.status_code != 200:
@@ -1065,15 +1046,14 @@ def set_schedule(enable=1, groups=None):
     global token, device_sn, debug_setting, schedule
     if get_flag() is None:
         return None
+    output(f"set_schedule(): enable = {enable}, groups = {groups}", 2)
     if debug_setting > 1:
-        output(f"set_schedule(): enable = {enable}, groups = {groups}")
         return None
     if groups is not None:
         if type(groups) is not list:
             groups = [groups]
         body = {'deviceSN': device_sn, 'groups': groups}
-        if debug_setting > 0:
-            output(f"\nSaving schedule")
+        output(f"\nSaving schedule", 1)
         response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
@@ -1083,8 +1063,7 @@ def set_schedule(enable=1, groups=None):
             output(f"** set_schedule(), enable, {errno_message(response)}")
             return None
         schedule['groups'] = groups
-    if debug_setting > 0:
-        output(f"\nSetting schedule enable flag to {enable}")
+    output(f"\nSetting schedule enable flag to {enable}", 1)
     body = {'deviceSN': device_sn, 'enable': enable}
     response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
@@ -1115,8 +1094,7 @@ def get_real(v = None):
         state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
         output(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
         return None
-    if debug_setting > 1:
-        output(f"getting real-time data")
+    output(f"getting real-time data", 2)
     body = {'deviceSN': device_sn}
     if v is not None:
         body['variables'] = v if type(v) is list else [v]
@@ -1195,8 +1173,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             output(f"** get_history(): invalid variable '{var}'")
             output(f"var_list = {var_list}")
             return None
-    if debug_setting > 1:
-        output(f"getting history data")
+    output(f"getting history data", 2)
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
         if t_begin is None:
@@ -1240,8 +1217,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             plot_history(result, plot)
         return result
     # integrate kW to kWh based on 5 minute samples
-    if debug_setting > 2:
-        output(f"calculating summary data")
+    output(f"calculating summary data", 3)
     # copy generationPower to produce inputPower data
     input_name = None
     if 'generationPower' in v:
@@ -1263,8 +1239,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
                 sample_time = round(60 * sample_rounding * (time_hours(var['data'][-1]['time'][11:]) - time_hours(var['data'][0]['time'][11:])) / (len(var['data']) - 1), 0) / sample_rounding
             else:
                 sample_time = 5.0
-            if debug_setting > 1:
-                output(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes")
+            output(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes", 2)
         sum = 0.0
         count = 0
         max = None
@@ -1277,8 +1252,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             h = time_hours(y['time'][11:19]) # time
             value = y['value']
             if value is None:
-                if debug_setting > 0:
-                    output(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}")
+                output(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}", 1)
                 continue
             sum += value
             count += 1
@@ -1435,8 +1409,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             output(f"** get_report(): invalid variable '{var}'")
             output(f"{report_vars}")
             return None
-    if debug_setting > 1:
-        output(f"getting report data")
+    output(f"getting report data", 2)
     current_date = query_date(None)
     main_date = query_date(d)
     if main_date is None:
@@ -1528,8 +1501,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         min = None
         for j, value in enumerate(var['values']):
             if value is None:
-                if debug_setting > 0:
-                    output(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}")
+                output(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}", 1)
                 continue
             count += 1
             sum += value
@@ -1573,8 +1545,7 @@ def plot_report(result, plot=1, station=0):
             for i in range(1, len(v['values'])+1):
                 if i not in index:
                     index.append(i)
-    if debug_setting > 2:
-        output(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}")
+    output(f"vars = {vars}, dates = {dates}, types = {types}, index = {index}", 2)
     if len(vars) == 0:
         return
     # plot variables by date with the same units on the same charts
@@ -1897,8 +1868,7 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     update_time = time_hours(update_time) if type(update_time) is str else 17 if update_time is None else update_time
     today = datetime.strftime(now + timedelta(days=0 if hour_now >= update_time else -1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= update_time else 0), '%Y-%m-%d')
-    if debug_setting > 1:
-        output(f"  datetime = {today} {hours_time(hour_now)}")
+    output(f"  datetime = {today} {hours_time(hour_now)}", 2)
     # get product and region
     product = tariff_config['product'].upper()
     region = tariff_config['region'].upper()
@@ -1913,9 +1883,8 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     period_from = today + zulu_hour
     period_to = tomorrow + zulu_hour
     params = {'period_from': period_from, 'period_to': period_to }
-    if debug_setting > 1:
-        output(f"time_offset = {time_offset}, time_shift = {time_shift}")
-        output(f"period_from = {period_from}, period_to = {period_to}")
+    output(f"time_offset = {time_offset}, time_shift = {time_shift}", 2)
+    output(f"period_from = {period_from}, period_to = {period_to}", 2)
     response = requests.get(url, params=params)
     if response.status_code != 200:
         output(f"** get_agile_period() response code from Octopus API {response.status_code}: {response.reason}")
@@ -1935,8 +1904,7 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
     start_i = int(round_time(start_at - 23) * 2)
     end_i = int(round_time(end_by - 23) * 2)
     end_i = 48 if end_i == 0 or end_i > 48 else end_i
-    if debug_setting > 1:
-        output(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}, duration = {duration}, span = {span}")
+    output(f"start_at = {start_at}, end_by = {end_by}, start_i = {start_i}, end_i = {end_i}, duration = {duration}, span = {span}", 2)
     if (start_i + span) > 48 or start_i > end_i:
         output(f"** get_agile_period(): invalid times {hours_time(start_at)} - {hours_time(end_by)}. Must start from 23:00 today and end by 23:00 tomorrow")
         return None
@@ -2269,10 +2237,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         else:
             charge_config[key] = value
             s += f"\n  {key} = {value}"
-    if len(s) > 0 and debug_setting > 1:
-        print(f"Parameters: {s}")
-    if tariff is not None and debug_setting > 1:
-        print(f"  tariff = {tariff['name']}")
+    if len(s) > 0:
+        output(f"Parameters: {s}", 2)
+    if tariff is not None:
+        output(f"  tariff = {tariff['name']}", 2)
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
@@ -2289,8 +2257,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
     hour_now = now.hour + now.minute / 60
-    if debug_setting > 1:
-        print(f"  datetime = {today} {hours_time(hour_now)}")
+    output(f"  datetime = {today} {hours_time(hour_now)}", 2)
     yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1), '%Y-%m-%d')
     day_tomorrow = day_names[(now.weekday() + 1) % 7]
@@ -2340,14 +2307,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
     elif type(full_charge) is str:          # value = daily or day of week
         full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
-    if debug_setting > 2:
-        print(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}")
-        print(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}")
-        print(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}")
-        print(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}")
-        print(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}")
-        print(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}")
-        print(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}")
+    output(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}", 3)
+    output(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}", 3)
+    output(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}", 3)
+    output(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}", 3)
+    output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}", 3)
+    output(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}", 3)
+    output(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}", 3)
     # get device and battery info from inverter
     if test_soc is None:
         if charge_config.get('min_soc') is not None:
@@ -2357,7 +2323,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             if battery_settings.get('minSocOnGrid') is not None:
                 min_soc = battery_settings['minSocOnGrid']
             else:
-                print(f"\nMin SoC On Grid is not available. Please provide % via 'min_soc' parameter")
+                output(f"\nMin SoC On Grid is not available. Please provide % via 'min_soc' parameter")
                 return None
         get_battery()
         current_soc = battery['soc']
@@ -2371,7 +2337,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         elif residual is not None and residual > 0.2 and current_soc is not None and current_soc > 1:
             capacity = residual * 100 / current_soc
         else:
-            print(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
+            output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
     else:
         current_soc = test_soc
@@ -2388,48 +2354,48 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_resistance = charge_config['bat_resistance'] * bat_volt / volt_nominal
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
-    print(f"\nBattery Info:")
-    print(f"  Capacity:    {capacity:.1f}kWh")
-    print(f"  Residual:    {residual:.1f}kWh")
-    print(f"  Voltage:     {bat_volt:.1f}V")
-    print(f"  Current:     {bat_current:.1f}A")
-    print(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    print(f"  Current SoC: {current_soc}%")
-    print(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
-    print(f"  Temperature: {temperature:.1f}°C")
-    print(f"  Resistance:  {bat_resistance:.2f} ohms")
-    print(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
+    output(f"\nBattery Info:")
+    output(f"  Capacity:    {capacity:.1f}kWh")
+    output(f"  Residual:    {residual:.1f}kWh")
+    output(f"  Voltage:     {bat_volt:.1f}V")
+    output(f"  Current:     {bat_current:.1f}A")
+    output(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
+    output(f"  Current SoC: {current_soc}%")
+    output(f"  Min SoC:     {min_soc}% ({reserve:.1f}kWh)")
+    output(f"  Temperature: {temperature:.1f}°C")
+    output(f"  Resistance:  {bat_resistance:.2f} ohms")
+    output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
     # get power and charge current for device
     device_power = device.get('power')
     device_current = device.get('max_charge_current')
     model = device.get('deviceType') if device.get('deviceType') is not None else 'unknown'
     if device_power is None or device_current is None:
-        print(f"** could not get parameters for {model} inverter, using default rating of 3.68kW")
+        output(f"** could not get parameters for {model} inverter, using default rating of 3.68kW")
         device_power = 3.68
         device_current = 26
     # charge times are derated based on temperature
     charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
     derate_temp = charge_config['derate_temp']
     if temperature > 36:
-        print(f"\nHigh battery temperature may affect the charge rate")
+        output(f"\nHigh battery temperature may affect the charge rate")
     elif round(temperature, 0) <= derate_temp:
-        print(f"\nLow battery temperature may affect the charge rate")
+        output(f"\nLow battery temperature may affect the charge rate")
         derating = charge_config['derating']
         derate_step = charge_config['derate_step']
         i = int((derate_temp - temperature) / (derate_step if derate_step is not None and derate_step > 0 else 1))
         if derating is not None and type(derating) is list and i < len(derating):
             derated_current = derating[i]
             if derated_current < charge_current:
-                print(f"  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
+                output(f"  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
                 charge_current = derated_current
         else:
             force_charge = 2
-            print(f"  Full charge set")
+            output(f"  Full charge set")
     # work out charge limit = max power going into the battery after ac conversion losses
     charge_limit = device_power * charge_config['grid_loss']
     charge_power = charge_current * (bat_ocv + charge_current * bat_resistance) / 1000
     if charge_power < 0.1:
-        print(f"** charge_current is too low ({charge_current:.1f}A)")
+        output(f"** charge_current is too low ({charge_current:.1f}A)")
     elif charge_power < charge_limit:
         charge_limit = charge_power
     # work out losses when charging / force discharging
@@ -2450,24 +2416,23 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / discharge_loss
     current_mode = get_work_mode()
-    if debug_setting > 2:
-        print(f"\ncharge_config = {json.dumps(charge_config, indent=2)}")
-    print(f"\nDevice Info:")
-    print(f"  Model:     {model}")
-    print(f"  Rating:    {device_power:.2f}kW")
-    print(f"  Export:    {export_power:.2f}kW")
-    print(f"  Charge:    {charge_current:.1f}A, {charge_limit:.2f}kW, {charge_loss * 100:.1f}% efficient")
-    print(f"  Discharge: {discharge_current:.1f}A, {discharge_limit:.2f}kW, {discharge_loss * 100:.1f}% efficient")
-    print(f"  Inverter:  {inverter_power:.0f}W power consumption")
-    print(f"  BMS:       {bms_power:.0f}W power consumption")
+    output(f"\ncharge_config = {json.dumps(charge_config, indent=2)}", 3)
+    output(f"\nDevice Info:")
+    output(f"  Model:     {model}")
+    output(f"  Rating:    {device_power:.2f}kW")
+    output(f"  Export:    {export_power:.2f}kW")
+    output(f"  Charge:    {charge_current:.1f}A, {charge_limit:.2f}kW, {charge_loss * 100:.1f}% efficient")
+    output(f"  Discharge: {discharge_current:.1f}A, {discharge_limit:.2f}kW, {discharge_loss * 100:.1f}% efficient")
+    output(f"  Inverter:  {inverter_power:.0f}W power consumption")
+    output(f"  BMS:       {bms_power:.0f}W power consumption")
     if current_mode is not None:
-        print(f"  Work Mode: {current_mode}")
+        output(f"  Work Mode: {current_mode}")
     # get consumption data
     annual_consumption = charge_config['annual_consumption']
     if annual_consumption is not None:
         consumption = annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality) * 12
         consumption_by_hour = daily_consumption
-        print(f"\nEstimated consumption: {consumption:.1f}kWh")
+        output(f"\nEstimated consumption: {consumption:.1f}kWh")
     else:
         consumption_days = charge_config['consumption_days']
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
@@ -2479,9 +2444,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             history = get_report('day', d=date_list(span='week', e=last_date, today=1)[-consumption_days:], v='loads')
         (consumption, consumption_by_hour) = report_value_profile(history)
         if consumption is None:
-            print(f"No consumption data available")
+            output(f"No consumption data available")
             return None
-        print(f"\nConsumption (kWh):")
+        output(f"\nConsumption (kWh):")
         s = ""
         for h in history:
             s += f"  {h['date']}: {h['total']:4.1f},"
@@ -2499,14 +2464,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             solcast_value = fsolcast.daily[forecast_day]['kwh']
             solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, hour_now, run_time, time_offset)
             if charge_pm:
-                print(f"\nSolcast forecast for {today} = {fsolcast.daily[today]['kwh']:.1f}, {tomorrow} = {fsolcast.daily[tomorrow]['kwh']:.1f}")
+                output(f"\nSolcast forecast for {today} = {fsolcast.daily[today]['kwh']:.1f}, {tomorrow} = {fsolcast.daily[tomorrow]['kwh']:.1f}")
             else:
-                print(f"\nSolcast forecast for {forecast_day} = {solcast_value:.1f}kWh")
+                output(f"\nSolcast forecast for {forecast_day} = {solcast_value:.1f}kWh")
             adjust = charge_config['solcast_adjust']
             if adjust != 100:
                 solcast_value = solcast_value * adjust / 100
                 solcast_timed = [v * adjust / 100 for v in solcast_timed]
-                print(f"  Adjusted forecast: {solcast_value:.1f}kWh ({adjust}%)")
+                output(f"  Adjusted forecast: {solcast_value:.1f}kWh ({adjust}%)")
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
@@ -2516,16 +2481,16 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             solar_value = fsolar.daily[forecast_day]['kwh']
             solar_timed = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time, time_offset)
             if charge_pm:
-                print(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
+                output(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
             else:
-                print(f"\nSolar forecast for {forecast_day} = {solar_value:.1f}kWh")
+                output(f"\nSolar forecast for {forecast_day} = {solar_value:.1f}kWh")
             adjust = charge_config['solar_adjust']
             if adjust != 100:
                 solar_value = solar_value * adjust / 100
                 solar_timed = [v * adjust / 100 for v in solar_timed]
-                print(f"  Adjusted forecast: {solar_value:.1f}kWh ({adjust}%)")
+                output(f"  Adjusted forecast: {solar_value:.1f}kWh ({adjust}%)")
     if solcast_value is None and solar_value is None and debug_setting > 1:
-        print(f"\nNo forecasts available at this time")
+        output(f"\nNo forecasts available at this time")
     # get generation data
     generation = None
     last_date = today if hour_now >= charge_config['use_today'] else yesterday
@@ -2540,31 +2505,29 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             if day.get('kwh') is not None and day.get('kwh_neg') is not None:
                 pv_history[date] += day['kwh_neg'] / 0.92 if day['variable'] == 'meterPower2' else day['kwh']
         pv_sum = sum([pv_history[d] for d in sorted(pv_history.keys())[-gen_days:]])
-        print(f"\nGeneration (kWh):")
+        output(f"\nGeneration (kWh):")
         s = ""
         for d in sorted(pv_history.keys())[-gen_days:]:
             s += f"  {d}: {pv_history[d]:4.1f},"
         print(s[:-1])
         generation = pv_sum / gen_days
-        print(f"  Average of last {gen_days} days: {generation:.1f}kWh")
+        output(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
     quarter = now.month // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
     sun_profile = seasonal_sun[quarter]['sun']
     sun_sum = sum(sun_profile)
     sun_timed = timed_list(sun_profile, hour_now, run_time)
+    output_spool(charge_needed_app_key)
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        output(f"\nUsing {expected:.1f}kWh manual forecast with {sun_name} sun and {consumption:.1f}kWh consumption")
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
-        output(f"\nUsing {expected:.1f}kWh Solcast forecast and {consumption:.1f}kWh consumption for {forecast_day}")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
-        output(f"\nUsing {expected:.1f}kWh Solar forecast and {consumption:.1f}kWh consumption for {forecast_day}")
     elif generation is None or generation == 0.0:
         output(f"\nNo generation data available")
         output_close()
@@ -2572,9 +2535,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     else:
         expected = generation
         generation_timed = [expected * x / sun_sum for x in sun_timed]
-        output(f"\nUsing {expected:.1f}kWh generation with {sun_name} sun and {consumption:.1f}kWh consumption")
         if charge_config['forecast_selection'] == 1 and update_settings > 0:
-            output(f"  Settings will not be updated when forecast is not available")
+            output(f"\nSettings will not be updated when forecast is not available")
             update_settings = 2 if update_settings == 3 else 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] for x in generation_timed]
@@ -2586,8 +2548,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # get work mode and check for changes
         new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
         if new_work_mode is not None and new_work_mode != work_mode:
-            if debug_setting > 1:
-                output(f"  {hours_time(h)}: {new_work_mode} work mode")
+            output(f"  {hours_time(h)}: {new_work_mode} work mode", 2)
             work_mode = new_work_mode
         # cap charge / discharge power
         charge_timed[i] = charge_limit if charge_timed[i] > charge_limit else charge_timed[i]
@@ -2632,7 +2593,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_current += kwh_timed[i]
         h += 1
     # work out what we need to add to stay above reserve and provide contingency or to hit target_soc
-    output_spool(charge_needed_app_key)
     contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     kwh_contingency = consumption * contingency / 100
     kwh_needed = reserve + kwh_contingency - kwh_min
@@ -2643,7 +2603,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_needed = target_kwh - start_residual
     day_when = 'today' if min_hour < 24 else 'tomorrow' if min_hour <= 48 else 'day after tomorrow'
     if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
-        output(f"\nNo charging is needed")
+        output(f"\nNo charging is needed (forecast = {expected:.1f}kWh, consumption = {consumption:.1f}kWh)")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
@@ -2652,7 +2612,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "with charge added"
         if test_charge is None:
             min_hour_adjust = min_hour - hour_adjustment if min_hour >= change_hour else 0
-            output(f"\nCharge of {kwh_needed:.2f}kWh is needed")
+            output(f"\nCharge of {kwh_needed:.2f}kWh is needed (forecast = {expected:.1f}kWh, consumption = {consumption:.1f}kWh)")
         else:
             output(f"\nTest charge of {test_charge}kWh")
             charge_message = "** test charge **"
@@ -2669,7 +2629,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 output(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
-            output(f"  Minimum charge time used")
+#            output(f"  Minimum charge time used")
         end1 = round_time(start_at + hours)
         # rework charge and discharge and work out grid consumption
         start_timed = time_to_start      # relative start and end time 
@@ -2689,8 +2649,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 t = 1.0                             # complete hour inside start and end
             else:
                 t = 0.0                             # complete hour before start or after end
-            if debug_setting > 2:
-                output(f"i = {i}, j = {j}, t = {t}")
+            output(f"i = {i}, j = {j}, t = {t}", 3)
             charge_added = charge_limit * t
             charge_timed[i] = charge_timed[i] + charge_added if charge_timed[i] + charge_added < charge_limit else charge_limit
             discharge_timed[i] *= (1-t)
@@ -2723,7 +2682,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
-        output(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
+#        output(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
         output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
         output(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
@@ -2753,17 +2712,17 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         x_timed = [i for i in range(0, run_time)]
         plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=False) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
-            title = f"Battery SoC % ({charge_message}, forecast={expected:.1f}kWh, consumption={consumption:.1f}kWh)"
+            title = f"Battery SoC % ({charge_message})"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
         else:
-            title = f"Energy Flow kWh ({charge_message}, forecast={expected:.1f}kWh, consumption={consumption:.1f}kWh)"
+            title = f"Energy Flow kWh ({charge_message})"
             plt.plot(x_timed, bat_timed, label='Battery', color='blue')
             plt.plot(x_timed, generation_timed, label='Generation', color='green')
             plt.plot(x_timed, consumption_timed, label='Consumption', color='red')
 #            if kwh_needed > 0:
 #                plt.plot(x_timed, bat_timed_old, label='Battery (before charging)', color='blue', linestyle='dotted')
             if show_plot == 3:
-                plt.plot(x_timed, charge_timed, label='Charge', color='orange', linestyle='dotted')
+                plt.plot(x_timed, charge_timed, label='Charge Avail.', color='orange', linestyle='dotted')
                 plt.plot(x_timed, discharge_timed, label='Discharge', color='brown', linestyle='dotted')
         plt.title(title, fontsize=10)
         plt.grid()
@@ -3692,8 +3651,10 @@ def output_message(app_key=None, message=None, plot=0):
     return None
 
 # add to spooled_output
-def output(s=""):
-    global spool_mode, spooled_output
+def output(s="", log_level=None):
+    global spool_mode, spooled_output, debug_setting
+    if log_level is not None and debug_setting < log_level:
+        return
     # keep output stream up to date in case of problem / exception
     print(s)
     # spool output for pushover if needed
