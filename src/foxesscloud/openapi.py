@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  19 April 2024
+Updated:  12 May 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.5"
+version = "2.2.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -638,6 +638,22 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
         output(f"success", 2) 
     return battery_settings
 
+def charge_strategy(st1 = None, en1 = None, st2 = None, en2 = None, adjust=0, min_soc=None):
+    output(f"\nConfiguring schedule", 1)
+    periods = set_strategy()
+    if st1 is not None and en1 is not None and st1 != en1:
+        st1 = round_time(time_hours(st1) + adjust)
+        en1 = round_time(time_hours(en1) + adjust)
+        output(f"   Force Charge from {hours_time(st1)} to {hours_time(en1)}", 1)
+        periods.append(set_group(start = st1, end = en1, mode = 'ForceCharge'))
+    if st2 is not None and en2 is not None and st2 != en2:
+        st2 = round_time(time_hours(st2) + adjust)
+        en2 = round_time(time_hours(en2) + adjust)
+        mode = 'SelfUse'
+        output(f"   {mode} from {hours_time(st2)} to {hours_time(en2)} with min_soc = {min_soc}%", 1)
+        periods.append(set_group(start = st2, end = en2, mode = mode, fdsoc = min_soc))
+    return periods
+
 ##################################################################################################
 # get min soc settings and save in battery_settings
 ##################################################################################################
@@ -1018,16 +1034,20 @@ def get_schedule():
 # set schedule
 ##################################################################################################
 
-# create time segment structure
-def set_group(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0, enable=1):
+# create time segment structure. Note: end time is exclusive.
+def set_group(start, end, mode=None, min_soc=None, fdsoc=None, fdpwr=None, enable=1):
     if start is None or end is None:
         return None
     start = time_hours(start)
     end = time_hours(end)
+    mode = 'SelfUse' if mode is None else mode
+    min_soc = 10 if min_soc is None else min_soc
+    fdsoc = 10 if fdsoc is None else fdsoc
+    fdpwr = 0 if fdpwr is None else fdpwr
     if mode not in work_modes:
         output(f"** mode must be one of {work_modes}")
         return None
-    device_power = device.get('power')
+    device_power = device.get('power') if device is not None else None
     if device_power is None:
         device_power = 12000
     if fdpwr < 0 or fdpwr > 12000:
@@ -1037,23 +1057,42 @@ def set_group(start, end, mode, min_soc=10, fdsoc=10, fdpwr=0, enable=1):
         output(f"** fdsoc must between 10 and 100")
         return None
     start_hour, start_minute = split_hours(start)
-    end_hour, end_minute = split_hours(end)
+    end_hour, end_minute = split_hours(end - 1/60)
     group = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
     return group
 
+# create groups from a list of strategy periods
+def set_strategy(strategy=None):
+    global tariff
+    if strategy is None and tariff is not None:
+        strategy = tariff.get('strategy')
+    if strategy is None:
+        return []
+    if type(strategy) is not list:
+        strategy = [strategy]
+    groups = []
+    for s in strategy:
+        p = set_group(s['start'], s['end'], s.get('mode'), s.get('min_soc'), s.get('fdsoc'), s.get('fdpwr'))
+        if p is not None:
+            groups.append(p)
+    return groups
+
 # set a schedule from a period or list of time segment groups
-def set_schedule(enable=1, groups=None):
+def set_schedule(groups=None, enable=1):
     global token, device_sn, debug_setting, schedule
     if get_flag() is None:
         return None
     output(f"set_schedule(): enable = {enable}, groups = {groups}", 2)
     if debug_setting > 1:
         return None
+    if enable == 0:
+        output(f"\nDisabling schedule", 1)
+    else:
+        output(f"\nEnabling schedule", 1)
     if groups is not None:
         if type(groups) is not list:
             groups = [groups]
         body = {'deviceSN': device_sn, 'groups': groups}
-        output(f"\nSaving schedule", 1)
         response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
@@ -1063,7 +1102,6 @@ def set_schedule(enable=1, groups=None):
             output(f"** set_schedule(), enable, {errno_message(response)}")
             return None
         schedule['groups'] = groups
-    output(f"\nSetting schedule enable flag to {enable}", 1)
     body = {'deviceSN': device_sn, 'enable': enable}
     response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
@@ -1746,8 +1784,9 @@ octopus_flux = {
     'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'forecast_times': [22, 23],                                 # hours in a day to get a forecast
-    'work_hours': [                                             # timed work mode settings
-        {'mode': 'SelfUse', 'start': 7, 'end': 16}, {'mode': 'Feedin', 'start': 16, 'end': 7}]
+    'strategy': [                                               # timed work mode settings
+        {'start': 5, 'end': 12, 'mode': 'SelfUse'},
+        {'start': 16, 'end': 23, 'mode': 'Feedin'}]
     }
 
 # time periods for Intelligent Octopus
@@ -2008,7 +2047,7 @@ def set_tariff_period(period=None, tariff=octopus_flux, d=None):
     return 1
 
 # set tariff and AM/PM charge time period
-def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, forecast_times=None, work_times=None, d=None, **settings):
+def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=None, forecast_times=None, strategy=None, d=None, **settings):
     global debug_setting, agile_octopus, tariff, tariff_list
     print(f"\n---------------- set_tariff -----------------")
     # validate parameters
@@ -2059,15 +2098,11 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
             forecast_hours.append(time_hours(t))
         use['forecast_times'] = forecast_hours
         print(f"\nForecast times set to {forecast_times}")
-    if work_times is not None:
-        if type(work_times) is not None:
-            work_times = [work_times]
-        work_hours = []
-        for d in work_times:
-            (mode, start, end) = d
-            work_hours.append({'mode': mode, 'start': time_hours(start), 'end': time_hours(end)})
-        use['work_hours'] = work_hours
-        print(f"\nWork mode times set to {work_hours}")
+    if strategy is not None:
+        if type(strategy) is not list:
+            strategy = [strategy]
+        use['strategy'] = strategy
+        print(f"\nStrategy set to {strategy}")
     if update == 1:
         tariff = use
         print(f"\nTariff set to {tariff['name']}")
@@ -2077,9 +2112,9 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
 
 # get work mode for a time of day based on the tariff:
 def timed_work_mode(h, default = 'SelfUse'):
-    if tariff is None or tariff.get('work_hours') is None:
+    if tariff is None or tariff.get('strategy') is None:
         return default
-    for d in tariff['work_hours']:
+    for d in tariff['strategy']:
         if hour_in(h, d):
             return d['mode']
     return default
@@ -2197,7 +2232,7 @@ charge_config = {
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
-    'timed_mode': 0,                  # 1 = apply timed work mode, 0 = None
+    'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
     'special_contingency': 33,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
@@ -2214,7 +2249,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
-#  update_settings: 0 no updates, 1 update charge settings, 2 update work mode, 3 update both. The default is 0
+#  update_settings: 0 no updates, 1 update charge settings. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 #  run_after: 0 over-rides 'forecast_times'. The default is 1.
@@ -2245,7 +2280,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
     run_after = 1 if run_after is None else run_after 
-    timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('work_hours') is not None else 0 if timed_mode is None else timed_mode
+    timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('strategy') is not None else 0 if timed_mode is None else timed_mode
     if forecast_times is None:
         forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
     if type(forecast_times) is not list:
@@ -2537,7 +2572,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         generation_timed = [expected * x / sun_sum for x in sun_timed]
         if charge_config['forecast_selection'] == 1 and update_settings > 0:
             output(f"\nSettings will not be updated when forecast is not available")
-            update_settings = 2 if update_settings == 3 else 0
+            update_settings = 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] for x in generation_timed]
     discharge_timed = [x / charge_config['discharge_loss'] for x in consumption_timed]
@@ -2546,7 +2581,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     for i in range(0, run_time):
         h = base_hour + i
         # get work mode and check for changes
-        new_work_mode = timed_work_mode(h, current_mode) if timed_mode == 1 else current_mode
+        new_work_mode = timed_work_mode(h, current_mode) if timed_mode > 0 else current_mode
         if new_work_mode is not None and new_work_mode != work_mode:
             output(f"  {hours_time(h)}: {new_work_mode} work mode", 2)
             work_mode = new_work_mode
@@ -2608,6 +2643,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_needed = 0.0
         hours = 0.0
         end1 = start_at
+        end_soc = int(start_residual / capacity * 100 + 0.5)
+        output(f"   Expected SoC at {hours_time(start_at)} is {end_soc}%")
     else:
         charge_message = "with charge added"
         if test_charge is None:
@@ -2682,9 +2719,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         old_residual = interpolate(end_timed, bat_timed_old)
         new_residual = capacity if old_residual + kwh_added > capacity else old_residual + kwh_added
         net_added = new_residual - start_residual
+        end_soc = int(new_residual / capacity * 100 + 0.5)
 #        output(f"  Charging for {int(hours * 60)} minutes adds {net_added:.2f}kWh")
         output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-        output(f"  End SoC:   {new_residual / capacity * 100:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
+        output(f"  End SoC:   {end_soc:3.0f}% at {hours_time(end1)} ({new_residual:.2f}kWh)")
     if show_data > 2:
         output(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
         for i in range(0, run_time):
@@ -2736,12 +2774,17 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if force_charge == 1 and hour_in(start2, {'start':start_at, 'end': end_by}):
         end2 = end_by
     else:
-            end2 = start2
+        end2 = start2
     # setup charging
-    if update_settings in [1,3]:
+    if update_settings == 1:
         # adjust times for clock changes
         adjust = hour_adjustment if hour_adjustment != 0 and start_hour > change_hour else 0
-        set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust, force = charge_config['force'])
+        if timed_mode > 1:
+            schedule = charge_strategy(st1 = start_at, en1 = end1, st2 = start2, en2 = end2, adjust = adjust, min_soc = end_soc)
+            output(f"Schedule = {schedule}", 2)
+            set_schedule(schedule)
+        else:
+            set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust, force = charge_config['force'])
     else:
         output(f"\nNo changes made to charge settings")
     output_close(plot=show_plot)

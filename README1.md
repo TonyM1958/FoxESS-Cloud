@@ -121,7 +121,9 @@ f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
 f.set_period(start, end, mode, min_soc, fdsoc, fdpwr)
-f.set_schedule(enable, periods, template)
+f.set_strategy(strategy)
+f.charge_strategy(st1, en1, st2, en2, min_soc)
+f.set_schedule(periods, template, enable)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
@@ -139,15 +141,25 @@ set_charge() takes the charge times from the battery_settings and applies these 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
 set_period() returns a period structure that can be used to build a list of strategy periods for set_schedule()
-+ start, end, mode: required parameters
++ start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode. 
 
+set_strategy() creates a list of time periods from the strategy. If strategy is not provided, it uses the strategy for the current tariff.
+
+charge_strategy(): returns a list of time periods that describe the strategy for the current tariff and adds the groupd required for charging:
++ st1: the start time for the period when the battery charges from the grid
++ en1: the end time for period 1
++ st2: the start time for period when the battery is held at min_soc
++ en2: the end time for period 2
++ min_soc: the min_soc to use after the charge period, when you don't want the battery to discharge below this level
+
+
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide either a list of periods or a template ID
-+ enable: 1 to enable a schedule 0 to disable. The default is 1.
-+ periods: a period or list of periods created using f.set_period().
++ periods: a period or list of periods created using f.set_period()
 + template: a template ID from get_templates() or find_template()
++ enable: 1 to enable a schedule 0 to disable. The default is 1
 
 ## Raw Data
 Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
@@ -267,10 +279,10 @@ f.charge_needed(forecast, force_charge, forecast_selection, forecast_times, upda
 
 All the parameters are optional:
 + forecast: the kWh expected tomorrow (optional, see below)
-+ force_charge: 1 any remaining time in a charge period has force charge set, 2 charging uses the entire charge period, 0 None (default)
++ force_charge: 1 any remaining time in a charge period has force charge / min_soc set, 2 charging uses the entire charge period, 0 None (default)
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
 + forecast_times: a list of hours when forecasts can be obtained
-+ update_settings: 0 no changes, 1 update charge time, 2 update work mode, 3 update charge time and work mode. The default is 0
++ update_settings: 0 no changes, 1 update charge settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data, 3 show timed data, 4 show timed data before and after charging. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
@@ -331,7 +343,7 @@ solcast_adjust: 100           # % adjustment to make to Solcast forecast
 solar_adjust:  100            # % adjustment to make to Solar forecast
 forecast_selection: 1         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
 annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
-timed_mode: 0                 # 1 = apply timed work mode, 0 = None
+timed_mode: 0                 # 0 = None, 1 = use timed work mode, 2 = strategy mode
 special_contingency: 30       # contingency for special days when consumption might be higher
 special_days: ['12-25', '12-26', '01-01']
 full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
@@ -348,6 +360,9 @@ The default battery open circuit voltage curve versus SoC from 0% to 100% is:
 ```
 lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 53.1, 53.50]
 ```
+
+When operating in strategy mode (timed_mode=2), charge_needed will create a schedule that includes the strategy for the tariff with additional time periods added to charge from grid and (optionall) to stop the battery discharging. In other modes, charge_needed() will disable any schedules and set the battery charge times.
+
 
 ## Battery Info
 
@@ -435,7 +450,7 @@ f.set_tariff('flux')
 When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_tariff('agile', product, region, start_at, end_by, duration, times, forecast_times, work_times, update, weighting, time_shift)
+f.set_tariff('agile', product, region, start_at, end_by, duration, times, forecast_times, strategy, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
@@ -446,7 +461,7 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
 + times: a list of charge periods that can be used instead of start_at, end_by and duration (see below)
 + forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar
-+ work_times: a list of work modes and times when these are set. The format is [(mode, start, end),...]
++ strategy: an optional list of times and work modes (see below)
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
@@ -487,6 +502,14 @@ To disable a charging period, set duration=0.
 
 set_tariff() can configure multiple charging periods for any tariff using the times parameter instead of start_at, end_by and duration. Times is a list of tuples containing values for start_at, end_by and duration. For example, this parameter configures an AM charging period between 11pm and 8am with a 3 hour period and a PM charging period between 12 noon and 4pm with a 1 hour period:
 + times=[("23:00", "8:00", 3), ("12:00", "16:00", 1)]
+
+'strategy' allows you to configure times when work modes will be changed. The format is a list of dictionary items, containing:
++ 'start', 'end': times in decimal hours or time format. The end time is exclusive so setting an end time of '07:00' will set a schedule that ends at '06:59'
++ 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
++ 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
+
+The strategy should not include settings for the AM/PM charge times for the tariff. These will be added by charge_needed().
+
 
 
 # PV Output
@@ -635,7 +658,9 @@ This setting can be:
 
 # Version 
 
-1.3.7<br>
+1.3.8<br>
+Added strategy mode (timed_mode=2) to charge_needed().
+Added set_strategy() and charge_strategy() to manage charging schedules and work mode changes.
 Refactor debug messaging.
 Simplify charge_needed() output.
 Added 'target_soc' to charge_needed() settings
