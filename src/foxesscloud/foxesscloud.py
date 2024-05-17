@@ -97,7 +97,7 @@ def interpolate(f, v):
     return v[i] * (1-x) + v[i+1] * x
 
 # build request header with signing
-http_timeout = 60        # http request timeout in seconds
+http_timeout = 60       # http request timeout in seconds
 http_tries = 2
 response_time = {}
 
@@ -155,6 +155,24 @@ def signed_post(path, data = None, login = 0):
             output(f"** signed_post(): {message}\n  path = {path}\n  headers = {headers}")
             continue
     return MockResponse(999, message)
+
+# implement minimum time between updates for inverter remote settings
+
+update_delay = 2       # delay between inverter setting updates in seconds
+update_time = {}       # last inverter setting update time
+
+def setting_delay():
+    global update_delay, update_time, device_sn
+    sn = device_sn if device_sn is not None else ''
+    t_now = time.time()
+    t_last = update_time.get(sn)
+    delta = t_now - t_last if t_last is not None else update_delay
+    if delta < update_delay:
+        time.sleep(update_delay - delta)
+        t_now = time.time()
+        output(f"-- setting_delay() --", 2)
+    update_time[sn] = t_now
+    return
 
 
 ##################################################################################################
@@ -672,6 +690,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     output(f"   Time Period 2 = {time_period(battery_settings['times'][1])}", 1)
     # set charge times
     data = {'sn': device_sn, 'times': battery_settings.get('times')}
+    setting_delay()
     response = signed_post(path="/c/v0/device/battery/time/set", data=data)
     if response.status_code != 200:
         output(f"** set_charge() got response code {response.status_code}: {response.reason}")
@@ -733,7 +752,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minGridSoc = None, minSoc = None, force = 0):
-    global token, device_sn, bat_settings, debug_setting, messages, default_min_soc
+    global token, device_sn, battery_settings, debug_setting, messages, default_min_soc
     if get_device() is None:
         return None
     if get_schedule().get('enable'):
@@ -750,9 +769,8 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
     if minSoc is not None:
         data['minSoc'] = minSoc
         battery_settings['minSoc'] = minSoc
-        output(f"set_min(): {battery_settings}", 2)
-        return None
     output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minGridSoc = {battery_settings.get('minGridSoc')}", 1)
+    setting_delay()
     response = signed_post(path="/c/v0/device/battery/soc/set", data=data)
     if response.status_code != 200:
         output(f"** set_min() got response code {response.status_code}: {response.reason}")
@@ -992,12 +1010,9 @@ def set_work_mode(mode, force = 0):
             output(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
-    if debug_setting > 1:
-        output(f"set_work_mode(): {mode}")
-        return None
-    if debug_setting > 0:
-        output(f"\nSetting work mode: {mode}")
+    output(f"\nSetting work mode: {mode}", 1)
     data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
+    setting_delay()
     response = signed_post(path="/c/v0/device/setting/set", data=data)
     if response.status_code != 200:
         output(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
@@ -1211,6 +1226,7 @@ def set_schedule(periods=None, template=None, enable=1):
     params = {'deviceSN': device_sn}
     if enable == 0:
         output(f"\nDisabling schedule", 1)
+        setting_delay()
         response = signed_get(path="/generic/v0/device/scheduler/disable", params=params)
         if response.status_code != 200:
             output(f"** set_schedule() got disable response code {response.status_code}: {response.reason}")
@@ -1237,6 +1253,7 @@ def set_schedule(periods=None, template=None, enable=1):
             output(f"** set_schedule() requires periods or template parameter")
             return None
         output(f"\nEnabling schedule", 1)
+        setting_delay()
         response = signed_post(path="/generic/v0/device/scheduler/enable", data=data)
         if response.status_code != 200:
             output(f"** set_schedule() got enable response code {response.status_code}: {response.reason}")

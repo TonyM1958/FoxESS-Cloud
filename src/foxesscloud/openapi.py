@@ -120,6 +120,7 @@ def avg(x):
     if len(x) == 0:
         return None
     return sum(x) / len(x)
+
 # build request header with signing and throttling for queries
 
 last_call = {}          # timestamp of the last call for a given path
@@ -194,6 +195,23 @@ def signed_post(path, body = None, login = 0):
             continue
     return MockResponse(999, message)
 
+# implement minimum time between updates for inverter remote settings
+
+update_delay = 2       # delay between inverter setting updates in seconds
+update_time = {}       # last inverter setting update time
+
+def setting_delay():
+    global update_delay, update_time, device_sn
+    sn = device_sn if device_sn is not None else ''
+    t_now = time.time()
+    t_last = update_time.get(sn)
+    delta = t_now - t_last if t_last is not None else update_delay
+    if delta < update_delay:
+        time.sleep(update_delay - delta)
+        t_now = time.time()
+        output(f"-- setting_delay() --", 2)
+    update_time[sn] = t_now
+    return
 
 ##################################################################################################
 # get error messages / error handling
@@ -623,6 +641,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
     body = {'sn': device_sn}
     for k in ['enable1', 'startTime1', 'endTime1', 'enable2', 'startTime2', 'endTime2']:
         body[k] = battery_settings['times'][k]          # try forcing order of items?
+    setting_delay
     response = signed_post(path="/op/v0/device/battery/forceChargeTime/set", body=body)
     if response.status_code != 200:
         output(f"** set_charge() got response code {response.status_code}: {response.reason}")
@@ -703,15 +722,13 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
             output(f"** set_min(): invalid minSoc = {minSoc}. Must be between 10 and 100")
             return None
         battery_settings['minSoc'] = minSoc
-    if debug_setting > 1:
-        output(f"set_min(): {battery_settings}")
-        return None
     body = {'sn': device_sn}
     if battery_settings.get('minSocOnGrid') is not None:
         body['minSocOnGrid'] = battery_settings['minSocOnGrid']
     if battery_settings.get('minSoc') is not None:
         body['minSoc'] = battery_settings['minSoc']
     output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}", 1)
+    setting_delay()
     response = signed_post(path="/op/v0/device/battery/soc/set", body=body)
     if response.status_code != 200:
         output(f"** set_min() got response code {response.status_code}: {response.reason}")
@@ -953,11 +970,9 @@ def set_work_mode(mode, force = 0):
             output(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
-    if debug_setting > 1:
-        output(f"set_work_mode(): {mode}")
-        return None
     output(f"\nSetting work mode: {mode}", 1)
     body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
+    setting_delay()
     response = signed_post(path="/op/v0/device/setting/set", body=body)
     if response.status_code != 200:
         output(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
@@ -1093,6 +1108,7 @@ def set_schedule(groups=None, enable=1):
         if type(groups) is not list:
             groups = [groups]
         body = {'deviceSN': device_sn, 'groups': groups}
+        setting_delay()
         response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() groups response code {response.status_code}: {response.reason}")
@@ -1103,6 +1119,7 @@ def set_schedule(groups=None, enable=1):
             return None
         schedule['groups'] = groups
     body = {'deviceSN': device_sn, 'enable': enable}
+    setting_delay()
     response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
         output(f"** set_schedule() flag response code {response.status_code}: {response.reason}")

@@ -677,6 +677,7 @@ This setting can be:
 # Version Info
 
 2.2.6<br>
+Implement 2 second delay between calls that change inverter settings.
 Added strategy mode (timed_mode=2) to charge_needed().
 Added set_strategy() and charge_strategy() to manage charging schedules and work mode changes.
 Refactor debug messaging.

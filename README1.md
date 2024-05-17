@@ -659,6 +659,8 @@ This setting can be:
 # Version 
 
 1.3.8<br>
+Fix set_min().
+Implement 2 second delay between calls that change inverter settings.
 Added strategy mode (timed_mode=2) to charge_needed().
 Added set_strategy() and charge_strategy() to manage charging schedules and work mode changes.
 Refactor debug messaging.
