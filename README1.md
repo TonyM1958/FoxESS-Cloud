@@ -319,17 +319,17 @@ Given the data available, the modelling works as follows:
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
 ```
-contingency: 20               # % of consumption to allow as contingency
+contingency: [20,10,5,10]     # % of consumption. Single or [winter, spring, summer, autumn] values
 capacity: None                # Battery capacity in kWh (over-rides generated value if set)
 charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
-export_limit: None            # maximum export power. None uses the inverter power rating
+export_limit: None            # maximum export power in kW. None uses the inverter power rating
 discharge_loss: 0.97          # loss converting battery discharge power to grid power
 pv_loss: 0.95                 # loss converting PV power to battery charge power
 grid_loss: 0.97               # loss converting grid power to battery charge power
 charge_loss: None             # loss converting charge power to residual
-inverter_power: None          # inverter power consumption W (dynamically set)
-bms_power: 25                 # BMS power consumption W
+inverter_power: None          # inverter power consumption in W (dynamically set)
+bms_power: 25                 # BMS power consumption in W
 bat_resistance: 0.070         # internal resistance of a battery in ohms
 volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
 nominal_soc: 55               # SoC for nominal open circuit voltage
@@ -658,7 +658,11 @@ This setting can be:
 
 # Version 
 
-1.3.8<br>
+1.3.9<br>
+Updated contingency to allow seasonal values for winter, spring, summer and autumn.
+Update strategy mode to support ForceCharge and ForceDischarge work modes.
+Update so min_soc setting in charge_needed() over-rides min_soc in the tariff strategy.
+Fix force charge strategy mode in charge_needed() to set min_soc correctly.
 Fix set_min().
 Implement 2 second delay between calls that change inverter settings.
 Added strategy mode (timed_mode=2) to charge_needed().
