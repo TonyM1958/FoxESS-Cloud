@@ -108,10 +108,9 @@ You can change inverter settings using:
 ```
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
-f.set_group(start, end, mode, min_soc, fdsoc, fdpwr)
-f.set_strategy(strategy)
-f.charge_strategy(st1, en1, st2, en2, min_soc)
-f.set_schedule(groups, enable)
+f.set_period(start, end, mode, min_soc, fdsoc, fdpwr, segment)
+f.charge_periods(st1, en1, st2, en2, min_soc)
+f.set_schedule(periods, enable)
 ```
 
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
@@ -126,16 +125,15 @@ set_charge() takes the charge times from the battery_settings and applies these 
 + st2: the start time for period 2
 + en2: the end time for period 2
 
-set_group() returns a time segment structure that can be used to build a list of time segments for set_schedule()
+set_period() returns a period structure that can be used to build a list for set_schedule()
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
++ segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
-set_strategy() creates a list of groups from the strategy. If strategy is not provided, it uses the strategy for the current tariff.
-
-charge_strategy(): returns a list of groups that describe the strategy for the current tariff and adds the groupd required for charging:
+charge_periods(): returns a list of periods that describe the strategy for the current tariff and adds the periods required for charging:
 + st1: the start time for the period when the battery charges from the grid
 + en1: the end time for period 1
 + st2: the start time for period when the battery is held at min_soc
@@ -143,7 +141,7 @@ charge_strategy(): returns a list of groups that describe the strategy for the c
 + min_soc: the min_soc to use after the charge period, when you don't want the battery to discharge below this level
 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
-+ groups: a time segment or list of time segments created using f.set_group().
++ periods: a time segment or list of time segments created using f.set_period().
 + enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
 
 
@@ -345,7 +343,9 @@ pv_loss: 0.95                 # loss converting PV power to battery charge power
 grid_loss: 0.97               # loss converting grid power to battery charge power
 charge_loss: None             # loss converting charge power to residual
 inverter_power: None          # inverter power consumption in W (dynamically set)
-bms_power: 25                 # BMS power consumption in W
+bms_power: 50                 # BMS power consumption in W
+allowed_drain: 4,             # % tolerance below min_soc before float charge starts
+float_current: 4,             # BMS float charge current in A
 bat_resistance: 0.070         # internal resistance of a battery in ohms
 volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
 nominal_soc: 55               # SoC for nominal open circuit voltage
@@ -528,7 +528,16 @@ set_tariff() can configure multiple charging periods for any tariff using the ti
 + 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
 + 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
 
-The strategy should not include settings for the AM/PM charge times for the tariff. These will be added by charge_needed().
+There are a number of pre-defined strategies:
++ f.flux_strategy_1: switch to self use at 5am and feed in first at 4pm.
++ f.flux_strategy_2: as above with force charge between 2am and 4am. Move the AM charge period between 4am and 5am when using this.
++ f.flux_strategy_3: as above with force discharge between 4pm and 6pm at 6kW with fdsoc at 35%
+
+```
+f.get_strategy()
+```
+
+get_strategy() creates a list of time segments from the strategy. If strategy is not provided, it uses the strategy for the current tariff. If a strategy includes settings for the AM/PM charge times for the tariff, the times will be moved so they do not conflict with the charge time used by charge_needed().
 
 
 # PV Output
@@ -676,7 +685,11 @@ This setting can be:
 
 # Version Info
 
-2.2.7<br>
+2.2.8<br>
+** breaking change ** rename 'groups' to 'periods' for consistency between foxesscloud and openapi.
+Updated management of battery reserve and float charging in charge_needed().
+Added Reserve level to charts in charge_needed().
+Changed bms_power setting to 50W.
 Updated contingency to allow seasonal values for winter, spring, summer and autumn.
 Update strategy mode to support ForceCharge and ForceDischarge work modes.
 Update so min_soc setting in charge_needed() over-rides min_soc in the tariff strategy.

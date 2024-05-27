@@ -329,7 +329,9 @@ pv_loss: 0.95                 # loss converting PV power to battery charge power
 grid_loss: 0.97               # loss converting grid power to battery charge power
 charge_loss: None             # loss converting charge power to residual
 inverter_power: None          # inverter power consumption in W (dynamically set)
-bms_power: 25                 # BMS power consumption in W
+bms_power: 50                 # BMS power consumption in W
+allowed_drain: 4,             # % tolerance below min_soc before float charge starts
+float_current: 4,             # BMS float charge in A
 bat_resistance: 0.070         # internal resistance of a battery in ohms
 volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
 nominal_soc: 55               # SoC for nominal open circuit voltage
@@ -657,6 +659,11 @@ This setting can be:
 
 
 # Version 
+
+1.4.0<br>
+Updated management of battery reserve and float charging in charge_needed().
+Added Reserve level to charts in charge_needed().
+Changed bms_power setting to 50W.
 
 1.3.9<br>
 Updated contingency to allow seasonal values for winter, spring, summer and autumn.
