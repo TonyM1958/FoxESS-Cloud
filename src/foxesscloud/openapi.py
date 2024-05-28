@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  24 May 2024
+Updated:  28 May 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.8"
+version = "2.2.9"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1055,7 +1055,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, fdsoc=None, fdpwr=
         start = segment.get('start')
         end = segment.get('end')
         mode = segment.get('mode')
-        min_soc = segement.get('min_soc')
+        min_soc = segment.get('min_soc')
         fdsoc = segment.get('fdsoc')
         fdpwr = segmenet.get('fdsoc')
     start = time_hours(start)
@@ -1819,7 +1819,12 @@ octopus_flux = {
     'peak': {'start': 16.0, 'end': 19.0 },                      # peak period 1
     'peak2': {'start': 0.0, 'end': 0.0 },                       # peak period 2
     'forecast_times': [22, 23],                                 # hours in a day to get a forecast
+    'strategy': [
+        {'start': 0.0, 'end': 2.0, 'mode': 'Feedin'},
+        {'start': 5.0, 'end': 6.0, 'mode': 'SelfUse'},
+        {'start': 16.0, 'end': 24.0, 'mode': 'Feedin'}]
     }
+
 
 # time periods for Intelligent Octopus
 intelligent_octopus = {
@@ -1897,25 +1902,7 @@ tariff = octopus_flux
 # Strategy - schedule templates
 ##################################################################################################
 
-# summer strategy for Flux
-flux_strategy_1 = [
-        {'start': 5, 'end': 6, 'mode': 'SelfUse'},
-        {'start': 16, 'end': 24, 'mode': 'Feedin'}]
-
-# winter strategy for Flux
-flux_strategy_2 = [
-        {'start': 2, 'end': 4, 'mode': 'ForceCharge'},
-        {'start': 5, 'end': 6, 'mode': 'SelfUse'},
-        {'start': 16, 'end': 24, 'mode': 'Feedin'}]
-
-# revenue strategy for Flux
-flux_strategy_3 = [
-        {'start': 2, 'end': 4, 'mode': 'ForceCharge'},
-        {'start': 5, 'end': 6, 'mode': 'SelfUse'},
-        {'start': 16, 'end': 18, 'mode': 'ForceDischarge', 'fdsoc': 35, 'fdpwr': 6000},
-        {'start': 18, 'end': 24, 'mode': 'Feedin'}]
-
-flux_strategy_x = [
+test_strategy = [
         {'start': 2, 'end': 11, 'mode': 'SelfUse', 'min_soc': 80},
         {'start': 11, 'end': 14, 'mode': 'SelfUse', 'min_soc': 10},
         {'start': 16, 'end': 24, 'mode': 'Feedin'}]

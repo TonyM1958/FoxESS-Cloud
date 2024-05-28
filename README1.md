@@ -120,8 +120,7 @@ You can change inverter settings using:
 f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
-f.set_period(start, end, mode, min_soc, fdsoc, fdpwr)
-f.set_strategy(strategy)
+f.set_period(start, end, mode, min_soc, fdsoc, fdpwr, segment)
 f.charge_strategy(st1, en1, st2, en2, min_soc)
 f.set_schedule(periods, template, enable)
 ```
@@ -144,17 +143,15 @@ set_period() returns a period structure that can be used to build a list of stra
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
-+ fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode. 
++ fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode.
++ segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
-set_strategy() creates a list of time periods from the strategy. If strategy is not provided, it uses the strategy for the current tariff.
-
-charge_strategy(): returns a list of time periods that describe the strategy for the current tariff and adds the groupd required for charging:
+charge_periods(): returns a list of time periods that describe the strategy for the current tariff and adds the periods required for charging:
 + st1: the start time for the period when the battery charges from the grid
 + en1: the end time for period 1
 + st2: the start time for period when the battery is held at min_soc
 + en2: the end time for period 2
 + min_soc: the min_soc to use after the charge period, when you don't want the battery to discharge below this level
-
 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide either a list of periods or a template ID
 + periods: a period or list of periods created using f.set_period()
@@ -432,7 +429,7 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode change to Self Use at 7am and Feed In First at 4pm.
++ Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode changes to Self Use at 5am and Feed In First at 4pm.
 + Intelligent Octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
 + Octopus Cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + Octopus Go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
@@ -510,7 +507,11 @@ set_tariff() can configure multiple charging periods for any tariff using the ti
 + 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
 + 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
 
-The strategy should not include settings for the AM/PM charge times for the tariff. These will be added by charge_needed().
+```
+f.get_strategy()
+```
+
+get_strategy() creates a list of time segments from the strategy. If strategy is not provided, it uses the strategy for the current tariff. If a strategy includes settings for the AM/PM charge times for the tariff, the times will be moved so they do not conflict with the charge time used by charge_needed().
 
 
 
@@ -660,7 +661,8 @@ This setting can be:
 
 # Version 
 
-1.4.0<br>
+1.4.1<br>
+Fix typo in charge_periods() that caused error with timed_mode=2
 Updated management of battery reserve and float charging in charge_needed().
 Added Reserve level to charts in charge_needed().
 Changed bms_power setting to 50W.

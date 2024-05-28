@@ -450,7 +450,7 @@ f.hours_in(h, {'start': a, 'end': b})            # True if decimal hour h is in 
 Tariffs configure when your battery can be charged and provide time of use (TOU) periods to split your grid import and export into peak, off-peak and shoulder times when data is uploaded to PV Ouptut.
 
 There are a number of different pre-configured tariffs:
-+ Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode change to Self Use at 7am and Feed In First at 4pm.
++ Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode changes to Self Use at 5am and Feed In First at 4pm.
 + Intelligent Octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
 + Octopus Cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
 + Octopus Go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
@@ -527,11 +527,6 @@ set_tariff() can configure multiple charging periods for any tariff using the ti
 + 'start', 'end': times in decimal hours or time format. The end time is exclusive so setting an end time of '07:00' will set a schedule that ends at '06:59'
 + 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
 + 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
-
-There are a number of pre-defined strategies:
-+ f.flux_strategy_1: switch to self use at 5am and feed in first at 4pm.
-+ f.flux_strategy_2: as above with force charge between 2am and 4am. Move the AM charge period between 4am and 5am when using this.
-+ f.flux_strategy_3: as above with force discharge between 4pm and 6pm at 6kW with fdsoc at 35%
 
 ```
 f.get_strategy()
@@ -685,7 +680,8 @@ This setting can be:
 
 # Version Info
 
-2.2.8<br>
+2.2.9<br>
+Fix typo in charge_periods() that caused error with timed_mode=2
 ** breaking change ** rename 'groups' to 'periods' for consistency between foxesscloud and openapi.
 Updated management of battery reserve and float charging in charge_needed().
 Added Reserve level to charts in charge_needed().
