@@ -680,8 +680,10 @@ This setting can be:
 
 # Version Info
 
-2.2.9<br>
+2.3.0<br>
 Fix typo in charge_periods() that caused error with timed_mode=2
+
+2.2.9<br>
 ** breaking change ** rename 'groups' to 'periods' for consistency between foxesscloud and openapi.
 Updated management of battery reserve and float charging in charge_needed().
 Added Reserve level to charts in charge_needed().

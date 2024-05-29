@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  28 May 2024
+Updated:  29 May 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.2.9"
+version = "2.3.0"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -659,7 +659,7 @@ def set_charge(ch1 = None, st1 = None, en1 = None, ch2 = None, st2 = None, en2 =
 
 def charge_periods(st1 = None, en1 = None, st2 = None, en2 = None, adjust=0, min_soc=10, target_soc=None):
     output(f"\nConfiguring schedule", 1)
-    strategy = get_strategy(min_soc=min_soc, quiet=0)
+    strategy = get_strategy(min_soc=min_soc)
     periods = []
     for s in strategy:
         periods.append(set_period(segment = s, quiet=0))
@@ -1057,7 +1057,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, fdsoc=None, fdpwr=
         mode = segment.get('mode')
         min_soc = segment.get('min_soc')
         fdsoc = segment.get('fdsoc')
-        fdpwr = segmenet.get('fdsoc')
+        fdpwr = segment.get('fdpwr')
     start = time_hours(start)
     end = time_hours(end)
     if start is None or end is None or start >= end:
