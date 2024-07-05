@@ -17,6 +17,8 @@ This module builds on the Fox Open API to provide a sample code and utilities th
 + Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)
 + A list of the error codes used by the API is available here: [Wiki/Error-Codes](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes).
 
+*Open API has had significant performance problems since May 2024 and there is no current sign that Fox are going to resolve this. Performance is poor between 10am and 10pm UK time, with requests often timing out or returning errors after 60 seconds. Sorry, there is nothign I can do about this*
+
 ## Setup
 To initialise a Jupyter Lab notebook to use the open API, copy the following text and edit the configuration variables needed to add your values:
 
