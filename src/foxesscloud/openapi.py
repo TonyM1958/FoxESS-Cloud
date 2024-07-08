@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  29 May 2024
+Updated:  08 July 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.0"
+version = "2.3.1"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -126,7 +126,7 @@ def avg(x):
 last_call = {}          # timestamp of the last call for a given path
 response_time = {}      # response time in seconds of the last call for a given path
 query_delay = 1         # minimum time between calls in seconds
-http_timeout = 60       # http request timeout in seconds
+http_timeout = 55       # http request timeout in seconds
 http_tries = 2          # number of times to re-try requst
 
 class MockResponse:
@@ -958,7 +958,7 @@ settable_modes = work_modes[:3]
 
 def set_work_mode(mode, force = 0):
     global token, device_sn, work_modes, work_mode, debug_setting
-    printf("** set_work_mode(): not available via Open API")
+    print(f"** set_work_mode(): not available via Open API")
     return None
     if get_device() is None:
         return None
@@ -1050,40 +1050,46 @@ def get_schedule():
 ##################################################################################################
 
 # create time segment structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, fdsoc=None, fdpwr=None, segment=None, enable=1, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, segment=None, enable=1, quiet=1):
     if segment is not None and type(segment) is dict:
         start = segment.get('start')
         end = segment.get('end')
         mode = segment.get('mode')
         min_soc = segment.get('min_soc')
+        max_soc = segment.get('max_soc')
         fdsoc = segment.get('fdsoc')
         fdpwr = segment.get('fdpwr')
     start = time_hours(start)
-    end = time_hours(end)
+    # adjust exclusive time to inclusive
+    end = round_time(time_hours(end) - 1/60)
     if start is None or end is None or start >= end:
+        output(f"set_period(): ** invalid period times: {hours_time(start)} - {hours_time(end)}")
         return None
-    end = round_time(end - 1/60)        # adjust exclusive time to inclusive
     mode = 'SelfUse' if mode is None else mode
     if mode not in work_modes:
         output(f"** mode must be one of {work_modes}")
         return None
     min_soc = 10 if min_soc is None else min_soc
+    max_soc = 100 if max_soc is None else max_soc
     fdsoc = min_soc if fdsoc is None else fdsoc
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
-        output(f"** min_soc must be between 10 and 100")
+        output(f"set_period(): ** min_soc must be between 10 and 100")
+        return None
+    if max_soc < min_soc or max_soc > 100:
+        output(f"set_period(): ** max_soc must be between {min_soc} and 100")
         return None
     if fdpwr < 0 or fdpwr > 6000:
-        output(f"** fdpwr must be between 0 and 6000")
+        output(f"set_period(): ** fdpwr must be between 0 and 6000")
         return None
     if fdsoc < min_soc or fdsoc > 100:
-        output(f"** fdsoc must between {min_soc} and 100")
+        output(f"set_period(): ** fdsoc must between {min_soc} and 100")
         return None
     if quiet == 0:
-        output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}%" + (f", fdPwr = {fdpwr/1000:.3f}kW and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
+        output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr/1000:.3f}kW and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
-    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
+    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'maxSoc': max_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
     return period
 
 # set a schedule from a period or list of time segment periods
@@ -1737,6 +1743,28 @@ def hour_in(h, period):
         # e.g. 02:00 - 05:00
         return h >= s and h < e
 
+# True if 2 time periods overlap
+def hour_overlap(period1, period2):
+    if period1 is None or period2 is None:
+        return False
+    s1 = period1.get('start')
+    e1 = period1.get('end')
+    if s1 is None or e1 is None or s1 == e1:
+        return False
+    while s1 > e1:
+        s1 -= 24
+    s2 = period2.get('start')
+    e2 = period2.get('end')
+    if s2 is None or e2 is None or s2 == e2:
+        return False
+    while s2 > e2:
+        s2 -= 24
+    if s1 >= s2 and s1 < e2:
+        return True
+    if s2 >= s1 and s2 < e1:
+        return True
+    return False
+
 # Time in a decimal hour that falls within a time period
 def duration_in(h, period):
     if period is None:
@@ -1907,7 +1935,7 @@ test_strategy = [
         {'start': 11, 'end': 14, 'mode': 'SelfUse', 'min_soc': 10},
         {'start': 16, 'end': 24, 'mode': 'Feedin'}]
 
-# return an updated strategy from the tariff strategy that has been filtered for charge times:
+# return a strategy that has been filtered for charge times:
 def get_strategy(use=None, strategy=None, min_soc=10, quiet=1):
     global tariff
     if use is None:
@@ -1919,24 +1947,43 @@ def get_strategy(use=None, strategy=None, min_soc=10, quiet=1):
     if type(strategy) is not list:
         strategy = [strategy]
     updated = []
-    for s in strategy:
-        # move start and end times so they don't overlap the charge periods
+    for s in strategy: #sorted(strategy, key=lambda s: s['start']):
+        # skip segments that overlap any charge periods
         start = s['start']
-        start = tariff['off_peak1']['end'] if hour_in(start, use['off_peak1']) else tariff['off_peak2']['end'] if hour_in(start, use['off_peak2']) else start
         end = s['end']
-        end = tariff['off_peak1']['start'] if hour_in(end, use['off_peak1']) else tariff['off_peak2']['start'] if hour_in(end, use['off_peak2']) else end
-        # create segment
-        if start < end:
-            min_soc_now = s['min_soc'] if s.get('min_soc') is not None and s['min_soc'] > min_soc else min_soc
-            mode = s['mode']
-            fdsoc = s.get('fdsoc')
-            fdpwr = s.get('fdpwr')
-            segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'fdsoc': fdsoc, 'fdpwr': fdpwr}
-            if quiet == 0:
-                output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc_now}%" + (f", fdPwr = {fdpwr}W and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
-            updated.append(segment)
+        if hour_overlap(s, use['off_peak1'] ) or hour_overlap(s, use['off_peak2']):
+            output(f"   {hours_time(start)} to {hours_time(end)} ** dropped ** (overlaps charge period)", 2)
+            continue
+        # add segment
+        min_soc_now = s['min_soc'] if s.get('min_soc') is not None and s['min_soc'] > min_soc else min_soc
+        mode = s['mode']
+        max_soc = s['max_soc'] if s.get('max_soc') is not None else 100
+        fdsoc = s.get('fdsoc')
+        fdpwr = s.get('fdpwr')
+        segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'max_soc': max_soc, 'fdsoc': fdsoc, 'fdpwr': fdpwr}
+        if quiet == 0:
+            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc_now}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr}W and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
+        updated.append(segment)
     return updated
 
+
+# build strategy using current schedule
+def build_strategy_from_schedule():
+    schedule = get_schedule()
+    if schedule.get('groups') is None:
+        return None
+    strategy = []
+    for p in schedule['groups']:
+        period = {}
+        period['start'] = round_time(p['startHour'] + p['startMinute'] / 60)
+        period['end'] = round_time(p['endHour'] + p['endMinute'] / 60 + 1/60)
+        period['mode'] = p.get('workMode')
+        period['min_soc'] = p.get('minSocOnGrid')
+        period['max_soc'] = p.get('maxSoc')
+        period['fdsoc'] = p.get('fdSoc')
+        period['fdpwr'] = p.get('fdPwr')
+        strategy.append(period)
+    return strategy
 
 ##################################################################################################
 # Octopus Energy Agile Price
@@ -2014,6 +2061,12 @@ def get_agile_period(start_at=None, end_by=None, duration=None, d=None):
         time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
         times.append(hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift))
         prices.append(r['value_inc_vat'])
+    # show the results
+    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
+    for i in range(0, len(times)):
+        s += "\n" if i % 6 == 2 else ""
+        s += f"  {times[i]} = {prices[i]:5.2f}"
+    output(s)
     # work out start and end times for charging
     start_at = time_hours(start_at) if type(start_at) is str else 23.0 if start_at is None else start_at
     end_by = time_hours(end_by) if type(end_by) is str else 8.0 if end_by is None else end_by
@@ -2070,12 +2123,6 @@ def set_agile_period(period=None, tariff=agile_octopus, d=None):
         if agile_period is None:
             output_close()
             return None
-        tomorrow = agile_period['date']
-        s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
-        for i in range(0, len(agile_period['times'])):
-            s += "\n" if i % 6 == 2 else ""
-            s += f"  {agile_period['times'][i]} = {agile_period['prices'][i]:5.2f}"
-        output(s)
         weighting = tariff_config['weighting']
         if weighting is not None:
             output(f"\nWeighting: {weighting}")
@@ -2101,6 +2148,37 @@ def set_agile_period(period=None, tariff=agile_octopus, d=None):
     output(f"  Charging period: {hours_time(start)} to {hours_time(end)}")
     output_close()
     return 1
+
+# set agile strategy
+def get_agile_strategy(max_price=None, duration=None, allow=None):
+    period = get_agile_period()
+    allow = {'start': 23, 'end': 8} if allow is None else allow
+    max_price = 13 if max_price is None else max_price
+    n = 6 if duration is None else int(duration * 2 + 0.99)
+    # find periods that meet the criteria
+    periods = []
+    for i in range(0, len(period['times'])):
+        h = time_hours(period['times'][i])
+        if period['prices'][i] <= max_price and hour_in(h, allow):
+            periods.append({'h': h, 'price': period['prices'][i]})
+    # sort by price to get cheapest n periods, then sort back into time order
+    periods = sorted(sorted(periods, key=lambda d: d['price'])[:n], key=lambda d: d['h'])
+    # consolidate 30 minute periods into time segments
+    segments = []
+    segment = None
+    h = -1
+    for s in periods:
+        if s['h'] != h:
+            if segment is not None:
+                segment['end'] = h
+                segments.append(segment)
+            h = s['h']
+            segment = {'start': h, 'end': None, 'mode': 'ForceCharge'}
+        h = round_time(h + 0.5)
+    if segment is not None:
+        segment['end'] = h
+        segments.append(segment)
+    return segments
 
 # set AM/PM charge time for any tariff
 def set_tariff_period(period=None, tariff=octopus_flux, d=None):
@@ -2176,11 +2254,12 @@ def set_tariff(find, update=1, start_at=None, end_by=None, duration=None, times=
         use['forecast_times'] = forecast_hours
         output(f"Forecast times set to {forecast_times}", 1)
     if strategy is not None:
-        if type(strategy) is not list:
+        if strategy == 'load':
+            strategy = build_strategy_from_schedule()
+        elif type(strategy) is not list:
             strategy = [strategy]
-        use['strategy'] = strategy
         output(f"Strategy updated")
-        get_strategy(use=use, strategy=strategy, quiet=0)
+        use['strategy'] = get_strategy(use=use, strategy=strategy, quiet=0)
     if update == 1:
         tariff = use
         output(f"\nTariff set to {tariff['name']}", 1)
@@ -2272,12 +2351,13 @@ def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_off
     return (timed + profile + profile)[:run_time]
 
 # build the timed work mode profile from the tariff strategy:
-def strategy_timed(timed_mode, hour_now, run_time, min_soc=10):
+def strategy_timed(timed_mode, hour_now, run_time, min_soc=10, max_soc=100):
     global tariff
     profile = []
     min_soc_now = min_soc
+    max_soc_now = max_soc
     for h in range(0, 24):
-        period = {'mode': 'SelfUse', 'min_soc': min_soc_now, 'fdpwr': 0, 'fdsoc': min_soc_now, 'duration': 1.0}
+        period = {'mode': 'SelfUse', 'min_soc': min_soc_now, 'max_soc': max_soc_now, 'fdpwr': 0, 'fdsoc': min_soc_now, 'duration': 1.0}
         if timed_mode > 0 and tariff is not None and tariff.get('strategy') is not None:
             for d in tariff['strategy']:
                 if hour_in(h, d):
@@ -2285,6 +2365,8 @@ def strategy_timed(timed_mode, hour_now, run_time, min_soc=10):
                     period['mode'] = mode
                     min_soc_now = d['min_soc'] if d.get('min_soc') is not None and d['min_soc'] > min_soc else min_soc
                     period['min_soc'] = min_soc_now
+                    max_soc_now = d['max_soc'] if d.get('max_soc') is not None and d['max_soc'] < max_soc else max_soc
+                    period['max_soc'] = max_soc_now
                     if mode == 'ForceDischarge':
                         if d.get('fdsoc') is not None:
                             period['fdsoc'] = d['fdsoc'] if d['fdsoc'] > min_soc_now else min_soc_now
@@ -3150,6 +3232,7 @@ max_pv_power = 100
 pv_calibration = 0.98
 ct2_calibration = 0.92
 invert_ct2 = 1
+integrate_load_power = 0
 
 ##################################################################################################
 # get PV Output upload data from the Fox Cloud as energy values for a list of dates
@@ -3159,7 +3242,7 @@ invert_ct2 = 1
 # tou: 0 = no time of use, 1 = use time of use periods if available
 
 def get_pvoutput(d = None, tou = 0):
-    global tariff, pv_calibration, ct2_calibration, pvoutput_app_key
+    global tariff, pv_calibration, ct2_calibration, pvoutput_app_key, integrate_load_power
     if d is None:
         d = date_list()[0]
     tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
@@ -3168,6 +3251,8 @@ def get_pvoutput(d = None, tou = 0):
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1:
             print(f"Time of use: {tariff['name']}")
+        if integrate_load_power == 1:
+            print(f"Consumption intergated from Load Power")
         print(f"------------------------------------------------")
         for x in d:
             csv = get_pvoutput(x, tou)
@@ -3176,12 +3261,16 @@ def get_pvoutput(d = None, tou = 0):
             print(csv)
         return
     # get quick report of totals for the day
-    v = ['loads', 'feedin', 'gridConsumption']
+    v = ['feedin', 'gridConsumption']
+    if integrate_load_power == 0:
+        v.append('loads')
     report_data = get_report('day', d=d, v=v, summary=2)
     if report_data is None:
         return None
     # get raw power data for the day
     v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
+    if integrate_load_power == 1:
+        v.append('loadsPower')
     raw_data = get_history('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None or len(raw_data) == 0 or raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
         return(f"# error: {d.replace('-','')} No generation data available")
@@ -3214,11 +3303,11 @@ def get_pvoutput(d = None, tou = 0):
         if var['variable'] == 'feedin':
             export_wh = wh 
             export = f"{wh},"
-        elif var['variable'] == 'loads':
-            consume = f"{wh},"
         elif var['variable'] == 'gridConsumption':
             grid_wh = wh
             grid = f"0,0,{wh},0,"
+        elif var['variable'] == 'loads':
+            consume = f"{wh},"
     # process list of raw_data values (with TOU)
     for var in raw_data:
         wh = int(var['kwh'] * 1000)
@@ -3236,6 +3325,8 @@ def get_pvoutput(d = None, tou = 0):
         elif var['variable'] == 'gridConsumptionPower':
             calibrate = grid_wh / wh if wh > 0.0 else 1.0
             grid = f"{int(peak * calibrate)},{int(off_peak * calibrate)},{int((wh - peak - off_peak) * calibrate)},0,"
+        elif var['variable'] == 'loadsPower':
+            consume = f"{wh},"
     if date is None or generate is None or export is None or power is None or grid is None or consume is None:
         return None
     # check exported is less than generated

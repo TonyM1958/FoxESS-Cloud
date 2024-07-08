@@ -507,6 +507,10 @@ set_tariff() can configure multiple charging periods for any tariff using the ti
 + 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
 + 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
 
+Alternatively, if you set strategy='load', the current inverter schedule will be loaded and used.
+
+Any strategy time segments that overlap with the charge time periods for the tariff will be dropped.
+
 ```
 f.get_strategy()
 ```
@@ -524,11 +528,13 @@ These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.o
 Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
 
 ```
+f.integrate_load_power=0
 f.get_pvoutput(d, tou)
 ```
 
-+ d is the date or a list of dates, to get data for. The default is yesterday
++ d is the date or a list of dates, to get data for. The default is yesterday.
 + tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
++ setting integrate_load_power to 1 will calculate load energy by integrating the load power instead of using data from Fox. This tries to overcome the limitation where the inverter does not track load power / energy correctly when there is secondary generation. When set to 0 (default), the  Fox load energy is used.
 
 You can copy and paste the output data to the pvoutput data CSV Loader, using the following settings:
 
@@ -661,7 +667,11 @@ This setting can be:
 
 # Version 
 
-1.4.2<br>
+1.4.3<br>
+Reduced API call time out from 60 to 55 seconds to stop invalid timestamp error.
+Load strategy from inverter in set_tariff().
+Added support for setting max_soc in a schedule (not tested)
+Added integrate_load_power setting to get_pvoutput.
 Fix typo in charge_periods() that caused error with timed_mode=2
 Updated management of battery reserve and float charging in charge_needed().
 Added Reserve level to charts in charge_needed().
