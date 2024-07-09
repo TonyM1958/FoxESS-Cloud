@@ -688,7 +688,9 @@ This setting can be:
 
 # Version Info
 
-2.3.1<br>
+2.3.2<br>
+Fix error when get_history() returns values that are strings.
+Force file encoding to UTF-8 when saving results in get_history().
 Reduced API call time out from 60 to 55 seconds to stop invalid timestamp error.
 Load strategy from inverter in set_tariff().
 Added support for setting max_soc in a schedule (not tested)

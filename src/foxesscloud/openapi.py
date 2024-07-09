@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  08 July 2024
+Updated:  09 July 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.1"
+version = "2.3.2"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1250,7 +1250,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         file.close()
     if save is not None:
         file_name = save + "_history_" + time_span + "_" + d[0:10].replace('-','') + ".txt"
-        file = open(file_name, 'w')
+        file = open(file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
     for var in result:
@@ -1295,8 +1295,8 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             else:
                 sample_time = 5.0
             output(f"{var['variable']}: samples = {len(var['data'])}, sample_time = {sample_time} minutes", 2)
-        sum = 0.0
         count = 0
+        sum = None
         max = None
         max_time = None
         min = None
@@ -1305,12 +1305,14 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
             var['state'] = [{}]
         for y in var['data']:
             h = time_hours(y['time'][11:19]) # time
-            value = y['value']
+            value = y.get('value')
             if value is None:
                 output(f"** get_history(), warning: missing data for {var['variable']} at {y['time']}", 1)
                 continue
-            sum += value
             count += 1
+            if type(value) is str:
+                continue
+            sum = value + (sum if sum is not None else 0.0)
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
             if energy:
@@ -1339,7 +1341,7 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
                 var['kwh_peak'] = kwh_peak
                 var['kwh_neg'] = kwh_neg
         var['count'] = count
-        var['average'] = sum / count if count > 0 else None
+        var['average'] = sum / count if count > 0 and sum is not None else None
         var['max'] = max if max is not None else None
         var['max_time'] = var['data'][[y['value'] for y in var['data']].index(max)]['time'][11:16] if max is not None else None
         var['min'] = min if min is not None else None
@@ -1543,7 +1545,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         file.close()
     elif save is not None:
         file_name = save + "_report_" + dimension + "_" + d.replace('-','') + ".txt"
-        file = open(file_name, 'w')
+        file = open(file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
     if summary == 0:
@@ -1551,7 +1553,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
     # calculate and add summary data
     for i, var in enumerate(result):
         count = 0
-        sum = 0.0
+        sum = None
         max = None
         min = None
         for j, value in enumerate(var['values']):
@@ -1559,7 +1561,9 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
                 output(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}", 1)
                 continue
             count += 1
-            sum += value
+            if type(value) is str:
+                continue
+            sum = value + (sum if sum is not None else 0.0)
             max = value if max is None or value > max else max
             min = value if min is None or value < min else min
         # correct day total from side report
@@ -1568,7 +1572,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         var['type'] = dimension
         if summary < 2:
             var['sum'] = sum
-            var['average'] = var['total'] / count if count > 0 else None
+            var['average'] = var['total'] / count if count > 0 and var['total'] is not None else None
             var['date'] = d
             var['count'] = count
             var['max'] = max if max is not None else None
