@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  09 July 2024
+Updated:  17 July 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.2"
+version = "2.3.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -536,9 +536,10 @@ battery = None
 battery_settings = None
 battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy' ]
 battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
+residual_handling = 1 # set to 2 if Residual returns current capacity
 
 def get_battery(v = None):
-    global device_sn, battery, debug_setting, residual_scaling
+    global device_sn, battery, debug_setting, residual_handling
     if get_device() is None:
         return None
     output(f"getting battery", 2)
@@ -549,6 +550,10 @@ def get_battery(v = None):
         battery = {}
     for i in range(0, len(battery_vars)):
         battery[battery_data[i]] = result[i].get('value')
+    if residual_handling == 2:
+        capacity = battery.get('residual')
+        soc = battery.get('soc')
+        battery['residual'] = capacity * soc / 100 if capacity is not None and soc is not None else capacity
     return battery
 
 ##################################################################################################
@@ -666,7 +671,7 @@ def charge_periods(st1 = None, en1 = None, st2 = None, en2 = None, adjust=0, min
     if st1 is not None and en1 is not None and st1 != en1:
         st1 = round_time(time_hours(st1) + adjust)
         en1 = round_time(time_hours(en1) + adjust)
-        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = target_soc, quiet=0))
+        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = min_soc, quiet=0))
     if st2 is not None and en2 is not None and st2 != en2:
         st2 = round_time(time_hours(st2) + adjust)
         en2 = round_time(time_hours(en2) + adjust)
@@ -762,11 +767,13 @@ merge_settings = {                  # keys to add
     'WorkMode': {'keys': {
         'h115__': 'operation_mode__work_mode',
         'h116__': 'operation_mode__work_mode',
+        'h117__': 'operation_mode__work_mode'
         },
         'values': ['SelfUse', 'Feedin', 'Backup']},
     'BatteryVolt': {'keys': {
         'h115__': ['h115__14', 'h115__15', 'h115__16'],
         'h116__': ['h116__15', 'h116__16', 'h116__17'],
+        'h117__': ['h117__15', 'h117__16', 'h117__17']
         },
         'type': 'list',
         'valueType': 'float',
@@ -774,10 +781,12 @@ merge_settings = {                  # keys to add
     'BatteryTemp': {'keys': {
         'h115__': 'h115__17',
         'h116__': 'h116__18',
+        'h117__': 'h117__18',
         },
         'type': 'list',
         'valueType': 'int',
         'unit': '℃'},
+
 }
 
 def get_ui():
@@ -1089,7 +1098,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr/1000:.3f}kW and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
-    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'maxSoc': max_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
+    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr, 'maxsoc': max_soc}
     return period
 
 # set a schedule from a period or list of time segment periods
@@ -2596,8 +2605,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
     output(f"\nBattery Info:")
-    output(f"  Capacity:    {capacity:.1f}kWh")
-    output(f"  Residual:    {residual:.1f}kWh")
+    output(f"  Capacity:    {capacity:.2f}kWh")
+    output(f"  Residual:    {residual:.2f}kWh")
     output(f"  Voltage:     {bat_volt:.1f}V")
     output(f"  Current:     {bat_current:.1f}A")
     output(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
@@ -3069,8 +3078,8 @@ def battery_info(log=0, plot=1, count=None):
                     s +=f",{v:.0f}"
         return s
     output(f"Current SoC:         {current_soc}%")
-    output(f"Residual:            {residual:.1f}kWh")
-    output(f"Est. Capacity:       {capacity:.1f}kWh")
+    output(f"Capacity:            {capacity:.2f}kWh")
+    output(f"Residual:            {residual:.2f}kWh")
     output(f"InvBatVolt:          {bat_volt:.1f}V")
     output(f"InvBatCurrent:       {bat_current:.1f}A")
     output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")

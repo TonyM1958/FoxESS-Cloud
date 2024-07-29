@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  09 July 2024
+Updated:  17 July 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.4.4"
+version = "1.4.5"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -576,8 +576,9 @@ def get_firmware():
 
 battery = None
 battery_settings = None
+residual_handling = 1 # set to 2 if Residual returns current capacity
 
-def get_battery():
+def get_battery(info=0):
     global token, device_id, battery, debug_setting, messages
     if get_device() is None:
         return None
@@ -595,6 +596,21 @@ def get_battery():
     battery = result
     if battery.get('residual') is not None:
         battery['residual'] /=1000
+    if residual_handling == 2:
+        capacity = battery.get('residual')
+        soc = battery.get('soc')
+        battery['residual'] = capacity * soc / 100 if capacity is not None and soc is not None else capacity
+    if info == 1:
+        response = signed_get(path="/generic/v0/device/battery/list", params=params)
+        if response.status_code != 200:
+            output(f"** get_battery().info got response code {response.status_code}: {response.reason}")
+        else:
+            result = response.json().get('result')
+            if result is None:
+                errno = response.json().get('errno')
+                output(f"** get_battery().info, no result data, {errno_message(errno)}")
+            else:
+                battery['info'] = result['batteries']
     return battery
 
 ##################################################################################################
@@ -715,7 +731,7 @@ def charge_periods(st1 = None, en1 = None, st2 = None, en2 = None, adjust=0, min
     if st1 is not None and en1 is not None and st1 != en1:
         st1 = round_time(time_hours(st1) + adjust)
         en1 = round_time(time_hours(en1) + adjust)
-        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = target_soc, quiet=0))
+        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = min_soc, quiet=0))
     if st2 is not None and en2 is not None and st2 != en2:
         st2 = round_time(time_hours(st2) + adjust)
         en2 = round_time(time_hours(en2) + adjust)
@@ -805,11 +821,13 @@ merge_settings = {                  # keys to add
     'WorkMode': {'keys': {
         'h115__': 'operation_mode__work_mode',
         'h116__': 'operation_mode__work_mode',
+        'h117__': 'operation_mode__work_mode'
         },
         'values': ['SelfUse', 'Feedin', 'Backup']},
     'BatteryVolt': {'keys': {
         'h115__': ['h115__14', 'h115__15', 'h115__16'],
         'h116__': ['h116__15', 'h116__16', 'h116__17'],
+        'h117__': ['h117__15', 'h117__16', 'h117__17']
         },
         'type': 'list',
         'valueType': 'float',
@@ -817,6 +835,7 @@ merge_settings = {                  # keys to add
     'BatteryTemp': {'keys': {
         'h115__': 'h115__17',
         'h116__': 'h116__18',
+        'h117__': 'h117__18',
         },
         'type': 'list',
         'valueType': 'int',
@@ -1206,7 +1225,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr}W and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
     start_h, start_m = split_hours(start)
     end_h, end_m = split_hours(end)
-    period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minSocOnGrid': min_soc, 'maxSoc': max_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
+    period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode, 'minsocongrid': min_soc, 'fdsoc': fdsoc, 'fdpwr': fdpwr, 'maxsoc': max_soc}
     return period
 
 # set a schedule from a period or list of periods
@@ -2724,8 +2743,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
     reserve = capacity * min_soc / 100
     output(f"\nBattery Info:")
-    output(f"  Capacity:    {capacity:.1f}kWh")
-    output(f"  Residual:    {residual:.1f}kWh")
+    output(f"  Capacity:    {capacity:.2f}kWh")
+    output(f"  Residual:    {residual:.2f}kWh")
     output(f"  Voltage:     {bat_volt:.1f}V")
     output(f"  Current:     {bat_current:.1f}A")
     output(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
@@ -3144,10 +3163,18 @@ battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 def battery_info(log=0, plot=1, count=None):
     global debug_setting, battery_info_app_key
     output_spool(battery_info_app_key)
-    bat = get_battery()
+    bat = get_battery(info=1)
     if bat is None:
         output_close()
         return None
+    nbat = None
+    if bat.get('info') is not None:
+        for b in bat['info']:
+            output(f"\nSN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
+            nbat = 0
+            for s in b['slaveBatteries']:
+                nbat += 1
+                output(f"SN {s['sn']}, {s['batType']}, Version {s['version']} (Battery {nbat})")
     bat_volt = bat['volt']
     current_soc = bat['soc']
     residual = bat['residual']
@@ -3160,7 +3187,8 @@ def battery_info(log=0, plot=1, count=None):
         output_close()
         return None
     nv = len(cell_volts)
-    nbat = bat_count(nv) if count is None else count
+    if nbat is None:
+        nbat = bat_count(nv) if count is None else count
     if nbat is None:
         output(f"** battery_info(): unable to match cells_per_battery for {nv}")
         output_close()
@@ -3197,9 +3225,9 @@ def battery_info(log=0, plot=1, count=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    output(f"Current SoC:         {current_soc}%")
-    output(f"Residual:            {residual:.1f}kWh")
-    output(f"Est. Capacity:       {capacity:.1f}kWh")
+    output(f"\nCurrent SoC:         {current_soc}%")
+    output(f"Capacity:            {capacity:.2f}kWh")
+    output(f"Residual:            {residual:.2f}kWh")
     output(f"InvBatVolt:          {bat_volt:.1f}V")
     output(f"InvBatCurrent:       {bat_current:.1f}A")
     output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")

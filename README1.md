@@ -22,6 +22,7 @@ f.username = "my.fox_username"
 f.password = "my.fox_password"
 f.device_sn = "my.fox_device_sn"
 f.time_zone = "Europe/London"
+f.residual_handling = 1
 
 f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
@@ -37,6 +38,10 @@ Advanced users: use the same sequence in bash/python scripts to install modules 
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
 For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login) and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
+
+Residual handling configures how battery residual energy reported by Fox is handled:
++ 1: Fox returns the current battery residual energy and battery capacity is calculated using soc
++ 2: Fox returns the current battery capacity and battery residual is calculated using soc
 
 If a value is set for f.plot_file, any charts created will also be saved to an image file:
 + f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
@@ -77,7 +82,7 @@ Once an inverter is selected, you can make other calls to get information:
 
 ```
 f.get_firmware()
-f.get_battery()
+f.get_battery(info=1)
 f.get_settings()
 f.get_charge()
 f.get_min()
@@ -95,7 +100,7 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 + get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
 
-+ get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery.
++ get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery. If the optional parameter info is set to 1, the bayyery serial numbers and firmware versions are added to f.battery['info']
 
 + get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
@@ -666,6 +671,12 @@ This setting can be:
 
 
 # Version 
+
+1.4.5<br>
+Added f.residual_handling to cater for changes in the way Fox reports Capacity inplace of Residual.
+Updated battery_info() to return BMS and Battery serial numbers and firmware versions.
+Added h117__ protocol keys for battery info on H series Manager firmware 1.74.
+Note: schedules do not work with firmwre 1.74. Fox reports "Parameter does not meet expectations". No fix currently available for this.
 
 1.4.4<br>
 Fix error when get_raw() returns values that are strings.

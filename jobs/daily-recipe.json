@@ -27,6 +27,7 @@ spec:
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
     f.pushover_user_key = ${PUSHOVER_USER_KEY:-None}
     f.plot_file = "plot###.png"
+    f.residual_handling = 1
 
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)

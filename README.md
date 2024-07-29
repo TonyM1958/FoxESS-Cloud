@@ -30,6 +30,7 @@ import foxesscloud.openapi as f
 f.api_key = "my.fox_api_key"
 f.device_sn = "my.fox_device_sn"
 f.time_zone = "Europe/London"
+f.residual_handling = 1
 
 f.pv_api_key = "my.pv_api_key"
 f.pv_system_id = "my.pv_system_id"
@@ -45,6 +46,10 @@ Advanced users: use the same sequence in bash/python scripts to install modules 
 You don't have to configure all of the settings. Your Fox ESS Cloud api key is the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login). Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
 
 For example, replace _my.fox_api_key_ with the API key. Add you inverter serial number if you have more than 1 inverter linked to your account. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
+
+Residual handling configures how battery residual energy reported by Fox is handled:
++ 1: Fox returns the current battery residual energy and battery capacity is calculated using soc
++ 2: Fox returns the current battery capacity and battery residual is calculated using soc
 
 If a value is set for f.plot_file, any charts created will also be saved to an image file:
 + f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
@@ -687,6 +692,12 @@ This setting can be:
 
 
 # Version Info
+
+2.3.3<br>
+Added f.residual_handling to cater for changes in the way Fox reports Capacity inplace of Residual.
+Added h117__ protocol keys for battery info on H series Manager firmware 1.74.
+Note: schedules do not work with firmwre 1.74. Fox reports "Parameter does not meet expectations". No fix currently available for this.
+
 
 2.3.2<br>
 Fix error when get_history() returns values that are strings.
