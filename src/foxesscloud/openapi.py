@@ -381,10 +381,11 @@ def get_logger(sn=None):
     if result is None:
         output(f"** get_logger(), no list result data, {errno_message(response)}")
         return None
-    if type(result) is not list or len(result) == 0 or len(result) > 100:
+    total = result.get('total')
+    logger_list = result.get('data')
+    if total is None or total == 0 or total > 100 or type(logger_list) is not list:
         output(f"** invalid list of loggers returned: {total}")
         return None
-    logger_list = result
     n = None
     if len(logger_list) > 1:
         if sn is not None:

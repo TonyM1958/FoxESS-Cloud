@@ -351,10 +351,10 @@ def get_site(name=None):
         output(f"** get_site(), no result data, {errno_message(errno)}")
         return None
     total = result.get('total')
-    if total is None or total == 0 or total > 100:
+    site_list = result.get('plants')
+    if total is None or total == 0 or total > 100 or type(site_list) is not list:
         output(f"** invalid list of sites returned: {total}")
         return None
-    site_list = result.get('plants')
     n = None
     if len(site_list) > 1:
         if name is not None:
