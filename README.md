@@ -693,6 +693,13 @@ This setting can be:
 
 # Version Info
 
+
+2.3.4<br>
+Add processing of Max SoC when set in Force Charge schedule.
+Correct timing of battery prediction so it doesn't lag actual by 1 hour.
+Process Min SoC when force_charge=1 and timed_mode=2.
+
+
 2.3.3<br>
 Added f.residual_handling to cater for changes in the way Fox reports Capacity inplace of Residual.
 Added h117__ protocol keys for battery info on H series Manager firmware 1.74.

@@ -672,6 +672,11 @@ This setting can be:
 
 # Version 
 
+1.4.6<br>
+Add processing of Max SoC when set in Force Charge schedule.
+Correct timing of battery prediction so it doesn't lag actual by 1 hour.
+Process Min SoC when force_charge=1 and timed_mode=2.
+
 1.4.5<br>
 Added f.residual_handling to cater for changes in the way Fox reports Capacity inplace of Residual.
 Updated battery_info() to return BMS and Battery serial numbers and firmware versions.
