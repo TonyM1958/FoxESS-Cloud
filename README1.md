@@ -672,6 +672,11 @@ This setting can be:
 
 # Version 
 
+1.4.7<br>
+Adjust losses for battery discharge in charge_needed().
+Fix data_wrap in charge_needed().
+Fix set_period() handling of max_soc.
+
 1.4.6<br>
 Add processing of Max SoC when set in Force Charge schedule.
 Correct timing of battery prediction so it doesn't lag actual by 1 hour.

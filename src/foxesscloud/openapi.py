@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  01 August 2024
+Updated:  02 August 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.4"
+version = "2.3.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1082,13 +1082,13 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"** mode must be one of {work_modes}")
         return None
     min_soc = 10 if min_soc is None else min_soc
-    max_soc = 100 if max_soc is None else max_soc
+    max_soc = None if mode != 'ForceCharge' else max_soc
     fdsoc = min_soc if fdsoc is None else fdsoc
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 10 and 100")
         return None
-    if max_soc < min_soc or max_soc > 100:
+    if max_soc is not None and (max_soc < min_soc or max_soc > 100):
         output(f"set_period(): ** max_soc must be between {min_soc} and 100")
         return None
     if fdpwr < 0 or fdpwr > 6000:
@@ -1098,10 +1098,17 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"set_period(): ** fdsoc must between {min_soc} and 100")
         return None
     if quiet == 0:
-        output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr/1000:.3f}kW and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
+        if mode == 'ForceCharge':
+            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%", 1)
+        elif mode == 'ForceDischarge':
+            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}%, fdPwr = {fdpwr}W and fdSoC = {fdsoc}%", 1)
+        else:
+            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}%", 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
-    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr, 'maxsoc': max_soc}
+    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
+    if max_soc is not None:
+        period['maxsoc'] = max_soc
     return period
 
 # set a schedule from a period or list of time segment periods
@@ -2802,7 +2809,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             update_settings = 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] * charge_loss for x in generation_timed]
-    discharge_timed = [x / discharge_loss for x in consumption_timed]
+    discharge_timed = [x / discharge_loss / charge_loss for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     work_mode_timed = strategy_timed(timed_mode, hour_now, run_time, min_soc)
     work_mode = work_mode_timed[0]['mode'] if current_mode is None else current_mode
@@ -2945,7 +2952,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if show_data > 0:
         data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
-        h = int(round_time(base_hour + 1))
+        h = base_hour + 1
         s += " " * (18 if show_data == 2 else 17) * (h % data_wrap)
         for i in range(1, run_time):
             s += "\n" if h > hour_now and h % data_wrap == 0 else ""
