@@ -104,7 +104,7 @@ get_battery() returns the current battery status, including 'soc', 'volt', 'curr
 
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge times.
 
-get_flag() returns the current scheduler enable / support flags
+get_flag() returns the current scheduler enable / support / maxsoc flags
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 
@@ -115,7 +115,7 @@ You can change inverter settings using:
 ```
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
-f.set_period(start, end, mode, min_soc, fdsoc, fdpwr, segment)
+f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
 f.charge_periods(st1, en1, st2, en2, min_soc)
 f.set_schedule(periods, enable)
 ```
@@ -135,6 +135,7 @@ set_charge() takes the charge times from the battery_settings and applies these 
 set_period() returns a period structure that can be used to build a list for set_schedule()
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
++ max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
@@ -692,6 +693,11 @@ This setting can be:
 
 
 # Version Info
+
+2.3.6<br>
+Correct timing of Solcast forecast when timezone is not GMT.
+Update get_flag() to return 'maxsoc' (True/False) if max soc is a supported field.
+Update processing of max_soc in schedules.
 
 2.3.5<br>
 Adjust losses for battery discharge in charge_needed().

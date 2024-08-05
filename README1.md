@@ -110,7 +110,7 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 + get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
-+ get_flag() returns the flag information for Mode Scheduler, indicating if this is supported or enabled.
++ get_flag() returns the flag information for Mode Scheduler, indicating if this is supported or enabled and also if maxsoc is a required parameter.
 
 + get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
 
@@ -125,7 +125,7 @@ You can change inverter settings using:
 f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
-f.set_period(start, end, mode, min_soc, fdsoc, fdpwr, segment)
+f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
 f.charge_strategy(st1, en1, st2, en2, min_soc)
 f.set_schedule(periods, template, enable)
 ```
@@ -147,6 +147,7 @@ set_work_mode(mode) takes a work mode as a parameter and sets the inverter to th
 set_period() returns a period structure that can be used to build a list of strategy periods for set_schedule()
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
++ max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
@@ -670,7 +671,12 @@ This setting can be:
 + 3: lots of debug information
 
 
-# Version 
+# Version
+
+1.4.8<br>
+Correct timing of Solcast forecast when timezone is not GMT.
+Update get_flag() to return 'maxsoc' (True/False) if max soc is a supported field.
+Update processing of max_soc in schedules.
 
 1.4.7<br>
 Adjust losses for battery discharge in charge_needed().

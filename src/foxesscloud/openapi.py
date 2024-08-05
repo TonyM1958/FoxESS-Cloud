@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  02 August 2024
+Updated:  04 August 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.5"
+version = "2.3.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -674,7 +674,7 @@ def charge_periods(st1 = None, en1 = None, st2 = None, en2 = None, adjust=0, min
     if st1 is not None and en1 is not None and st1 != en1:
         st1 = round_time(time_hours(st1) + adjust)
         en1 = round_time(time_hours(en1) + adjust)
-        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = min_soc, quiet=0))
+        periods.append(set_period(start = st1, end = en1, mode = 'ForceCharge', min_soc = min_soc, max_soc=target_soc, quiet=0))
     if st2 is not None and en2 is not None and st2 != en2:
         st2 = round_time(time_hours(st2) + adjust)
         en2 = round_time(time_hours(en2) + adjust)
@@ -1028,7 +1028,8 @@ def get_flag():
         schedule = {'enable': None, 'support': None, 'periods': None}
     schedule['enable'] = result.get('enable')
     schedule['support'] = result.get('support')
-    return result
+    schedule['maxsoc'] = False
+    return schedule
 
 ##################################################################################################
 # get schedule
@@ -1063,6 +1064,9 @@ def get_schedule():
 
 # create time segment structure. Note: end time is exclusive.
 def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, segment=None, enable=1, quiet=1):
+    global schedule
+    if schedule is None and get_flag() is None:
+        return None
     if segment is not None and type(segment) is dict:
         start = segment.get('start')
         end = segment.get('end')
@@ -1082,14 +1086,14 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"** mode must be one of {work_modes}")
         return None
     min_soc = 10 if min_soc is None else min_soc
-    max_soc = None if mode != 'ForceCharge' else max_soc
+    max_soc = None if schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
     fdsoc = min_soc if fdsoc is None else fdsoc
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 10 and 100")
         return None
-    if max_soc is not None and (max_soc < min_soc or max_soc > 100):
-        output(f"set_period(): ** max_soc must be between {min_soc} and 100")
+    if max_soc is not None and (max_soc < 10 or max_soc > 100):
+        output(f"set_period(): ** max_soc must be between 10 and 100")
         return None
     if fdpwr < 0 or fdpwr > 6000:
         output(f"set_period(): ** fdpwr must be between 0 and 6000")
@@ -1098,12 +1102,12 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"set_period(): ** fdsoc must between {min_soc} and 100")
         return None
     if quiet == 0:
-        if mode == 'ForceCharge':
-            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}% and max_soc = {max_soc}%", 1)
-        elif mode == 'ForceDischarge':
-            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}%, fdPwr = {fdpwr}W and fdSoC = {fdsoc}%", 1)
+        if mode == 'ForceDischarge':
+            s = f"   {hours_time(start)} to {hours_time(end)} {mode} with minsoc = {min_soc}%, fdPwr = {fdpwr}W, fdSoC = {fdsoc}%"
         else:
-            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc}%", 1)
+            s = f"   {hours_time(start)} to {hours_time(end)} {mode} with minsoc = {min_soc}%"
+        s += f", maxsoc = {max_soc}%" if max_soc is not None else ""
+        output(s, 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
     period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'minSocOnGrid': min_soc, 'fdSoc': fdsoc, 'fdPwr': fdpwr}
@@ -2364,15 +2368,21 @@ def report_value_profile(result):
     current_total = sum(by_hour)
     return (daily_average, [h * daily_average / current_total for h in by_hour])
 
-# take forecast and return timed profile
 def forecast_value_timed(forecast, today, tomorrow, hour_now, run_time, time_offset=0):
     profile = []
-    for h in range(0, 24):
-        profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(int(round_time(h - time_offset)))))
-    timed = []
-    for h in range(int(hour_now), 24):
-        timed.append(c_float(forecast.daily[today]['hourly'].get(int(round_time(h - time_offset)))))
-    return (timed + profile + profile)[:run_time]
+    h = int(hour_now - time_offset)
+    while h < 0:
+        profile.append(0.0)
+        h += 1
+    while h < 24:
+        profile.append(c_float(forecast.daily[today]['hourly'].get(h)))
+        h += 1
+    while h < 48:
+        profile.append(c_float(forecast.daily[tomorrow]['hourly'].get(h-24)))
+        h += 1
+    while len(profile) < run_time:
+        profile.append(0.0)
+    return profile[:run_time]
 
 # build the timed work mode profile from the tariff strategy:
 def strategy_timed(timed_mode, hour_now, run_time, min_soc=10, max_soc=100):
@@ -2748,7 +2758,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         fsolar = Solar(quiet=True)
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
             solar_value = fsolar.daily[forecast_day]['kwh']
-            solar_timed = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time, time_offset)
+            solar_timed = forecast_value_timed(fsolar, today, tomorrow, hour_now, run_time, 0)
             if charge_pm:
                 output(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
             else:
@@ -3554,7 +3564,7 @@ class Solcast :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
-                        hour = int(period_end[11:13])
+                        hour = int(round_time(time_hours(period_end[11:16])-0.5))
                         if date not in self.daily.keys() :
                             self.daily[date] = {'hourly': {}, 'kwh': 0.0}
                         if hour not in self.daily[date]['hourly'].keys():
@@ -3643,7 +3653,7 @@ class Solcast :
         color = 'orange' if day > self.today else 'green'
         if x is not None and len(x) != 0 :
             plt.plot(x, y, color=color, linestyle='solid', linewidth=2)
-        title = f"Solcast hourly yield on {day}"
+        title = f"Solcast hourly yield on {day} (UTC)"
         title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
         plt.title(title, fontsize=12)
         plt.grid()
