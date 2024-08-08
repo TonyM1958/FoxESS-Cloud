@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  04 August 2024
+Updated:  06 August 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.4.8"
+version = "1.4.9"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1094,7 +1094,6 @@ def get_flag():
     schedule['maxsoc'] = 'maxsoc' in result['fields']
     return schedule
 
-
 # get the current schedule
 def get_schedule():
     global token, device_id, schedule, debug_setting, messages
@@ -1114,7 +1113,9 @@ def get_schedule():
         errno = response.json().get('errno')
         output(f"** get_schedule(), no result data, {errno_message(errno)}")
         return None
+    maxsoc = schedule.get('maxsoc')
     schedule = result
+    schedule['maxsoc'] = maxsoc
     return schedule
 
 # get the details for a specific template
@@ -2604,7 +2605,7 @@ charge_config = {
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power in kW
-    'discharge_loss': 0.97,           # loss converting battery discharge power to grid power
+    'discharge_loss': 0.98,           # loss converting battery discharge power to grid power
     'pv_loss': 0.95,                  # loss converting PV power to battery charge power
     'grid_loss': 0.95,                # loss converting grid power to battery charge power
     'charge_loss': None,              # loss converting charge power to residual
@@ -2822,7 +2823,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif charge_power < charge_limit:
         charge_limit = charge_power
     # work out losses when charging / force discharging
-    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 20
+    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 12
     operating_loss = inverter_power / 1000
     bms_power = charge_config['bms_power']
     bms_loss = bms_power / 1000
@@ -2964,7 +2965,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             update_settings = 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] * charge_loss for x in generation_timed]
-    discharge_timed = [x / discharge_loss / charge_loss for x in consumption_timed]
+    discharge_timed = [(x / discharge_loss + operating_loss) / charge_loss for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     work_mode_timed = strategy_timed(timed_mode, hour_now, run_time, min_soc)
     work_mode = work_mode_timed[0]['mode'] if current_mode is None else current_mode
@@ -3149,7 +3150,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # adjust times for clock changes
         adjust = hour_adjustment if hour_adjustment != 0 and start_hour > change_hour else 0
         if timed_mode > 1:
-            periods = charge_periods(st1 = start_at, en1 = end1, st2 = start2, en2 = end2, adjust = adjust, min_soc = min_soc, target_soc = end_soc if target_soc <= 10 else target_soc)
+            periods = charge_periods(st1 = start_at, en1 = end1, st2 = start2, en2 = end2, adjust = adjust, min_soc = min_soc, target_soc = end_soc if target_soc < end_soc else target_soc)
             set_schedule(periods = periods)
         else:
             set_charge(ch1 = True, st1 = start_at, en1 = end1, ch2 = False, st2 = start2, en2 = end2, adjust = adjust, force = charge_config['force'])

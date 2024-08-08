@@ -327,7 +327,7 @@ capacity: None                # Battery capacity in kWh (over-rides generated va
 charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
 discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
 export_limit: None            # maximum export power in kW. None uses the inverter power rating
-discharge_loss: 0.97          # loss converting battery discharge power to grid power
+discharge_loss: 0.98          # loss converting battery discharge power to grid power
 pv_loss: 0.95                 # loss converting PV power to battery charge power
 grid_loss: 0.97               # loss converting grid power to battery charge power
 charge_loss: None             # loss converting charge power to residual
@@ -672,6 +672,9 @@ This setting can be:
 
 
 # Version
+
+1.4.9<br>
+Adjust inverter losses in charge_needed().
 
 1.4.8<br>
 Correct timing of Solcast forecast when timezone is not GMT.
