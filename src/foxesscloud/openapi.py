@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  06 August 2024
+Updated:  09 August 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.3.7"
+version = "2.3.8"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2677,7 +2677,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif charge_power < charge_limit:
         charge_limit = charge_power
     # work out losses when charging / force discharging
-    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 12
+    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     operating_loss = inverter_power / 1000
     bms_power = charge_config['bms_power']
     bms_loss = bms_power / 1000
@@ -2819,7 +2819,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             update_settings = 0
     # produce time lines for main charge and discharge (after losses)
     charge_timed = [x * charge_config['pv_loss'] * charge_loss for x in generation_timed]
-    discharge_timed = [(x / discharge_loss + operating_loss) / charge_loss for x in consumption_timed]
+    discharge_timed = [(x / discharge_loss + bms_loss) / charge_loss for x in consumption_timed]
     # adjust charge and discharge time lines for work mode, force charge and power limits
     work_mode_timed = strategy_timed(timed_mode, hour_now, run_time, min_soc)
     work_mode = work_mode_timed[0]['mode'] if current_mode is None else current_mode

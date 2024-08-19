@@ -673,6 +673,10 @@ This setting can be:
 
 # Version
 
+1.5.0<br>
+Fix target_soc typo in charge_needed() when charge is required and schdeules are being used.
+Revert inverter losses to BMS losses in charge_needed().
+
 1.4.9<br>
 Adjust inverter losses in charge_needed().
 

@@ -694,6 +694,9 @@ This setting can be:
 
 # Version Info
 
+2.3.8<br>
+Revert inverter losses to BMS losses in charge_needed().
+
 2.3.7<br>
 Adjust inverter losses in charge_needed().
 
