@@ -305,7 +305,7 @@ All the parameters are optional:
 + forecast_selection: if set to 1, settings are only updated if there is a forecast. Default is 0, generation is used when forecasts are not available
 + forecast_times: a list of hours when forecasts can be obtained. By default, the forecast times for the selected tariff are used (see below)
 + update_settings: 0 no changes, 1 update charge settings. The default is 0
-+ show_data: 1 show battery SoC data, 2 show battery Residual data, 3 show timed data, 4 show timed data before and after charging. The default is 1.
++ show_data: 1 show battery SoC data, 2 show battery Residual data, 3 show timed data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
 ### Modelling
@@ -693,6 +693,14 @@ This setting can be:
 
 
 # Version Info
+
+2.3.9<br>
+Add checking of number of periods in a schedule. Error if more than 8.
+Show min and max soc correctly during charge periods.
+Update default strategy for Flux to include period for charging from 01:00 to 01:59.
+Sort periods into ascending time order to make them easier to follow.
+Rework charge / discharge to improve prediction when charging from grid when solar is available.
+Drop show_data=4 option in charge_needed().
 
 2.3.8<br>
 Revert inverter losses to BMS losses in charge_needed().
