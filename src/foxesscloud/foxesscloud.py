@@ -2279,6 +2279,7 @@ def get_agile_offset(start, duration):
         return 0
     key = 'off_peak1' if hour_in(start, tariff.get('off_peak1')) else 'off_peak2'
     if tariff.get('agile') is None or tariff['agile'].get(key) is None:
+        output(f"  Charge time: {hours_time(start)} to {hours_time(start + duration)}")
         return 0
     i = min([int(duration * 2), len(tariff['agile'][key]['times'])])
     period = tariff['agile'][key]['times'][i]
@@ -2983,7 +2984,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             hours = charge_config['min_hours']
         end_soc = min([int((start_residual + kwh_needed) / capacity * 100 + 0.5), 100])
         # rework charge and discharge
-        charge_offset = 0.0 if hours > charge_time else get_agile_offset(start_at, hours)
+        charge_offset = get_agile_offset(start_at, hours)
         start1 = round_time(start_at + charge_offset)
         end1 = round_time(start1 + hours)
         start_timed = time_to_start + charge_offset

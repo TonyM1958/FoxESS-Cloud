@@ -126,7 +126,7 @@ f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
 f.set_work_mode(mode)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
-f.charge_strategy(st1, en1, st2, en2, min_soc)
+f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
 f.set_schedule(periods, template, enable)
 ```
 
@@ -152,12 +152,16 @@ set_period() returns a period structure that can be used to build a list of stra
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
-charge_periods(): returns a list of time periods that describe the strategy for the current tariff and adds the periods required for charging:
+charge_periods(): returns a list of periods that describe the strategy for the current tariff and adds the periods required for charging:
++ st0: the start time for period 0 when you don't want the battery to discharge before charging
++ en0: the end time for period 0
 + st1: the start time for the period when the battery charges from the grid
 + en1: the end time for period 1
-+ st2: the start time for period when the battery is held at min_soc
++ st2: the start time for period 2 when you don't want the batteru to discharge after charging
 + en2: the end time for period 2
-+ min_soc: the min_soc to use after the charge period, when you don't want the battery to discharge below this level
++ min_soc: the min_soc to use when building the strategy
++ start_soc: the min_soc to use for period 0
++ target_soc: the max_soc to set during period 1 and min_soc to use for period 2
 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide either a list of periods or a template ID
 + periods: a period or list of periods created using f.set_period()
@@ -211,8 +215,8 @@ The summary includes the following attributes:
 
 For power values, the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
 + kwh: the total energy generated or consumed
-+ kwh_off: the total energy consumed or generated during the off-peak time of use
-+ kwh_peak: the total energy consumed or generated during the peak time of use
++ kwh_off: the total energy consumed or generated during the off-peak time of use (off_peak1, off_peak2, off_peak3)
++ kwh_peak: the total energy consumed or generated during the peak time of use (peak1, peak2)
 + kwh_neg: the total energy from -ve power flow (all other totals are based on +ve power flow)
 
 ## Report Data
@@ -330,9 +334,9 @@ export_limit: None            # maximum export power in kW. None uses the invert
 discharge_loss: 0.98          # loss converting battery discharge power to grid power
 pv_loss: 0.95                 # loss converting PV power to battery charge power
 grid_loss: 0.97               # loss converting grid power to battery charge power
-charge_loss: None             # loss converting charge power to residual
 inverter_power: None          # inverter power consumption in W (dynamically set)
 bms_power: 50                 # BMS power consumption in W
+force_charge_power: 5.10      # power used when Force Charge is scheduled
 allowed_drain: 4,             # % tolerance below min_soc before float charge starts
 float_current: 4,             # BMS float charge in A
 bat_resistance: 0.070         # internal resistance of a battery in ohms
@@ -437,14 +441,15 @@ Tariffs configure when your battery can be charged and provide time of use (TOU)
 There are a number of different pre-configured tariffs:
 + Octopus Flux: off-peak from 02:00 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59. Timed work mode changes to Self Use at 5am and Feed In First at 4pm.
 + Intelligent Octopus: off-peak from 23:30 to 05:30, forecasts from 22:00 to 23:59
-+ Octopus Cosy: off-peak from 04:00 to 07:00 and 13:00 to 16:00, peak from 16:00 to 19:00, forecasts from 02:00 to 03:59 and 12:00 to 12:59
++ Octopus Cosy: off-peak from 04:00 to 07:00, 13:00 to 16:00 and 22:00 to 24:00, peak from 16:00 to 19:00, forecasts from 01:00 to 02:59 and 10:00 to 11:59
 + Octopus Go: off peak from 00:30 to 04:30, forecasts from 22:00 to 23:59
-+ Agile Octopus: off-peak from 02:30 to 05:00, peak from 16:00 to 19:00, forecasts from 22:00 to 23:59
++ Agile Octopus: off-peak from 00:00 to 06:00 and 12:00 to 16:00, peak from 16:00 to 19:00, forecasts from 10:00 to 11:59 and 22:00 to 23:59
 + British Gas Electric Driver: off-peak from 00:00 to 05:00, forecasts from 22:00 to 23:59
++ EON Next Drive: off-peak from 00:00 to 07:00, forecasts from 22:00 to 23:59
 + Eco 7: Economy 7: off-peak from 00:30 to 07:30 GMT (01:30 to 08:30 during BST)
 
 Custom periods can be configured for specific times if required:
-+ Custom: charging from 02:00 to 05:00, no off-peak or peak times, forecasts from 22:00 to 23:59
++ Custom: off-peak from 02:00 to 05:00, peak from 16:00 to 18:59, forecasts from 22:00 to 23:59
 
 The active tariff is configured by calling 'f.set_tariff() with the name of the tariff to use:
 
@@ -455,15 +460,12 @@ f.set_tariff('flux')
 When Agile Octopus is selected, a price based charging period is configured using the 30 minute price forecast. For example:
 
 ```
-f.set_tariff('agile', product, region, start_at, end_by, duration, times, forecast_times, strategy, update, weighting, time_shift)
+f.set_tariff('agile', product, region, times, forecast_times, strategy, update, weighting, time_shift)
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
 + product: optional Agile Octopus product code (see below). The default is "AGILE-FLEX-22-11-25"
 + region: optional region to use for prices (se below). The default is 'H' (Southern England)
-+ start_at: optional earliest start time for charge period in hours, the default is 23:00
-+ end_by: optional latest end time for charge period in hours, the default is 08:00
-+ duration: optional charge time period in hours, the default is 3 hours. Valid range is 1-6 hours
 + times: a list of charge periods that can be used instead of start_at, end_by and duration (see below)
 + forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar
 + strategy: an optional list of times and work modes (see below)
@@ -501,21 +503,20 @@ The best charging period is determined based on the weighted average of the 30 m
 + f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
 
-Specifying start_at, end_by and duration allows either the AM or PM charging slot for any tariif to be updated, depending on the time. Agile periods will be calculated; othe rtariffs will use the start and end times directly. By default, set_tariff() updates the AM charge period if start_at is after 9pm and end_by is before 8am; it updates the PM charge period if start_at is after 8am and the end_by is before 9pm. Only the relevant AM or PM charge time is updated e.g. if you configure a PM charging period, the AM charginig period is not changed.
+set_tariff() can configure multiple off-peak and peak periods for any tariff using the times parameter. Times is a list of tuples containing values for key, start_at and end_by. A tuple with a key but no value will remove the specified time periods from the tariff.
++ recongnised keys are: 'off_peak1', 'off_peak2', 'off_peak3', 'peak1', 'peak2'
 
-To disable a charging period, set duration=0.
-
-set_tariff() can configure multiple charging periods for any tariff using the times parameter instead of start_at, end_by and duration. Times is a list of tuples containing values for start_at, end_by and duration. For example, this parameter configures an AM charging period between 11pm and 8am with a 3 hour period and a PM charging period between 12 noon and 4pm with a 1 hour period:
-+ times=[("23:00", "8:00", 3), ("12:00", "16:00", 1)]
+For example, this parameter configures an AM charging period between 11pm and 8am and a PM charging period between 12 noon and 4pm and removes the time period 'peak2':
++ times=[("off_peak1", "23:00", "8:00"), ("off_peak2", "12:00", "16:00"), ("peak2")]
 
 'strategy' allows you to configure times when work modes will be changed. The format is a list of dictionary items, containing:
 + 'start', 'end': times in decimal hours or time format. The end time is exclusive so setting an end time of '07:00' will set a schedule that ends at '06:59'
 + 'mode': the work mode to be used from 'SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge'
-+ 'min_soc, 'fdsoc', 'fdpwr': optional values for each work mode. The defaults are 10, 10 and 0 respectively.
++ 'min_soc, 'fdsoc', 'fdpwr' and 'max_soc': optional values for each work mode. The defaults are 10, 10, 0 and 100 respectively.
 
 Alternatively, if you set strategy='load', the current inverter schedule will be loaded and used.
 
-Any strategy time segments that overlap with the charge time periods for the tariff will be dropped.
+Any strategy time segments that overlap the charge time periods for the tariff will be dropped.
 
 ```
 f.get_strategy()
@@ -672,6 +673,19 @@ This setting can be:
 
 
 # Version
+
+1.5.2<br>
+**breaking changes**
+Implement best charging times for Agile tariff, based on best price for charge time required.
+Re-write tariff handling with major charnges to set_tariff() and the way Agile prices are stored and processed.
+Drop parameters 'start_at', 'end_by' and 'duration' from set_tariff().
+Update 'times' parameter for set_tariff() to allow time periods to be added and remove using a list of tuples.
+Add period 0 to charge_periods() to support force_charge before Agile charge period and update min_soc settings.
+Add 'off_peak3' period for Octopus Cosy and include this in Time Of Use.
+Change tariff 'peak' period key to 'peak1' to align with 'peak2'.
+Update modelling of charge power when using schedules.
+Update Octopus Cosy to correct TOU.
+Update Agile to allow charging between 00:00-06:00 and 12:00-16:00.
 
 1.5.1<br>
 Add checking of number of periods in a schedule. Error if more than 8.
