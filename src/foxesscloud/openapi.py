@@ -2614,7 +2614,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if charge_limit < 0.1:
         output(f"** charge_current is too low ({charge_current:.1f}A)")
     charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2
-    force_charge_power = charge_config['force_charge_power'] if timed_mode > 1 else device_power
+    force_charge_power = charge_config['force_charge_power'] if timed_mode > 1 and charge_config.get('force_charge_power') is not None else device_power
     grid_loss = charge_config['grid_loss']
     charge_power = min([device_power * grid_loss, force_charge_power * grid_loss, charge_limit])
     float_charge = (charge_config['float_current'] if charge_config.get('float_current') is not None else 4) * bat_ocv / 1000
