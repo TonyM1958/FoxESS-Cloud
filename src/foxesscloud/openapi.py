@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  28 August 2024
+Updated:  30 August 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.4.0"
+version = "2.4.1"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -595,7 +595,7 @@ def time_period(t, n):
         result += f" Charge from grid" if enable else f" Force Charge"
     return result
 
-def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, adjust = 0, force = 0):
+def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force = 0):
     global token, device_sn, battery_settings, debug_setting, time_period_vars
     if get_device() is None:
         return None
@@ -621,8 +621,8 @@ def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, adjus
             en1 = 0
             ch1 = False
         else:
-            st1 = round_time(time_hours(st1) + adjust)
-            en1 = round_time(time_hours(en1) + adjust)
+            st1 = time_hours(st1)
+            en1 = time_hours(en1)
         battery_settings['times']['enable1'] = True if ch1 == True or ch1 == 1 else False
         battery_settings['times']['startTime1']['hour'] = int(st1)
         battery_settings['times']['startTime1']['minute'] = int(60 * (st1 - int(st1)) + 0.5)
@@ -635,8 +635,8 @@ def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, adjus
             en2 = 0
             ch2 = False
         else:
-            st2 = round_time(time_hours(st2) + adjust)
-            en2 = round_time(time_hours(en2) + adjust)
+            st2 = time_hours(st2)
+            en2 = time_hours(en2)
         battery_settings['times']['enable2'] = True if ch2 == True or ch2 == 1 else False
         battery_settings['times']['startTime2']['hour'] = int(st2)
         battery_settings['times']['startTime2']['minute'] = int(60 * (st2 - int(st2)) + 0.5)
@@ -665,20 +665,20 @@ def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, adjus
         output(f"success", 2) 
     return battery_settings
 
-def charge_periods(st0=None, en0=None, st1=None, en1=None, st2=None, en2=None, adjust=0, min_soc=10, target_soc=100, start_soc=10):
+def charge_periods(st0=None, en0=None, st1=None, en1=None, st2=None, en2=None, min_soc=10, target_soc=100, start_soc=10):
     output(f"\nConfiguring schedule",1)
     strategy = get_strategy(min_soc=min_soc)
     if st0 is not None and en0 is not None and st0 != en0:
-        st0 = round_time(time_hours(st0) + adjust)
-        en0 = round_time(time_hours(en0) + adjust)
+        st0 = time_hours(st0)
+        en0 = time_hours(en0)
         strategy.append({'start': st0, 'end': en0, 'mode': 'SelfUse', 'min_soc': start_soc})
     if st1 is not None and en1 is not None and st1 != en1:
-        st1 = round_time(time_hours(st1) + adjust)
-        en1 = round_time(time_hours(en1) + adjust)
+        st1 = time_hours(st1)
+        en1 = time_hours(en1)
         strategy.append({'start': st1, 'end': en1, 'mode': 'ForceCharge', 'min_soc': start_soc, 'max_soc': target_soc})
     if st2 is not None and en2 is not None and st2 != en2:
-        st2 = round_time(time_hours(st2) + adjust)
-        en2 = round_time(time_hours(en2) + adjust)
+        st2 = time_hours(st2)
+        en2 = time_hours(en2)
         strategy.append({'start': st2, 'end': en2, 'mode': 'SelfUse', 'min_soc': target_soc})
     periods = []
     for s in sorted(strategy, key=lambda s: s['start']):
@@ -1869,6 +1869,15 @@ daylight_saving = british_summer_time
 def daylight_changes(a,b):
     return daylight_saving(a) - daylight_saving(b)
 
+# return an hour from a time line (adjusted for daylight saving)
+def adjusted_hour(t, time_line):
+    if t is None or time_line is None:
+        return None
+    i = int(t)
+    if i < 0 or i >= len(time_line):
+        return None
+    return time_line[i] + t % 1
+
 
 ##################################################################################################
 # TARIFFS - charge periods and time of user (TOU)
@@ -1882,12 +1891,8 @@ octopus_flux = {
     'peak1': {'start': 16.0, 'end': 19.0 },                     # peak period 1
     'forecast_times': [22, 23],                                 # hours in a day to get a forecast
     'strategy': [
-        {'start': 0.0, 'end': 2.0, 'mode': 'Feedin'},
-        {'start': 5.0, 'end': 6.0, 'mode': 'SelfUse'},
-        {'start': 6.0, 'end': 13.0, 'mode': 'SelfUse'},
-        {'start': 13.0, 'end': 14.0, 'mode': 'SelfUse'},
-        {'start': 14.0, 'end': 16.0, 'mode': 'SelfUse'},
-        {'start': 16.0, 'end': 24.0, 'mode': 'Feedin'}]
+        {'start':  5.0, 'end':  6.0, 'mode': 'SelfUse'},
+        {'start': 16.0, 'end': 19.0, 'mode': 'Feedin'}]
     }
 
 # time periods for Intelligent Octopus
@@ -1922,7 +1927,7 @@ agile_octopus = {
     'peak1': {'start': 16.0, 'end': 19.0 },
     'forecast_times': [10, 11, 22, 23],
     'strategy': [
-        {'start': 6.0, 'end': 12.0, 'mode': 'SelfUse'},
+        {'start':  6.0, 'end':  7.0, 'mode': 'SelfUse'},
         {'start': 16.0, 'end': 19.0, 'mode': 'Feedin'}],
     'agile': {}
     }
@@ -2102,10 +2107,11 @@ def get_agile_times(tariff=agile_octopus, d=None):
             tariff['agile'][key] = {}
         # prices for AM/PM charge times
         prices = []
+        h = 23
         for i in range(0, len(slots)):
-            h = time_hours(slots[i]['start'])
             if hour_in(h, tariff[key]):
                 prices.append({'start': h, 'price': slots[i]['price']})
+            h = (h + 0.5) % 24
         tariff['agile'][key]['prices'] = prices
         # best weighed charge time for [0.5, 1, 1.5, 2 etc] hours
         weighting = tariff_config.get('weighting')
@@ -2126,20 +2132,16 @@ def get_agile_times(tariff=agile_octopus, d=None):
             tariff['agile'][key]['times'].append({'start': start, 'end': round_time(start + span / 2), 'price': min_v})
     return tariff['agile']
 
-# work out the delay to charging for Agile:
-def get_agile_offset(start, duration):
+# return the best charge time:
+def get_best_charge_period(start, duration):
     global tariff
     if tariff is None:
-        return 0
+        return None
     key = 'off_peak1' if hour_in(start, tariff.get('off_peak1')) else 'off_peak2'
     if tariff.get('agile') is None or tariff['agile'].get(key) is None:
-        output(f"  Charge time: {hours_time(start)} to {hours_time(start + duration)}")
-        return 0
-    i = min([int(duration * 2), len(tariff['agile'][key]['times'])])
-    period = tariff['agile'][key]['times'][i]
-    offset = round_time(period['start'] - tariff[key]['start'])
-    output(f"  Charge time: {hours_time(period['start'])} to {hours_time(period['end'])} at {period['price']:5.2f}p/kWh inc VAT")
-    return offset
+        return tariff.get(key)
+    i = min([int(duration * 2), len(tariff['agile'][key]['times']) - 1])
+    return tariff['agile'][key]['times'][i]
 
 # pushover app key for set_tariff()
 set_tariff_app_key = "apx24dswzinhrbeb62sdensvt42aqe"
@@ -2183,7 +2185,7 @@ def set_tariff(find, update=1, times=None, forecast_times=None, strategy=None, d
             times = [times]
         output(f"\n{tariff['name']}:")
         for t in times:
-            if len(t) not in (1,3) or t[0] not in ['off_peak1', 'off_peak2', 'off_peak3', 'peak1', 'peak2']:
+            if len(t) not in (1,3,4) or t[0] not in ['off_peak1', 'off_peak2', 'off_peak3', 'peak1', 'peak2']:
                 output(f"** set_tariff(): invalid time period {t}")
                 continue
             key = t[0]
@@ -2195,6 +2197,8 @@ def set_tariff(find, update=1, times=None, forecast_times=None, strategy=None, d
                 tariff[key] = {}
             tariff[key]['start'] = time_hours(t[1])
             tariff[key]['end'] = time_hours(t[2])
+            if len(t) > 3:
+                tariff[key]['force'] = t[3]
             gmt = ' GMT' if tariff[key].get('gmt') is not None else ''
             output(f"  {key} period: {hours_time(t[1])} to {hours_time(t[2])}{gmt}")
     # update dynamic charge times
@@ -2400,10 +2404,10 @@ charge_config = {
     'export_limit': None,             # maximum export power in kW
     'discharge_loss': 0.97,           # loss converting battery discharge power to grid power
     'pv_loss': 0.95,                  # loss converting PV power to battery charge power
-    'grid_loss': 0.95,                # loss converting grid power to battery charge power
+    'grid_loss': 0.975,               # loss converting grid power to battery charge power
     'inverter_power': None,           # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
-    'force_charge_power': 5.10,       # charge power in kW when using force charge
+    'force_charge_power': 5.00,       # charge power in kW when using force charge
     'allowed_drain': 4,               # % tolerance below min_soc before float charge starts
     'float_current': 4,               # BMS float charge in A
     'bat_resistance': 0.072,          # internal resistance of a battery
@@ -2491,6 +2495,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if hour_adjustment != 0:    # change happens in the next 2 days - work out if today, tomorrow or day after tomorrow
         change_hour = 1 if daylight_changes(system_time, f"{tomorrow} 00:00") != 0 else 25 if daylight_changes(f"{tomorrow} 00:00", f"{day_after_tomorrow} 00:00") != 0 else 49
         change_hour += 1 if hour_adjustment > 0 else 0
+    time_change = change_hour - base_hour
     # get charge times for am
     start_am = time_hours(tariff['off_peak1']['start'] if tariff is not None else 2.0)
     end_am = time_hours(tariff['off_peak1']['end'] if tariff is not None else 5.0)
@@ -2516,14 +2521,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if hour_in(hour_now, {'start': round_time(start_at - 0.25), 'end': round_time(end_by + 0.25)}) and update_settings > 0:
         print(f"\nInverter settings will not be changed less than 15 minutes before or after the next charging period")
         update_settings = 0
+    # work out time window and adjust times for clocks changing
     time_to_start = time_to_pm if charge_pm else time_to_am
-    time_to_end = time_to_pm_end if charge_pm else time_to_am_end
-    start_hour = base_hour + time_to_start
+    time_to_start += hour_adjustment if time_to_start > time_change else 0
+    time_to_end = time_to_start + charge_time
     time_to_next = int(time_to_start)
     forecast_day = today if charge_pm else tomorrow
-    if hour_adjustment < 0 and start_hour > change_hour:
-        time_to_next -= 1       # 1 hour less if charging after clocks go forward
     run_time = int((time_to_am_end if charge_pm else time_to_am_end + 24 if time_to_pm is None else time_to_pm_end) + 0.99) + 1 + hour_adjustment
+    time_line = [round_time(base_hour + x - (hour_adjustment if x >= time_change else 0)) for x in range(0, run_time)]
     # if we need to do a full charge, full_charge is the date, otherwise None
     full_charge = charge_config['full_charge'] if not charge_pm else None
     if type(full_charge) is int:            # value = day of month
@@ -2534,9 +2539,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}", 3)
     output(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}", 3)
     output(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}", 3)
-    output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}", 3)
+    output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}, time_change = {time_change}", 3)
     output(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}", 3)
-    output(f"start_hour = {start_hour}, time_to_next = {time_to_next}, full_charge = {full_charge}", 3)
+    output(f"time_to_next = {time_to_next}, full_charge = {full_charge}", 3)
     # get device and battery info from inverter
     if test_soc is None:
         min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
@@ -2609,24 +2614,24 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         else:
             force_charge = 2
             output(f"  Full charge set")
+    # inverter losses
+    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
+    operating_loss = inverter_power / 1000
+    bms_power = charge_config['bms_power']
+    bms_loss = bms_power / 1000
     # work out charge limit, power and losses. Max power going to the battery after ac conversion losses
     charge_limit = min([charge_current * (bat_ocv + charge_current * bat_resistance) / 1000, device_power])
     if charge_limit < 0.1:
         output(f"** charge_current is too low ({charge_current:.1f}A)")
     charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2
-    force_charge_power = charge_config['force_charge_power'] if timed_mode > 1 and charge_config.get('force_charge_power') is not None else device_power
+    force_charge_power = charge_config['force_charge_power'] if timed_mode > 1 and charge_config.get('force_charge_power') is not None else 100
     grid_loss = charge_config['grid_loss']
-    charge_power = min([device_power * grid_loss, force_charge_power * grid_loss, charge_limit])
+    charge_power = min([(device_power - operating_loss) * grid_loss, force_charge_power * grid_loss, charge_limit])
     float_charge = (charge_config['float_current'] if charge_config.get('float_current') is not None else 4) * bat_ocv / 1000
     charge_config['charge_loss'] = charge_loss
     charge_config['charge_limit'] = charge_limit
     charge_config['charge_power'] = charge_power
     charge_config['float_charge'] = float_charge
-    # work out other losses
-    inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
-    operating_loss = inverter_power / 1000
-    bms_power = charge_config['bms_power']
-    bms_loss = bms_power / 1000
     # work out discharge limit = max power coming from the battery before ac conversion losses
     discharge_loss = charge_config['discharge_loss']
     discharge_limit = device_power / discharge_loss
@@ -2815,7 +2820,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         start1 = start_at
         end1 = start_at
         end_soc = int(end_residual / capacity * 100 + 0.5)
-        output(f"   Expected SoC at {hours_time(end_by)} is {end_soc}%")
+        output(f"   Expected SoC at {hours_time(adjusted_hour(time_to_end, time_line))} is {end_soc}%")
         # rebuild the battery residual with min_soc for battery hold
         if force_charge > 0 and timed_mode > 1:
             for i in range(0, int(charge_time + 0.5)):
@@ -2835,18 +2840,20 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # full charge if requested or charge time exceeded or charge needed exceeds capacity
         if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.01):
             kwh_needed = capacity - start_residual
-            hours = charge_time
-            output(f"  Full charge time used")
+            if test_charge is None:
+                hours = charge_time
+                output(f"  Full charge time used")
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
         end1 = round_time(start_at + hours)
         end_soc = min([int((start_residual + kwh_needed) / capacity * 100 + 0.5), 100])
         # rework charge and discharge
-        charge_offset = get_agile_offset(start_at, hours)
-        start1 = round_time(start_at + charge_offset)
-        end1 = round_time(start1 + hours)
+        charge_period = get_best_charge_period(start_at, hours)
+        charge_offset = round_time(charge_period['start'] - start_at) if charge_period is not None else 0
+        price = charge_period.get('price') if charge_period is not None else None
         start_timed = time_to_start + charge_offset
         end_timed = start_timed + hours
+        output(f"  Charge time: {hours_time(adjusted_hour(start_timed, time_line))} to {hours_time(adjusted_hour(end_timed, time_line))}" + f" at {price:5.2f}p/kWh inc VAT" if price is not None else "")
         for i in range(time_to_next, int(time_to_next + charge_time + 1)):
             j = i + 1
             # work out time (fraction of hour) when charging in hour from i to j
@@ -2872,14 +2879,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
         end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
         # show the state
-        output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(start_at)} ({start_residual:.2f}kWh)")
-        output(f"  End SoC:   {end_soc:3.0f}% at {hours_time(end1)} ({capacity * end_soc / 100:.2f}kWh)")
-    # work out charge periods settings
-    start2 = round_time(start_at if hours == 0 else end1)
-    if force_charge > 0 and hour_in(start2, {'start':start_at, 'end': end_by}):
-        end2 = end_by
-    else:
-        end2 = start2
+        output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(adjusted_hour(time_to_start, time_line))} ({start_residual:.2f}kWh)")
+        output(f"  End SoC:   {end_residual / capacity * 100:3.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
     if show_data == 3:
         output(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
         for i in range(0, run_time):
@@ -2889,10 +2890,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
         h = base_hour + 1
-        s += " " * (18 if show_data == 2 else 17) * (h % data_wrap)
+        s += " " * (16 if show_data == 2 else 15) * (h % data_wrap)
         for i in range(1, run_time):
-            s += "\n" if h > hour_now and h % data_wrap == 0 else ""
-            s += f"  {hours_time(h - (hour_adjustment if h >= change_hour else 0), day=True)}"
+            s += "\n" if i > 1 and h % data_wrap == 0 else ""
+            s += f"  {hours_time(time_line[i])}"
             s += f" = {bat_timed[i]:5.2f}," if show_data == 2 else f" = {bat_timed[i] / capacity * 100:3.0f}%,"
             h += 1
         output(s[:-1])
@@ -2900,7 +2901,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(1, run_time)]
-        plt.xticks(ticks=x_timed, labels=[hours_time(base_hour + x - (hour_adjustment if (base_hour + x) >= change_hour else 0), day=False) for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.xticks(ticks=x_timed, labels=[hours_time(time_line[x]) for x in x_timed], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Battery SoC % ({charge_message})"
             plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity,1) for x in x_timed], label='Battery', color='blue')
@@ -2924,14 +2925,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         plot_show()
     # setup charging
     if update_settings == 1:
-        # adjust times for clock changes
-        adjust = hour_adjustment if hour_adjustment != 0 and start_hour > change_hour else 0
+        # work out the charge times and set
+        adjust = hour_adjustment if hour_adjustment != 0 and time_to_next > time_change else 0
         if timed_mode > 1:
             target_soc = end_soc if end_soc > target_soc else target_soc
             start0 = start1 if force_charge == 0 else start_at
-            periods = charge_periods(st0=start0, en0=start1, st1=start1, en1=end1, st2=end1, en2=end2, adjust=adjust, min_soc=min_soc, target_soc=target_soc, start_soc=start_soc)
+            periods = charge_periods(st0=start0, en0=start1, st1=start1, en1=end1, st2=end1, en2=end2, min_soc=min_soc, target_soc=target_soc, start_soc=start_soc)
         else:
-            set_charge(ch1=True, st1=start1, en1=end1, ch2=False, st2=end1, en2=end2, adjust=adjust, force=charge_config['force'])
+            set_charge(ch1=True, st1=start1, en1=end1, ch2=False, st2=end1, en2=end2, force=charge_config['force'])
     else:
         output(f"\nNo changes made to charge settings")
     output_close(plot=show_plot)

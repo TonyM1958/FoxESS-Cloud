@@ -352,10 +352,10 @@ discharge_current: None       # max battery discharge current setting in A. None
 export_limit: None            # maximum export power in kW. None uses the inverter power rating
 discharge_loss: 0.98          # loss converting battery discharge power to grid power
 pv_loss: 0.95                 # loss converting PV power to battery charge power
-grid_loss: 0.97               # loss converting grid power to battery charge power
+grid_loss: 0.975              # loss converting grid power to battery charge power
 inverter_power: None          # inverter power consumption in W (dynamically set)
 bms_power: 50                 # BMS power consumption in W
-force_charge_power: 5.10      # power used when Force Charge is scheduled
+force_charge_power: 5.00      # power used when Force Charge is scheduled
 allowed_drain: 4,             # % tolerance below min_soc before float charge starts
 float_current: 4,             # BMS float charge current in A
 bat_resistance: 0.070         # internal resistance of a battery in ohms
@@ -526,8 +526,10 @@ The best charging period is determined based on the weighted average of the 30 m
 + f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 + f.first_hour: [1.0, 1.0]
 
-set_tariff() can configure multiple off-peak and peak periods for any tariff using the times parameter. Times is a list of tuples containing values for key, start_at and end_by. A tuple with a key but no value will remove the specified time periods from the tariff.
+set_tariff() can configure multiple off-peak and peak periods for any tariff using the 'times' parameter. Times is a list of tuples:
++ containing values for key, 'start', 'end' and optional 'force'.
 + recongnised keys are: 'off_peak1', 'off_peak2', 'off_peak3', 'peak1', 'peak2'
++ a tuple containing a key with no values will remove the time period from the tariff.
 
 For example, this parameter configures an AM charging period between 11pm and 8am and a PM charging period between 12 noon and 4pm and removes the time period 'peak2':
 + times=[("off_peak1", "23:00", "8:00"), ("off_peak2", "12:00", "16:00"), ("peak2")]
@@ -694,6 +696,12 @@ This setting can be:
 
 
 # Version Info
+
+2.4.1<br>
+Reduce number of time periods used by stratgies for Octopus Flux and Agile.
+Revise calculation of charge power to include inverter losses and reduce grid loss.
+Update so charge times display correctly when clocks change.
+
 
 2.4.0<br>
 **breaking changes**
