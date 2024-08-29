@@ -701,6 +701,7 @@ This setting can be:
 Reduce number of time periods used by stratgies for Octopus Flux and Agile.
 Revise calculation of charge power to include inverter losses and reduce grid loss.
 Update so charge times display correctly when clocks change.
+Update set_tariff 'times' to include option to set 'force'.
 
 
 2.4.0<br>
