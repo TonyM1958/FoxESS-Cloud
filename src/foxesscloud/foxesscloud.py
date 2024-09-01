@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 September 2024
+Updated:  02 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.5.4"
+version = "1.5.5"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2035,7 +2035,7 @@ octopus_flux = {
     'name': 'Octopus Flux',
     'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},        # off-peak period 1 / am charging period
     'peak1': {'start': 16.0, 'end': 19.0 },                     # peak period 1
-    'forecast_times': [22, 23],                                 # hours in a day to get a forecast
+    'forecast_times': [21, 22],                                 # hours in a day to get a forecast
     'strategy': [
         {'start': 5.0, 'end': 6.0, 'mode': 'SelfUse'},
         {'start': 16.0, 'end': 19.0, 'mode': 'Feedin'}]
@@ -2045,7 +2045,7 @@ octopus_flux = {
 intelligent_octopus = {
     'name': 'Intelligent Octopus',
     'off_peak1': {'start': 23.5, 'end': 5.5, 'force': 1},
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22]
     }
 
 # time periods for Octopus Cosy
@@ -2071,9 +2071,10 @@ agile_octopus = {
     'off_peak1': {'start':  0.0, 'end':  6.0, 'force': 1},
     'off_peak2': {'start': 12.0, 'end': 16.0, 'force': 0},
     'peak1': {'start': 16.0, 'end': 19.0 },
-    'forecast_times': [10, 11, 22, 23],
+    'forecast_times': [9, 10, 21, 22],
     'strategy': [
-        {'start': 6.0, 'end': 7.0, 'mode': 'SelfUse'}],
+        {'start':  6.0, 'end':  7.0, 'mode': 'SelfUse'},
+        {'start': 16.0, 'end': 19.0, 'mode': 'Feedin'}],
     'agile': {}
     }
 
@@ -2081,28 +2082,28 @@ agile_octopus = {
 bg_driver = {
     'name': 'British Gas Electric Driver',
     'off_peak1': {'start': 0.0, 'end': 5.0, 'force': 1},
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22]
     }
 
 # time periods for EON Next Drive
 eon_drive = {
     'name': 'EON NextDrive',
     'off_peak1': {'start': 0.0, 'end': 7.0, 'force': 1},
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22]
     }
 
 # time periods for Economy 7
 economy_7 = {
     'name': 'Eco 7',
     'off_peak1': {'start': 0.5, 'end': 7.5, 'force': 1, 'gmt': 1},
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22]
     }
 
 # custom time periods / template
 custom_periods = {'name': 'Custom',
     'off_peak1': {'start': 2.0, 'end': 5.0, 'force': 1},
     'peak1': {'start': 16.0, 'end': 19.0 },
-    'forecast_times': [22, 23]
+    'forecast_times': [21, 22]
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, eon_drive, economy_7, custom_periods]
@@ -2185,13 +2186,15 @@ first_hour =   [1.0, 1.0]                               # lowest average price f
 
 
 tariff_config = {
-    'product': "AGILE-FLEX-22-11-25",     # product code to use for Octopus API
+    'product': "AGILE-24-04-03",          # product code to use for Octopus API
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
     'trigger_price':  5,                  # trigger price in p/kWh inc VAT
     'trigger_mode': 2,                    # force charge (full charge)
-    'data_wrap': 6                        # prices to show per line
+    'data_wrap': 6,                       # prices to show per line
+    'show_data': 0,                       # show pricing data
+    'show_plot': 1                        # plot pricing data
 }
 
 
@@ -2234,55 +2237,63 @@ def get_agile_times(tariff=agile_octopus, d=None):
     # results are in reverse chronological order...
     results = response.json().get('results')[::-1]
     # extract times and prices
-    slots = []         # ordered list of 30 minute time slots
+    prices = []         # ordered list of 30 minute prices
     for r in results:
         time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
-        slots.append({'start': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
-    # show the results
-    data_wrap = tariff_config['data_wrap'] if tariff_config.get('data_wrap') is not None else 6
-    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * (data_wrap - 2) * 13
-    for i in range(0, len(slots)):
-        s += "\n" if i > 0 and (i + data_wrap - 2) % data_wrap == 0 else ""
-        s += f"  {slots[i]['start']} {slots[i]['price']:5.2f}"
-    output(s)
+        prices.append({'start': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
     tariff['agile']['date'] = tomorrow
-    tariff['agile']['slots'] = slots
-    s = ""
+    tariff['agile']['prices'] = prices
     for key in ['off_peak1', 'off_peak2']:
         if tariff.get(key) is None:
             continue
         if tariff['agile'].get(key) is None:
             tariff['agile'][key] = {}
-        # prices for AM/PM charge times
-        prices = []
-        h = 23
-        for i in range(0, len(slots)):
-            if hour_in(h, tariff[key]):
-                prices.append({'start': h, 'price': slots[i]['price']})
-            h = (h + 0.5) % 24
-        tariff['agile'][key]['prices'] = prices
+        # get price index for AM/PM charge times
+        slots = []
+        for i in range(0, len(prices)):
+            if hour_in(time_hours(prices[i]['start']), tariff[key]):
+                slots.append(i)
+        tariff['agile'][key]['slots'] = slots
         # best charge time for [0.5, 1, 1.5, 2 etc] hours
         weighting = tariff_config.get('weighting')
         tariff['agile'][key]['times'] = []
-        for j in range (0, len(prices)):
+        for j in range (0, len(slots)):
             span = j + 1
             weights = [1.0] * span if weighting is None else (weighting + [0.0] * span)[:span]
-            min_i = None
-            min_v = None
-            for i in range(0, len(prices) - j):
-                p_span = [p['price'] for p in prices[i : i + span]]
+            best = None
+            price = None
+            for i in range(0, len(slots) - j):
+                t = slots[i: i + span]
+                p_span = [prices[x]['price'] for x in t]
                 wavg = round(sum(p * w for p,w in zip(p_span, weights)) / sum(weights), 2)
-                if min_v is None or wavg < min_v:
-                    min_v = wavg
-                    min_i = i
+                if price is None or wavg < price:
+                    price = wavg
+                    best = t
             # save best time slot for charge duration
-            start = prices[min_i]['start']
-            tariff['agile'][key]['times'].append({'start': start, 'end': round_time(start + span / 2), 'price': min_v})
-        p = tariff['agile'][key]['times'][-1]
-        s += f"{hours_time(p['start'])}-{hours_time(p['end'])} average price = {p['price']:5.2f}p/kWh\n"
-    if s != "":
-        output(f"\n{s}")
-
+            start = time_hours(prices[best[0]]['start'])
+            tariff['agile'][key]['times'].append({'start': start, 'end': round_time(start + span / 2), 'price': price, 'best': best, 'key': key})
+    # show the results
+    if tariff_config['show_data'] > 0:
+        data_wrap = tariff_config['data_wrap'] if tariff_config.get('data_wrap') is not None else 6
+        s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * (data_wrap - 2) * 13
+        for i in range(0, len(prices)):
+            s += "\n" if i > 0 and (i + data_wrap - 2) % data_wrap == 0 else ""
+            s += f"  {prices[i]['start']} {prices[i]['price']:5.2f}"
+        output(s)
+    if tariff_config['show_plot'] > 0:
+        plt.figure(figsize=(figure_width, figure_width/2))
+        x_timed = [i for i in range(0, len(prices))]
+        plt.xticks(ticks=x_timed, labels=[prices[x]['start'] for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.plot(x_timed, [prices[x]['price'] for x in x_timed], label='30 minute price', color='blue')
+        for key in ['off_peak1', 'off_peak2']:
+            if tariff['agile'].get(key) is not None:
+                p = tariff['agile'][key]['times'][-1]
+                plt.plot(x_timed, [p['price'] if x in p['best'] else None for x in x_timed], label=key)
+                output(f"  {hours_time(p['start'])}-{hours_time(p['end'])} average price = {p['price']:5.2f}p/kWh")
+        plt.title(f"Pricing for {tomorrow} (p/kWh))", fontsize=10)
+        plt.legend(fontsize=8)
+        plt.grid()
+        plot_show()
     return tariff['agile']
 
 # return the best charge time:
@@ -2388,7 +2399,7 @@ def set_tariff(find, update=1, times=None, forecast_times=None, strategy=None, d
             strategy = [strategy]
         output(f"\nStrategy:")
         use['strategy'] = get_strategy(use=use, strategy=strategy, quiet=0)
-    output_close()
+    output_close(plot=tariff_config['show_plot'])
     if update == 1:
         tariff = use
         output(f"\nTariff set to {tariff['name']}")
@@ -2558,6 +2569,9 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
 lifepo4_curve = [51.00, 51.50, 52.00, 52.30, 52.60, 52.80, 52.90, 53.00, 53.10, 53.30, 54.00]
 
+# number of steps per hour in timeline
+steps_per_hour = 2
+
 # charge_needed settings
 charge_config = {
     'contingency': [20,10,5,15],      # % of consumption. Single value or [winter, spring, summer, autumn]
@@ -2608,12 +2622,13 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
 #  run_after: 0 over-rides 'forecast_times'. The default is 1.
-#  forecast_times: list of hours when forecast can be fetched
+#  forecast_times: list of hours when forecast can be fetched (UTC)
 #  force_charge: 1 = set force charge, 2 = charge for whole period
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, timed_strategy
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift
+    global timed_strategy, steps_per_hour
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2634,10 +2649,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # set default parameters
     show_data = 1 if show_data is None or show_data == True else 0 if show_data == False else show_data
     show_plot = 3 if show_plot is None or show_plot == True else 0 if show_plot == False else show_plot
-    run_after = 1 if run_after is None else run_after 
+    run_after = 1 if run_after is None else run_after
     timed_mode = 1 if timed_mode is None and tariff is not None and tariff.get('strategy') is not None else 0 if timed_mode is None else timed_mode
     if forecast_times is None:
-        forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [22,23]
+        forecast_times = tariff['forecast_times'] if tariff is not None and tariff.get('forecast_times') is not None else [9,10,21,22]
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
@@ -2846,7 +2861,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get Solcast data and produce time line
     solcast_value = None
     solcast_profile = None
-    if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (base_hour in forecast_times or run_after == 0):
+    if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (system_time.hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, estimated=1 if charge_pm else 0)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
             solcast_value = fsolcast.daily[forecast_day]['kwh']
@@ -2863,7 +2878,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
-    if forecast is None and solar_arrays is not None and (base_hour in forecast_times or run_after == 0):
+    if forecast is None and solar_arrays is not None and (system_time.hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True)
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
             solar_value = fsolar.daily[forecast_day]['kwh']
@@ -3088,7 +3103,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         plt.title(title, fontsize=10)
         plt.grid()
         if show_plot > 1:
-            plt.legend(fontsize=8, loc="upper right")
+            plt.legend(fontsize=8)
         plot_show()
     # setup charging
     if update_settings == 1:

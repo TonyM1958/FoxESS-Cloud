@@ -486,23 +486,26 @@ f.set_tariff('agile', product, region, times, forecast_times, strategy, update, 
 ```
 
 This gets the latest 30 minute pricing and uses this to work out the best off peak charging period.
-+ product: optional Agile Octopus product code (see below). The default is "AGILE-FLEX-22-11-25"
++ product: optional Agile Octopus product code (see below). The default is "AGILE-24-04-03"
 + region: optional region to use for prices (se below). The default is 'H' (Southern England)
 + times: a list of charge periods that can be used instead of start_at, end_by and duration (see below)
-+ forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar
++ forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar, aligned with the host system time
 + strategy: an optional list of times and work modes (see below)
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
 + trigger_price: the price in p/kWh when trigger mode is activated, The default is 5p.
 + trigger_mode: the value to set for force_charge. The default is 2 (full charge).
++ show_data: show 30 minute Agile pricing data. Default is 0.
++ show_plot: plot 30 minute Agile pricing data. Default is 1.
 
 Product codes include: 
 + 'AGILE-18-02-21' = The original version capped at 35p per unit
 + 'AGILE-22-07-22' = The cap rose to 55p
 + 'AGILE-22-08-31' = The cap was increased to 78p
 + 'AGILE-VAR-22-10-19' = This version raised the cap to £1 per unit and also introduced a new formula.
-+ 'AGILE-FLEX-22-11-25' = Cap stays at £1 per unit but new formula only deducts 17.9p from higher unit prices (default)
++ 'AGILE-FLEX-22-11-25' = Cap stays at £1 per unit but new formula only deducts 17.9p from higher unit prices
++ 'AGILE-24-04-30' = Latest Agile tariff (default)
 
 Region codes include:
 + 'A' = Eastern England
@@ -698,8 +701,10 @@ This setting can be:
 
 # Version Info
 
-2.4.2<br>
-Amended default Agile strategy to remove feedin period from 4pm to 7pm.
+2.4.3<br>
+Change forecast_times to use system time for consistency with schedules when using Saturn Cloud.
+Change default Agile product to AGILE-24-04-03.
+Add options to plot Agile price data in set_tariff() with show_data and show_plot parameters.
 Added trigger_price and trigger_mode to set_tariff() to increase grid use when Agile prices are lower than trigger_price.
 Added data_wrap to set_tariff().
 Set inverer power to 101W.
