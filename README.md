@@ -17,7 +17,6 @@ This module builds on the Fox Open API to provide a sample code and utilities th
 + Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)
 + A list of the error codes used by the API is available here: [Wiki/Error-Codes](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes).
 
-*Open API has had significant performance problems since May 2024 and there is no current sign that Fox are going to resolve this. Performance is poor between 10am and 10pm UK time, with requests often timing out or returning errors after 60 seconds. Sorry, there is nothign I can do about this*
 
 ## Setup
 To initialise a Jupyter Lab notebook to use the open API, copy the following text and edit the configuration variables needed to add your values:
@@ -495,6 +494,8 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
++ trigger_price: the price in p/kWh when trigger mode is activated, The default is 5p.
++ trigger_mode: the value to set for force_charge. The default is 2 (full charge).
 
 Product codes include: 
 + 'AGILE-18-02-21' = The original version capped at 35p per unit
@@ -696,6 +697,14 @@ This setting can be:
 
 
 # Version Info
+
+2.4.2<br>
+Amended default Agile strategy to remove feedin period from 4pm to 7pm.
+Added trigger_price and trigger_mode to set_tariff() to increase grid use when Agile prices are lower than trigger_price.
+Added data_wrap to set_tariff().
+Set inverer power to 101W.
+Fixed charge power being limited when device_power was less than 6.0kW.
+Ameded seasonal changes so they use the forecast day instead of today.
 
 2.4.1<br>
 Reduce number of time periods used by stratgies for Octopus Flux and Agile.

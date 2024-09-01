@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  30 August 2024
+Updated:  01 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.5.3"
+version = "1.5.4"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2073,8 +2073,7 @@ agile_octopus = {
     'peak1': {'start': 16.0, 'end': 19.0 },
     'forecast_times': [10, 11, 22, 23],
     'strategy': [
-        {'start':  6.0, 'end':  7.0, 'mode': 'SelfUse'},
-        {'start': 16.0, 'end': 19.0, 'mode': 'Feedin'}],
+        {'start': 6.0, 'end': 7.0, 'mode': 'SelfUse'}],
     'agile': {}
     }
 
@@ -2190,8 +2189,9 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'pm_start': 11,                       # time when charge period is considered PM
-    'am_start': 23                        # time when charge period is considered AM
+    'trigger_price':  5,                  # trigger price in p/kWh inc VAT
+    'trigger_mode': 2,                    # force charge (full charge)
+    'data_wrap': 6                        # prices to show per line
 }
 
 
@@ -2239,13 +2239,15 @@ def get_agile_times(tariff=agile_octopus, d=None):
         time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
         slots.append({'start': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
     # show the results
-    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * 4 * 15
+    data_wrap = tariff_config['data_wrap'] if tariff_config.get('data_wrap') is not None else 6
+    s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * (data_wrap - 2) * 13
     for i in range(0, len(slots)):
-        s += "\n" if i % 6 == 2 else ""
-        s += f"  {slots[i]['start']} = {slots[i]['price']:5.2f}"
+        s += "\n" if i > 0 and (i + data_wrap - 2) % data_wrap == 0 else ""
+        s += f"  {slots[i]['start']} {slots[i]['price']:5.2f}"
     output(s)
     tariff['agile']['date'] = tomorrow
     tariff['agile']['slots'] = slots
+    s = ""
     for key in ['off_peak1', 'off_peak2']:
         if tariff.get(key) is None:
             continue
@@ -2276,6 +2278,11 @@ def get_agile_times(tariff=agile_octopus, d=None):
             # save best time slot for charge duration
             start = prices[min_i]['start']
             tariff['agile'][key]['times'].append({'start': start, 'end': round_time(start + span / 2), 'price': min_v})
+        p = tariff['agile'][key]['times'][-1]
+        s += f"{hours_time(p['start'])}-{hours_time(p['end'])} average price = {p['price']:5.2f}p/kWh\n"
+    if s != "":
+        output(f"\n{s}")
+
     return tariff['agile']
 
 # return the best charge time:
@@ -2288,6 +2295,17 @@ def get_best_charge_period(start, duration):
         return tariff.get(key)
     i = min([int(duration * 2), len(tariff['agile'][key]['times']) - 1])
     return tariff['agile'][key]['times'][i]
+
+# get trigger mode if average price is lower than trigger_price
+def get_trigger_mode(start):
+    global tariff, tariff_config
+    if tariff is None or tariff.get('agile') is None:
+        return None
+    key = 'off_peak1' if hour_in(start, tariff.get('off_peak1')) else 'off_peak2'
+    if tariff['agile'].get(key) is None or tariff_config.get('trigger_price') is None:
+        return None
+    trigger_mode = tariff_config.get('trigger_mode') if tariff['agile'][key]['times'][-1]['price'] <= tariff_config['trigger_price'] else 0
+    return trigger_mode
 
 # pushover app key for set_tariff()
 set_tariff_app_key = "apx24dswzinhrbeb62sdensvt42aqe"
@@ -2551,7 +2569,7 @@ charge_config = {
     'discharge_loss': 0.97,           # loss converting battery discharge power to grid power
     'pv_loss': 0.95,                  # loss converting PV power to battery charge power
     'grid_loss': 0.975,               # loss converting grid power to battery charge power
-    'inverter_power': None,           # Inverter power consumption in W
+    'inverter_power': 101,            # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
     'force_charge_power': 5.00,       # charge power in kW when using force charge
     'allowed_drain': 4,               # % tolerance below min_soc before float charge starts
@@ -2661,10 +2679,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     start_at = start_pm if charge_pm else start_am
     end_by = end_pm if charge_pm else end_am
     charge_time = round_time(end_by - start_at)
-    force_charge = force_charge_pm if charge_pm else force_charge_am
     if hour_in(hour_now, {'start': round_time(start_at - 0.25), 'end': round_time(end_by + 0.25)}) and update_settings > 0:
         print(f"\nInverter settings will not be changed less than 15 minutes before or after the next charging period")
         update_settings = 0
+    force_charge = force_charge_pm if charge_pm else force_charge_am
     # work out time window and times with clock changes
     time_to_start = time_to_pm if charge_pm else time_to_am
     time_to_start += hour_adjustment if time_to_start > time_change else 0
@@ -2764,7 +2782,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     bms_power = charge_config['bms_power']
     bms_loss = bms_power / 1000
     # work out charge limit, power and losses. Max power going to the battery after ac conversion losses
-    charge_limit = min([charge_current * (bat_ocv + charge_current * bat_resistance) / 1000, device_power])
+    charge_limit = min([charge_current * (bat_ocv + charge_current * bat_resistance) / 1000, max([6, device_power])])
     if charge_limit < 0.1:
         output(f"** charge_current is too low ({charge_current:.1f}A)")
     charge_loss = 1.0 - charge_limit * 1000 * bat_resistance / bat_ocv ** 2
@@ -2883,12 +2901,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         generation = pv_sum / gen_days
         output(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
-    output_spool(charge_needed_app_key)
-    quarter = now.month // 3 % 4
+    quarter = int(today[5:7] if charge_pm else tomorrow[5:7]) // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
     sun_profile = seasonal_sun[quarter]['sun']
     sun_sum = sum(sun_profile)
     sun_timed = timed_list(sun_profile, hour_now, run_time)
+    output_spool(charge_needed_app_key)
     if forecast is not None:
         expected = forecast
         generation_timed = [expected * x / sun_sum for x in sun_timed]
@@ -2955,7 +2973,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     target_kwh = target_soc / 100 * capacity
     if target_kwh > (end_residual + kwh_needed):
         kwh_needed = target_kwh - end_residual
-    if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None:
+    # check for force charge / trigger mode:
+    trigger_mode = get_trigger_mode(start_at)
+    if trigger_mode is not None and trigger_mode > 0:
+        force_charge = trigger_mode
+        output(f"\nTrigger price met: force_charge = {force_charge}")
+    # work out charge needed
+    if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None and force_charge != 2:
         output(f"\nNo charging is needed (forecast = {expected:.1f}kWh, consumption = {consumption:.1f}kWh, contingency = {kwh_contingency:.1f}kWh)")
         charge_message = "no charge needed"
         kwh_needed = 0.0
