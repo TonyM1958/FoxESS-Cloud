@@ -1440,6 +1440,7 @@ def plot_history(result, plot=1):
                 lines = 0
     return
 
+
 ##################################################################################################
 # get production report in kWh
 ##################################################################################################
@@ -2396,7 +2397,7 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
     global charge_config, steps_per_hour
     bat_timed = []
     allowed_drain = charge_config['allowed_drain'] if charge_config.get('allowed_drain') is not None else 4
-    bms_loss = (charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05)
+    bms_loss = charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05
     charge_loss = charge_config['charge_loss']
     charge_limit = charge_config['charge_limit'] * charge_loss
     float_charge = charge_config['float_charge'] * charge_loss
@@ -2466,7 +2467,7 @@ charge_config = {
     'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
-    'timed_mode': 0,                  # = = None, 1 = timed mode, 2 = strategy mode
+    'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
     'special_contingency': 33,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
@@ -2492,7 +2493,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
-    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift
+    global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
     global timed_strategy, steps_per_hour
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
@@ -2577,10 +2578,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         full_charge = tomorrow if full_charge is not None and int(tomorrow[-2:]) == full_charge else None
     elif type(full_charge) is str:          # value = daily or day of week
         full_charge = tomorrow if full_charge.lower() == 'daily' or full_charge.title() == day_tomorrow[:3] else None
-    output(f"\ntoday= {today}, tomorrow = {tomorrow}, time_shift = {time_shift}", 3)
-    output(f"start_am= {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}", 3)
-    output(f"start_pm= {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}", 3)
-    output(f"start_at= {start_at}, end_by = {end_by}, force_charge = {force_charge}", 3)
+    output(f"\ntoday = {today}, tomorrow = {tomorrow}, time_shift = {time_shift}", 3)
+    output(f"start_am = {start_am}, end_am = {end_am}, force_am = {force_charge_am}, time_to_am = {time_to_am}", 3)
+    output(f"start_pm = {start_pm}, end_pm = {end_pm}, force_pm = {force_charge_pm}, time_to_pm = {time_to_pm}", 3)
+    output(f"start_at = {start_at}, end_by = {end_by}, force_charge = {force_charge}", 3)
     output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}, time_change = {time_change}", 3)
     output(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_pm = {charge_pm}", 3)
     output(f"time_to_next = {time_to_next}, full_charge = {full_charge}", 3)
@@ -2588,7 +2589,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if test_soc is None:
         min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
         get_battery()
-        if battery is None or battery['status'] != 1:
+        if battery is None:
             output(f"\nBattery status is not available")
             return None
         current_soc = battery['soc']
@@ -2761,7 +2762,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     generation = None
     last_date = today if hour_now >= charge_config['use_today'] else yesterday
     gen_days = charge_config['generation_days']
-    history = get_raw('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
+    history = get_history('week', d=last_date, v=['pvPower','meterPower2'], summary=2)
     pv_history = {}
     if history is not None and len(history) > 0:
         for day in history:
@@ -2985,7 +2986,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         else:
             set_charge(ch1=True, st1=start1, en1=end1, ch2=False, st2=end1, en2=end2, force=charge_config['force'])
     else:
-        print(f"\nNo changes made to charge settings")
+        output(f"\nNo changes made to charge settings")
     output_close(plot=show_plot)
     return None
 
@@ -3032,7 +3033,7 @@ def bat_count(cell_count):
 battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
-def battery_info(log=0, plot=1, count=None, info=1):
+def battery_info(log=0, plot=1, count=None, info=0):
     global debug_setting, battery_info_app_key
     output_spool(battery_info_app_key)
     bat = get_battery(info=info)
@@ -3237,7 +3238,7 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
             last = first + timedelta(days=days) if first is not None else last
             first = last - timedelta(days=days) if first is None else first
         else:
-            print(f"** span '{span}' was not recognised")
+            output(f"** span '{span}' was not recognised")
             return None
     else:
         limit = 200 if limit is None or limit < 1 else limit
@@ -3304,7 +3305,7 @@ def get_pvoutput(d = None, tou = 0):
     v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
     if integrate_load_power == 1:
         v.append('loadsPower')
-    raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
+    raw_data = get_history('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None or len(raw_data) == 0 or raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
         return(f"# error: {d.replace('-','')} No generation data available")
     # apply calibration and merge raw_data for meterPower2 into pvPower:
@@ -3393,7 +3394,7 @@ pv_system_id = None
 pvoutput_app_key = "a32i66pnyp9d8awshj5a4exypndzan"
 
 # upload data for a day using pvoutput api
-def set_pvoutput(d = None, system_id=None, tou = 0, push=2):
+def set_pvoutput(d=None, system_id=None, tou=0, push=2):
     global pv_url, pv_api_key, pv_system_id, tariff, pvoutput_app_key, pushover_user_key
     system_id = pv_system_id if system_id is None else system_id
     if pv_api_key is None or system_id is None or pv_api_key == 'my.pv_api_key' or system_id == 'my.pv_system_id':
@@ -3931,7 +3932,7 @@ pushover_url = "https://api.pushover.net/1/messages.json"
 foxesscloud_app_key = "aqj8up6jeg9hu4zr1pgir3368vda4q"
 
 def pushover_post(message, file=None, app_key=None):
-    global pushover_user_key, pushover_url, foxesscloud_app_key
+    global pushover_user_key, pushover_url, foxesscloud_app_key, debug_setting
     if pushover_user_key is None or message is None:
         return None
     if app_key is None:
@@ -3945,7 +3946,7 @@ def pushover_post(message, file=None, app_key=None):
         print(f"** pushover_post() got response code {response.status_code}: {response.reason}")
         return None
     if debug_setting > 1:
-        print(f"---- pushover message sent ----")
+        print(f"\n---- pushover message sent ----")
     return 200
 
 spool_mode = None
