@@ -685,6 +685,8 @@ This setting can be:
 
 1.5.6<br>
 Updated Solcast and Solar to include 30 minute forecast data and plotting.
+Re-work charge_needed() to support steps_per_hour to set battery processing resolution.
+
 
 1.5.5<br>
 Change forecast_times to use system time for consistency with schedules when using Saturn Cloud.
