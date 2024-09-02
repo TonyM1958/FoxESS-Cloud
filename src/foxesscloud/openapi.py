@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.4.3"
+version = "2.4.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -3531,14 +3531,19 @@ class Solcast :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
                         period_end = f.get('period_end')
                         date = period_end[:10]
-                        hour = int(round_time(time_hours(period_end[11:16])-0.5))
+                        time = round_time(time_hours(period_end[11:16])-0.5)
+                        key = hours_time(time)
+                        hour = int(time)
                         if date not in self.daily.keys() :
-                            self.daily[date] = {'hourly': {}, 'kwh': 0.0}
-                        if hour not in self.daily[date]['hourly'].keys():
+                            self.daily[date] = {'hourly': {}, 'kwh': 0.0, 'pt30': {}}
+                        if self.daily[date]['hourly'].get(hour) is None:
                             self.daily[date]['hourly'][hour] = 0.0
-                        value = c_float(f.get('pv_estimate')) / 2                   # 30 minute power kw, yield / 2 = kwh
-                        self.daily[date]['kwh'] += value
-                        self.daily[date]['hourly'][hour] += value
+                        if self.daily[date]['pt30'].get(key) is None:
+                            self.daily[date]['pt30'][key] = 0.0
+                        value = c_float(f.get('pv_estimate'))
+                        self.daily [date]['pt30'][key] += value
+                        self.daily[date]['kwh'] += value / 2        # 30 minute power kW, power / 2 = kWh
+                        self.daily[date]['hourly'][hour] += value / 2
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -3614,20 +3619,48 @@ class Solcast :
         if day is None:
             day = self.tomorrow
         # plot forecasts
-        hours = sorted([h for h in self.daily[day]['hourly'].keys()])
-        x = [hours_time(h) for h in hours]
-        y = [self.daily[day]['hourly'][h] for h in hours]
+        times = sorted([t for t in self.daily[day]['hourly'].keys()])
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
         color = 'orange' if day > self.today else 'green'
-        if x is not None and len(x) != 0 :
-            plt.plot(x, y, color=color, linestyle='solid', linewidth=2)
-        title = f"Solcast hourly yield on {day} (UTC)"
+        plt.plot(times, [self.daily[day]['hourly'][t] for t in times], color=color, linestyle='solid', linewidth=2)
+        title = f"Solcast hourly power on {day} (UTC)"
         title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
         plt.title(title, fontsize=12)
         plt.grid()
-        plt.xticks(rotation=45, ha='right')
         plot_show()
         return
 
+    def plot_pt30(self, day = None) :
+        if not hasattr(self, 'daily') :
+            print(f"Solcast: no daily data to plot")
+            return
+        if day == 'today':
+            day = self.today
+        elif day == 'tomorrow':
+            day = self.tomorrow
+        elif day == 'all':
+            day = self.keys
+        elif day is None:
+            day = [self.today, self.tomorrow]
+        if type(day) is list:
+            for d in day:
+                self.plot_pt30(d)
+            return
+        plt.figure(figsize=(figure_width, figure_width/3))
+        print()
+        if day is None:
+            day = self.tomorrow
+        # plot forecasts
+        times = sorted([time_hours(t) for t in self.daily[day]['pt30'].keys()])
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        color = 'orange' if day > self.today else 'green'
+        plt.plot(times, [self.daily[day]['pt30'][hours_time(t)] for t in times], color=color, linestyle='solid', linewidth=2)
+        title = f"Solcast 30 minute power on {day} (UTC)"
+        title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
+        plt.title(title, fontsize=12)
+        plt.grid()
+        plot_show()
+        return
 
 
 ##################################################################################################
@@ -3719,7 +3752,7 @@ class Solar :
                 whd = self.results[k]['watt_hours_day']
                 for d in whd.keys():
                     if d not in self.daily.keys():
-                        self.daily[d] = {'hourly': {}, 'kwh': 0.0}
+                        self.daily[d] = {'hourly': {}, 'kwh': 0.0, 'pt30': {}}
                     self.daily[d]['kwh'] += whd[d] / 1000
             if self.results[k].get('watt_hours_period') is not None:
                 whp = self.results[k]['watt_hours_period']
@@ -3729,11 +3762,14 @@ class Solar :
                     if hour not in self.daily[date]['hourly'].keys():
                         self.daily[date]['hourly'][hour] = 0.0
                     self.daily[date]['hourly'][hour] += whp[dt] / 1000
-        # fill out hourly forecast to cover 24 hours
+        # fill out hourly forecast to cover 24 hours and make up 30 minute data
         for d in self.daily.keys():
             for h in range(0,24):
                 if self.daily[d]['hourly'].get(h) is None:
                     self.daily[d]['hourly'][h] = 0.0
+                value = self.daily[d]['hourly'][h]
+                self.daily[d]['pt30'][hours_time(h)] = value
+                self.daily[d]['pt30'][hours_time(h + 0.5)] = value
         # drop forecast for today as it already happened
         self.keys = sorted(self.daily.keys())
         self.days = len(self.keys)
@@ -3811,19 +3847,56 @@ class Solar :
         if self.daily.get(day) is None:
             print(f"Solar: no data for {day}")
             return
-        hours = sorted([h for h in self.daily[day]['hourly'].keys()])
-        x = [hours_time(h) for h in hours]
-        y = [self.daily[day]['hourly'][h] for h in hours]
+        times = sorted([h for h in self.daily[day]['hourly'].keys()])
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
         color = 'orange' if day > self.today else 'green'
-        if x is not None and len(x) != 0 :
-            plt.plot(x, y, color=color, linestyle='solid', linewidth=2)
-        title = f"Solar hourly yield on {day}"
+        plt.plot(times, [self.daily[day]['hourly'][t] for t in times], color=color, linestyle='solid', linewidth=2)
+        title = f"Solar power on {day}"
         title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
         plt.title(title, fontsize=12)
         plt.grid()
-        plt.xticks(rotation=45, ha='right')
         plot_show()
         return
+
+    def plot_pt30(self, day = None) :
+        if not hasattr(self, 'daily') :
+            print(f"Solar: no daily data to plot")
+            return
+        if day == 'today':
+            day = self.today
+        elif day == 'tomorrow':
+            day = self.tomorrow
+        elif day == 'all':
+            day = self.keys
+        elif day is None:
+            day = [self.today, self.tomorrow]
+        if type(day) is list:
+            for d in day:
+                self.plot_pt30(d)
+            return
+        plt.figure(figsize=(figure_width, figure_width/3))
+        print()
+        if day is None:
+            day = self.tomorrow
+        elif day == 'today':
+            day = self.today
+        elif day == 'tomorrow':
+            day = self.tomorrow
+        # plot forecasts
+        if self.daily.get(day) is None:
+            print(f"Solar: no data for {day}")
+            return
+        times = sorted([time_hours(t) for t in self.daily[day]['pt30'].keys()])
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        color = 'orange' if day > self.today else 'green'
+        plt.plot(times, [self.daily[day]['pt30'][hours_time(t)] for t in times], color=color, linestyle='solid', linewidth=2)
+        title = f"Solar 30 minute power on {day}"
+        title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
+        plt.title(title, fontsize=12)
+        plt.grid()
+        plot_show()
+        return
+
 
 ##################################################################################################
 ##################################################################################################

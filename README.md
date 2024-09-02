@@ -617,9 +617,10 @@ Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
 ```
 fcast.plot_daily()
 fcast.plot_hourly(day)
+fcast.plot_pt30(day)
 ```
 
-Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately.
+Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately by hour. plot_pt30() plots 30 minute slots.
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
 # Forecast.solar
@@ -659,9 +660,10 @@ Forecast data is saved to f.solar_save. The default is 'solar.txt'.
 ```
 fcast.plot_daily()
 fcast.plot_hourly(day)
+fcast.plot_pt30(day)
 ```
 
-Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately.
+Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately by hour. plot_pt30() plots 30 minute slots.
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
 # Pushover
@@ -700,6 +702,9 @@ This setting can be:
 
 
 # Version Info
+
+2.4.4<br>
+Updated Solcast and Solar to include 30 minute forecast data and plotting.
 
 2.4.3<br>
 Change forecast_times to use system time for consistency with schedules when using Saturn Cloud.
