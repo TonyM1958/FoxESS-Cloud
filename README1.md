@@ -565,13 +565,14 @@ f.get_pvoutput(f.date_list('2023-06-01', '2023-06-30'))
 Loads CSV data directly using the PV Ouput API:
 
 ```
-f.set_pvoutput(d, system_id, tou, push)
+f.set_pvoutput(d, system_id, tou, push, run_after)
 ```
 
 + d is optional and is the date, or a list of dates, to upload
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
 + tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate
 + push: optional. 0 = do not sent to pushover, 1 = send summary to pushover, 2 = send first day summary only
++ run_after: optional. Only generate data on or after this hour. Default 0.
 
 
 # Solar Forecasting
@@ -682,6 +683,15 @@ This setting can be:
 
 
 # Version Info
+
+
+1.5.7<br>
+Update charge period processing so charge_needed() will use the end time of the off_peak1 period as the end time.
+Update charge period schedules to correct min_soc after charging with force_charge.
+Flip charge periods to use second time period for charging and first for battery hold.
+Fix problem in get_schedule() where disabled periods are returned.
+Add 'status' to f.battery (for compatibility with foxesscloud).
+Add 'run_after' to set_pvoutput() for runtime control in scheduled jobs.
 
 1.5.6<br>
 Updated Solcast and Solar to include 30 minute forecast data and plotting.
