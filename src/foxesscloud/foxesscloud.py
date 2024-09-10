@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  03 September 2024
+Updated:  07 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.5.7"
+version = "1.5.8"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -729,17 +729,21 @@ def charge_periods(st1=None, en1=None, st2=None, en2=None, min_soc=10, target_so
     en1 = time_hours(en1)
     st2 = time_hours(st2)
     en2 = time_hours(en2)
+    span = None
     if st2 is not None and en2 is not None and st2 != en2:
         charge.append({'start': st2, 'end': en2, 'mode': 'ForceCharge', 'min_soc': min_soc, 'max_soc': target_soc})
+        span = {'start': st2, 'end': en2}
         if st1 is not None and en1 is not None and st1 != en1:
             charge.append({'start': st1, 'end': en1, 'mode': 'SelfUse', 'min_soc': start_soc})
+            span = {'start': st1, 'end': en2}
     elif st1 is not None and en1 is not None and st1 != en1:
+        span = {'start': st1, 'end': en1}
         if round_time(en1 - st1) > 0.25:
             st3 = round_time(en1 - 5 / 60)
             charge.append({'start': st1, 'end': st3, 'mode': 'SelfUse', 'min_soc': start_soc})
             st1 = st3
         charge.append({'start': st1, 'end': en1, 'mode': 'SelfUse', 'min_soc': min_soc})
-    strategy = get_strategy(check={'start': st1, 'end': en2} if st1 is not None and en2 is not None else None)[:(8 - len(charge))]
+    strategy = get_strategy(remove=span)[:(8 - len(charge))]
     for c in charge:
         strategy.append(c)
     periods = []
@@ -1225,7 +1229,7 @@ def find_template(name):
 ##################################################################################################
 
 # create a period structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, segment=None, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, price=None, segment=None, quiet=1):
     global schedule
     if schedule is None and get_flag() is None:
         return None
@@ -1237,6 +1241,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         max_soc = segment.get('max_soc')
         fdsoc = segment.get('fdsoc')
         fdpwr = segment.get('fdpwr')
+        price = segment.get('price')
     start = time_hours(start)
     # adjust exclusive time to inclusive
     end = round_time(time_hours(end) - 1/60)
@@ -1264,11 +1269,10 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"set_period(): ** fdsoc must between {min_soc} and 100")
         return None
     if quiet == 0:
-        if mode == 'ForceDischarge':
-            s = f"   {hours_time(start)} to {hours_time(end)} {mode} with minsoc = {min_soc}%, fdPwr = {fdpwr}W, fdSoC = {fdsoc}%"
-        else:
-            s = f"   {hours_time(start)} to {hours_time(end)} {mode} with minsoc = {min_soc}%"
-        s += f", maxsoc = {max_soc}%" if max_soc is not None else ""
+        s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
+        s += f", maxsoc {max_soc}%" if max_soc is not None else ""
+        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
+        s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_h, start_m = split_hours(start)
     end_h, end_m = split_hours(end)
@@ -2183,12 +2187,15 @@ test_strategy = [
         {'start': 21, 'end': 22, 'mode': 'ForceCharge'}]
 
 # return a strategy that has been sorted and filtered for charge times:
-def get_strategy(use=None, strategy=None, quiet=1, check=None, reserve=0):
+def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
     global tariff
     if use is None:
         use = tariff
     if strategy is None and tariff is not None:
-        strategy = tariff['strategy'] if tariff.get('strategy') is not None else []
+        strategy = []
+        if tariff.get('strategy') is not None:
+            for s in tariff['strategy']:
+                strategy.append(s)
         if use.get('agile') is not None and use['agile'].get('strategy') is not None:
             for s in use['agile']['strategy']:
                 strategy.append(s)
@@ -2199,8 +2206,8 @@ def get_strategy(use=None, strategy=None, quiet=1, check=None, reserve=0):
         # skip segments that overlap any charge periods
         start = s['start']
         end = s['end']
-        if hour_overlap(s, [use.get('off_peak1'), use.get('off_peak2'), use.get('off_peak3'), check]):
-            output(f"   {hours_time(start)} to {hours_time(end)} ** dropped ** (overlaps charge period)", 2)
+        if hour_overlap(s, remove):
+            output(f"   {hours_time(start)} to {hours_time(end)} ** removed ** (overlaps charge period)", 2)
             continue
         # add segment
         min_soc_now = s['min_soc'] if s.get('min_soc') is not None and s['min_soc'] > 10 else 10
@@ -2208,9 +2215,13 @@ def get_strategy(use=None, strategy=None, quiet=1, check=None, reserve=0):
         max_soc = s['max_soc'] if s.get('max_soc') is not None else 100
         fdsoc = s.get('fdsoc')
         fdpwr = s.get('fdpwr')
-        segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'max_soc': max_soc, 'fdsoc': fdsoc, 'fdpwr': fdpwr}
+        price = s.get('price')
+        segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'max_soc': max_soc, 'fdsoc': fdsoc, 'fdpwr': fdpwr, 'price': price}
         if quiet == 0:
-            output(f"   {hours_time(start)} to {hours_time(end)} {mode} with min_soc = {min_soc_now}% and max_soc = {max_soc}%" + (f", fdPwr = {fdpwr}W and fdSoC = {fdsoc}%" if mode == 'ForceDischarge' else ""), 1)
+            s = f"   {hours_time(start)}-{hours_time(end)} {mode}, min_soc {min_soc_now}%, max_soc {max_soc}%"
+            s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
+            s += f", {price:.2f}p/kWh" if price is not None else ""
+            output(s, 1)
         updated.append(segment)
         if len(updated) + reserve == 8:
             break
@@ -2237,8 +2248,8 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'trigger_price':  5,                  # trigger price in p/kWh inc VAT
-    'trigger_mode': 2,                    # force charge (full charge)
+    'plunge_price':  2,                   # plunge price in p/kWh inc VAT
+    'plunge_slots': 6,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 0,                       # show pricing data
     'show_plot': 1                        # plot pricing data
@@ -2258,7 +2269,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
     hour_now = now.hour + now.minute / 60
     update_time = tariff_config['update_time']
     update_time = time_hours(update_time) if type(update_time) is str else 17 if update_time is None else update_time
-    today = datetime.strftime(now + timedelta(days=0 if hour_now >= update_time else -1), '%Y-%m-%d')
+    today = datetime.strftime(now, '%Y-%m-%d')
     tomorrow = datetime.strftime(now + timedelta(days=1 if hour_now >= update_time else 0), '%Y-%m-%d')
     output(f"  datetime = {today} {hours_time(hour_now)}", 2)
     # get product and region
@@ -2270,10 +2281,10 @@ def get_agile_times(tariff=agile_octopus, d=None):
     # get prices from 11pm today to 11pm tomorrow
     output(f"\nProduct: {product}")
     output(f"Region:  {regions[region]}")
-    zulu_hour = "T" + hours_time(23 - time_offset - time_shift, ss=True) + "Z"
+#    zulu_hour = "T" + hours_time(23 - time_offset - time_shift, ss=True) + "Z"
     url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
-    period_from = today + zulu_hour
-    period_to = tomorrow + zulu_hour
+    period_from = today + f"T{hours_time(now.hour)}"
+    period_to = tomorrow + f"T23:30"
     params = {'period_from': period_from, 'period_to': period_to }
     output(f"time_offset = {time_offset}, time_shift = {time_shift}", 2)
     output(f"period_from = {period_from}, period_to = {period_to}", 2)
@@ -2290,6 +2301,19 @@ def get_agile_times(tariff=agile_octopus, d=None):
         prices.append({'start': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
     tariff['agile']['date'] = tomorrow
     tariff['agile']['prices'] = prices
+    plunge = []
+    plunge_price = tariff_config['plunge_price'] if tariff_config.get('plunge_price') is not None else 2
+    plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 6
+    for i in range(0, min([48, len(prices)])):
+        if prices[i] is not None and prices[i]['price'] < plunge_price:
+            plunge.append(i)
+    plunge = sorted(plunge, key=lambda s: prices[s]['price'])[:plunge_slots]
+    strategy = []
+    for t in plunge:
+        start = time_hours(prices[t]['start'])
+        end = round_time(start + 0.5)
+        strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': prices[t]['price']})
+    tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3']:
         if tariff.get(key) is None:
             continue
@@ -2333,11 +2357,11 @@ def get_agile_times(tariff=agile_octopus, d=None):
         plt.xticks(ticks=x_timed, labels=[prices[x]['start'] for x in x_timed], rotation=90, fontsize=8, ha='center')
         plt.plot(x_timed, [prices[x]['price'] for x in x_timed], label='30 minute price', color='blue')
         for key in ['off_peak1', 'off_peak2']:
-            if tariff['agile'].get(key) is not None:
+            if tariff['agile'].get(key) is not None and len(tariff['agile'][key]['times']) > 0:
                 p = tariff['agile'][key]['times'][-1]
                 plt.plot(x_timed, [p['price'] if x in p['best'] else None for x in x_timed], label=key)
                 output(f"  {hours_time(p['start'])}-{hours_time(p['end'])} average price = {p['price']:5.2f}p/kWh")
-        plt.title(f"Pricing for {tomorrow} (p/kWh))", fontsize=10)
+        plt.title(f"Pricing from {today} to {tomorrow} (p/kWh))", fontsize=10)
         plt.legend(fontsize=8)
         plt.grid()
         plot_show()
@@ -2353,17 +2377,6 @@ def get_best_charge_period(start, duration):
         return tariff.get(key)
     i = min([int(duration * 2), len(tariff['agile'][key]['times']) - 1])
     return tariff['agile'][key]['times'][i]
-
-# get trigger mode if average price is lower than trigger_price
-def get_trigger_mode(start):
-    global tariff, tariff_config
-    if tariff is None or tariff.get('agile') is None:
-        return None
-    key = 'off_peak1' if hour_in(start, tariff.get('off_peak1')) else 'off_peak2'
-    if tariff['agile'].get(key) is None or tariff_config.get('trigger_price') is None:
-        return None
-    trigger_mode = tariff_config.get('trigger_mode') if tariff['agile'][key]['times'][-1]['price'] <= tariff_config['trigger_price'] else 0
-    return trigger_mode
 
 # pushover app key for set_tariff()
 set_tariff_app_key = "apx24dswzinhrbeb62sdensvt42aqe"
@@ -2446,7 +2459,7 @@ def set_tariff(find, update=1, times=None, forecast_times=None, strategy=None, d
         elif type(strategy) is not list:
             strategy = [strategy]
         output(f"\nStrategy")
-        use['strategy'] = get_strategy(use=use, strategy=strategy, quiet=0)
+        use['strategy'] = get_strategy(use=use, strategy=strategy, quiet=0, remove=[use.get('off_peak1'), use.get('off_peak2'), use.get('off_peak3')])
     output_close(plot=tariff_config['show_plot'])
     if update == 1:
         tariff = use
@@ -2716,7 +2729,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         t['time_to_start'] = time_to_start
         t['time_to_end'] = time_to_end
         t['charge_time'] = charge_time
-        time_to_end1 = time_to_end if t['key'] == 'off_peak1' else time_to_end1
+        time_to_end1 = time_to_end if time_to_end1 is None else time_to_end1
     # get next charge slot
     times = sorted(times, key=lambda t: t['time_to_start'])
     charge_key = times[0]['key']
@@ -2732,7 +2745,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     time_to_next = int(time_to_start)
     charge_today = (base_hour + time_to_start / steps_per_hour) < 24
     forecast_day = today if charge_today else tomorrow
-    time_to_end1 = time_to_end if time_to_end1 is None else time_to_end1
     run_to = time_to_end1 if time_to_end < time_to_end1 else time_to_end1 + 24 * steps_per_hour
     run_time = int(run_to + 0.99) + 1 + hour_adjustment * steps_per_hour
     time_line = [round_time(base_hour + x / steps_per_hour - (hour_adjustment if x >= time_change else 0)) for x in range(0, run_time)]

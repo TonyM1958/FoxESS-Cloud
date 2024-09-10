@@ -114,7 +114,7 @@ You can change inverter settings using:
 ```
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2)
-f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
+f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
 f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
 f.set_schedule(periods, enable)
 ```
@@ -137,6 +137,7 @@ set_period() returns a period structure that can be used to build a list for set
 + max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
++ price: optional, default None. Used to display plunge pricing for time period.
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
@@ -494,8 +495,8 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
-+ trigger_price: the price in p/kWh when trigger mode is activated, The default is 5p.
-+ trigger_mode: the value to set for force_charge. The default is 2 (full charge).
++ plunge_price: the price in p/kWh when plunge pricing is used. The default is 2p.
++ plunge_slots: the number of 30 minute slots to use for plunge pricing. The default is 6, allowing up to 3 hours.
 + show_data: show 30 minute Agile pricing data. Default is 0.
 + show_plot: plot 30 minute Agile pricing data. Default is 1.
 
@@ -703,6 +704,10 @@ This setting can be:
 
 
 # Version Info
+
+2.4.6<br>
+Implementation of Agile 'plunge_price', replaces 'trigger_price' and adds plunge time periods to current strategy.
+Update set_tariff() to fetch Agile price from current hour instead of 11pm.
 
 2.4.5<br>
 Update charge period processing so charge_needed() will use the end time of the off_peak1 period as the end time.

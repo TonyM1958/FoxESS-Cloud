@@ -150,6 +150,7 @@ set_period() returns a period structure that can be used to build a list of stra
 + max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode.
++ price: optional, default None. Used to display plunge pricing for time period.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
 charge_periods(): returns a list of periods that describe the strategy for the current tariff and adds the periods required for charging:
@@ -472,8 +473,8 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
-+ trigger_price: the price in p/kWh when trigger mode is activated, The default is 5p.
-+ trigger_mode: the value to set for force_charge. The default is 2 (full charge).
++ plunge_price: the price in p/kWh when plunge pricing is used. The default is 2p.
++ plunge_slots: the number of 30 minute slots to use for plunge pricing. The default is 6, allowing up to 3 hours.
 + show_data: show 30 minute Agile pricing data. Default is 0.
 + show_plot: plot 30 minute Agile pricing data. Default is 1.
 
@@ -501,7 +502,7 @@ Region codes include:
 + 'N' = Southern Scotland
 + 'P' = Northern Scotland
 
-Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from yesterday are used. By default, prices for tomorrow are fetched after 5pm. The setting for this is:
+Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from now up to 11pm are used. Prices for tomorrow are fetched after 5pm. The setting for this is:
 + f.agile_update_time = 17
 
 The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally). You can change the weighting by providing 'weighting'. The following preset weightings are provided:
@@ -684,6 +685,9 @@ This setting can be:
 
 # Version Info
 
+1.5.8<br>
+Implementation of Agile 'plunge_price', replaces 'trigger_price' and adds plunge time periods to current strategy.
+Update set_tariff() to fetch Agile price from current hour instead of 11pm.
 
 1.5.7<br>
 Update charge period processing so charge_needed() will use the end time of the off_peak1 period as the end time.
