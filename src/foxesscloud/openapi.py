@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  07 September 2024
+Updated:  10 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.4.6"
+version = "2.4.7"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2138,7 +2138,6 @@ def get_agile_times(tariff=agile_octopus, d=None):
     # get prices from 11pm today to 11pm tomorrow
     output(f"\nProduct: {product}")
     output(f"Region:  {regions[region]}")
-#    zulu_hour = "T" + hours_time(23 - time_offset - time_shift, ss=True) + "Z"
     url = octopus_api_url.replace("%PRODUCT%", product).replace("%REGION%", region)
     period_from = today + f"T{hours_time(now.hour)}"
     period_to = tomorrow + f"T23:30"
@@ -2151,12 +2150,14 @@ def get_agile_times(tariff=agile_octopus, d=None):
         return None
     # results are in reverse chronological order...
     results = response.json().get('results')[::-1]
-    # extract times and prices
+    # extract times and prices. Times are Zulu (UTC)
     prices = []         # ordered list of 30 minute prices
+    h = now.hour
     for r in results:
         time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
-        prices.append({'start': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
-    tariff['agile']['date'] = tomorrow
+        prices.append({'start': h, 'time': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
+        h += 0.5
+    tariff['agile']['date'] = period_from.replace('T', ' ')
     tariff['agile']['prices'] = prices
     plunge = []
     plunge_price = tariff_config['plunge_price'] if tariff_config.get('plunge_price') is not None else 2
@@ -2167,7 +2168,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
     plunge = sorted(plunge, key=lambda s: prices[s]['price'])[:plunge_slots]
     strategy = []
     for t in plunge:
-        start = time_hours(prices[t]['start'])
+        start = prices[t]['start']
         end = round_time(start + 0.5)
         strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': prices[t]['price']})
     tariff['agile']['strategy'] = strategy
@@ -2198,7 +2199,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
                     price = wavg
                     best = t
             # save best time slot for charge duration
-            start = time_hours(prices[best[0]]['start'])
+            start = prices[best[0]]['start']
             tariff['agile'][key]['times'].append({'start': start, 'end': round_time(start + span / 2), 'price': price, 'best': best, 'key': key})
     # show the results
     if tariff_config['show_data'] > 0:
@@ -2206,12 +2207,12 @@ def get_agile_times(tariff=agile_octopus, d=None):
         s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * (data_wrap - 2) * 13
         for i in range(0, len(prices)):
             s += "\n" if i > 0 and (i + data_wrap - 2) % data_wrap == 0 else ""
-            s += f"  {prices[i]['start']} {prices[i]['price']:5.2f}"
+            s += f"  {prices[i]['time']} {prices[i]['price']:5.2f}"
         output(s)
     if tariff_config['show_plot'] > 0:
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(0, len(prices))]
-        plt.xticks(ticks=x_timed, labels=[prices[x]['start'] for x in x_timed], rotation=90, fontsize=8, ha='center')
+        plt.xticks(ticks=x_timed, labels=[prices[x]['time'] for x in x_timed], rotation=90, fontsize=8, ha='center')
         plt.plot(x_timed, [prices[x]['price'] for x in x_timed], label='30 minute price', color='blue')
         for key in ['off_peak1', 'off_peak2']:
             if tariff['agile'].get(key) is not None and len(tariff['agile'][key]['times']) > 0:

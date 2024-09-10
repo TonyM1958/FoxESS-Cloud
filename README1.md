@@ -685,6 +685,9 @@ This setting can be:
 
 # Version Info
 
+1.5.9<br>
+Correct times in Agile pricing for changes in daylght saving.
+
 1.5.8<br>
 Implementation of Agile 'plunge_price', replaces 'trigger_price' and adds plunge time periods to current strategy.
 Update set_tariff() to fetch Agile price from current hour instead of 11pm.
