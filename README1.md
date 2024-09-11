@@ -473,7 +473,7 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
 + weighting: optional, default is None (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
-+ plunge_price: the price in p/kWh when plunge pricing is used. The default is 2p.
++ plunge_price: list of prices in p/kWh when plunge pricing is used (see below). The default is [0, 5].
 + plunge_slots: the number of 30 minute slots to use for plunge pricing. The default is 6, allowing up to 3 hours.
 + show_data: show 30 minute Agile pricing data. Default is 0.
 + show_plot: plot 30 minute Agile pricing data. Default is 1.
@@ -502,7 +502,7 @@ Region codes include:
 + 'N' = Southern Scotland
 + 'P' = Northern Scotland
 
-Pricing for tomorrow is updated around 4pm each day. If run before this time, prices from now up to 11pm are used. Prices for tomorrow are fetched after 5pm. The setting for this is:
+Pricing for tomorrow is updated around 5pm each day. If run before this time, prices from now up to 11pm are used. Prices for tomorrow are fetched after 5pm. The setting for this is:
 + f.agile_update_time = 17
 
 The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally). You can change the weighting by providing 'weighting'. The following preset weightings are provided:
@@ -532,6 +532,9 @@ f.get_strategy()
 
 get_strategy() creates a list of time segments from the strategy. If strategy is not provided, it uses the strategy for the current tariff. If a strategy includes settings for the AM/PM charge times for the tariff, the times will be moved so they do not conflict with the charge time used by charge_needed().
 
+Plunge pricing allows for the automatic configuration of charging periods when Agile prices are low:
++ 'plunge_pricing is a list of prices. If the price for a 30 minute period is below this price, a plunge charging period is added to the schedule. 'plunge_pricing' is a value or list of values. When a list is used, the values are spread over 24 hours starting with the first value at 7am. So, for example, if 2 prices are provided, the first applies between 7am and 7pm and the second applies between 7pm and 7am. This allows different prices to be applied for day-time and night-time. If 3 prices are provided, each covers 8 hours so the time slots are 7am-3pm, 3pm-11pm and 11pm-7am. With 4 prices, each covers 6 hours so the time periods are 7am-1pm, 1pm-7pm, 7pm-1am, 1am-7am etc.
++ 'plunge_slots' sets the maximum number of 30 minute plunge charging slots to use. The default is 6.
 
 
 # PV Output
@@ -687,6 +690,7 @@ This setting can be:
 
 1.5.9<br>
 Correct times in Agile pricing for changes in daylght saving.
+Update plunge pricing to allow a list of prices to be used.
 
 1.5.8<br>
 Implementation of Agile 'plunge_price', replaces 'trigger_price' and adds plunge time periods to current strategy.

@@ -2092,6 +2092,17 @@ def adjusted_hour(t, time_line):
         return None
     return time_line[i] + (t % 1) / steps_per_hour
 
+# hours difference between 2 time stamps
+def hours_difference(t1, t2):
+    if t1 is None or t2 is None:
+        return 0.0
+    if t1 == t2:
+        return 0.0
+    if type(t1) is str:
+        t1 = datetime.strptime(t1, '%Y-%m-%d %H:%M')
+    if type(t2) is str:
+        t2 = datetime.strptime(t2, '%Y-%m-%d %H:%M')
+    return round((t1 - t2).total_seconds() / 3600,1)
 
 ##################################################################################################
 # TARIFFS - charge periods and time of user (TOU)
@@ -2188,7 +2199,7 @@ test_strategy = [
 
 # return a strategy that has been sorted and filtered for charge times:
 def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
-    global tariff
+    global tariff, base_time
     if use is None:
         use = tariff
     if strategy is None and tariff is not None:
@@ -2197,7 +2208,9 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
             for s in tariff['strategy']:
                 strategy.append(s)
         if use.get('agile') is not None and use['agile'].get('strategy') is not None:
+            base_time_adjust = hours_difference(base_time, use['agile'].get('base_time') )
             for s in use['agile']['strategy']:
+                s['expires'] = int((s['valid_to'] - base_time_adjust) * steps_per_hour)
                 strategy.append(s)
     if strategy is None or len(strategy) == 0:
         return []
@@ -2220,7 +2233,7 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
         if quiet == 0:
             s = f"   {hours_time(start)}-{hours_time(end)} {mode}, min_soc {min_soc_now}%, max_soc {max_soc}%"
             s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
-            s += f", {price:.2f}p/kWh" if price is not None else ""
+            s += f", {price:.1f}p/kWh" if price is not None else ""
             output(s, 1)
         updated.append(segment)
         if len(updated) + reserve == 8:
@@ -2248,7 +2261,7 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'plunge_price':  2,                   # plunge price in p/kWh inc VAT
+    'plunge_price': [0, 5],               # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
     'plunge_slots': 6,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 0,                       # show pricing data
@@ -2295,25 +2308,33 @@ def get_agile_times(tariff=agile_octopus, d=None):
     results = response.json().get('results')[::-1]
     # extract times and prices. Times are Zulu (UTC)
     prices = []         # ordered list of 30 minute prices
-    h = now.hour
-    for r in results:
-        time_offset = daylight_saving(r['valid_from'][:16]) if daylight_saving is not None else 0
-        prices.append({'start': h, 'time': hours_time(time_hours(r['valid_from'][11:16]) + time_offset + time_shift), 'price': r['value_inc_vat']})
-        h += 0.5
-    tariff['agile']['date'] = period_from.replace('T', ' ')
+    for i in range(0, len(results)):
+        time_offset = daylight_saving(results[i]['valid_from'][:16]) if daylight_saving is not None else 0
+        prices.append({
+            'start': (now.hour + i / 2) % 24,
+            'time': hours_time(time_hours(results[i]['valid_from'][11:16]) + time_offset + time_shift),
+            'price': results[i]['value_inc_vat'],
+            'valid_to': i / 2 + 0.5})
+    tariff['agile']['base_time'] = period_from.replace('T', ' ')
     tariff['agile']['prices'] = prices
     plunge = []
     plunge_price = tariff_config['plunge_price'] if tariff_config.get('plunge_price') is not None else 2
+    plunge_price = [plunge_price] if type(plunge_price) is not list else plunge_price
     plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 6
     for i in range(0, min([48, len(prices)])):
-        if prices[i] is not None and prices[i]['price'] < plunge_price:
+        h = int(((now.hour - 7 + i / 2) % 24) * len(plunge_price) / 24)
+        if prices[i] is not None and prices[i]['price'] < plunge_price[h]:
             plunge.append(i)
     plunge = sorted(plunge, key=lambda s: prices[s]['price'])[:plunge_slots]
     strategy = []
-    for t in plunge:
-        start = prices[t]['start']
-        end = round_time(start + 0.5)
-        strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': prices[t]['price']})
+    if len(plunge) > 0:
+        output(f"\nPlunge slots:", 1)
+        for t in plunge:
+            start = prices[t]['start']
+            end = round_time(start + 0.5)
+            price = prices[t]['price']
+            strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': price, 'expires': prices[t]['expires']})
+            output(f"  {hours_time(start)}-{hours_time(end)} at {price:.1f}p", 1)
     tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3']:
         if tariff.get(key) is None:
@@ -2347,22 +2368,26 @@ def get_agile_times(tariff=agile_octopus, d=None):
     # show the results
     if tariff_config['show_data'] > 0:
         data_wrap = tariff_config['data_wrap'] if tariff_config.get('data_wrap') is not None else 6
-        s = f"\nPrices for {tomorrow} (p/kWh inc VAT):\n" + " " * (data_wrap - 2) * 13
+        t = (now.hour * 2) % data_wrap
+        s = f"\nPricing on {today} p/kWh inc VAT:\n" + " " * t * 12
         for i in range(0, len(prices)):
-            s += "\n" if i > 0 and (i + data_wrap - 2) % data_wrap == 0 else ""
-            s += f"  {prices[i]['time']} {prices[i]['price']:5.2f}"
+            s += "\n" if i > 0 and t % data_wrap == 0 else ""
+            s += f"  {prices[i]['time']} {prices[i]['price']:4.1f}"
+            t += 1
         output(s)
     if tariff_config['show_plot'] > 0:
         plt.figure(figsize=(figure_width, figure_width/2))
         x_timed = [i for i in range(0, len(prices))]
         plt.xticks(ticks=x_timed, labels=[prices[x]['time'] for x in x_timed], rotation=90, fontsize=8, ha='center')
         plt.plot(x_timed, [prices[x]['price'] for x in x_timed], label='30 minute price', color='blue')
+        s = ""
         for key in ['off_peak1', 'off_peak2']:
             if tariff['agile'].get(key) is not None and len(tariff['agile'][key]['times']) > 0:
                 p = tariff['agile'][key]['times'][-1]
-                plt.plot(x_timed, [p['price'] if x in p['best'] else None for x in x_timed], label=key)
-                output(f"  {hours_time(p['start'])}-{hours_time(p['end'])} average price = {p['price']:5.2f}p/kWh")
-        plt.title(f"Pricing from {today} to {tomorrow} (p/kWh))", fontsize=10)
+                plt.plot(x_timed, [p['price'] if x in p['best'] else None for x in x_timed], label=f"{key} {p['price']:.1f}p")
+                s += f"\n  {hours_time(p['start'])}-{hours_time(p['end'])} at {p['price']:.1f}p"
+        output(f"\nCharge times{s}" if s != "" else "", 1)
+        plt.title(f"Pricing on {today} p/kWh inc VAT", fontsize=10)
         plt.legend(fontsize=8)
         plt.grid()
         plot_show()
@@ -2539,14 +2564,14 @@ def strategy_timed(timed_mode, base_hour, run_time, min_soc=10, max_soc=100, cur
     min_soc_now = min_soc
     max_soc_now = max_soc
     current_mode = 'SelfUse' if current_mode is None else current_mode
-    h = base_hour
     strategy = get_strategy() if timed_mode > 0 else None
+    h = base_hour
     for i in range(0, run_time):
         period = {'mode': current_mode, 'min_soc': min_soc_now, 'max_soc': max_soc_now, 'fdpwr': 0, 'fdsoc': min_soc_now, 'duration': 1.0, 'charge': 0.0, 'pv': 0.0, 'discharge': 0.0}
         if strategy is not None:
             period['mode'] = 'SelfUse'
             for d in strategy:
-                if hour_in(h, d):
+                if hour_in(h, d) and (d.get('expires') is None or d['expires'] < i):
                     mode = d['mode']
                     period['mode'] = mode
                     min_soc_now = d['min_soc'] if d.get('min_soc') is not None else min_soc
@@ -2606,8 +2631,9 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
 #                 0%     10%    20%    30%    40%    50%    60%    70%    80%    90%   100%
 lifepo4_curve = [51.00, 51.50, 52.00, 52.30, 52.60, 52.80, 52.90, 53.00, 53.10, 53.30, 54.00]
 
-# number of steps per hour in timeline
+# number of steps per hour in timeline and base time for time_line
 steps_per_hour = 2
+base_time = None
 
 # charge_needed settings
 charge_config = {
@@ -2664,7 +2690,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour
+    global timed_strategy, steps_per_hour, base_time
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2697,6 +2723,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     now = system_time + timedelta(hours=time_offset)
     today = datetime.strftime(now, '%Y-%m-%d')
     base_hour = now.hour
+    base_time = today + f" {hours_time(base_hour)}"
     hour_now = now.hour + now.minute / 60
     output(f"  datetime = {today} {hours_time(hour_now)}", 2)
     yesterday = datetime.strftime(now - timedelta(days=1), '%Y-%m-%d')
@@ -2894,8 +2921,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"\nConsumption (kWh):")
         s = ""
         for h in history:
-            s += f"  {h['date']}: {h['total']:4.1f},"
-        output(s[:-1])
+            s += f"  {h['date']} {h['total']:4.1f}"
+        output(s)
         output(f"  Average of last {consumption_days} {day_tomorrow if consumption_span=='weekday' else 'day'}s: {consumption:.1f}kWh")
     # time line buckets of consumption
     daily_sum = sum(consumption_by_hour)
@@ -2953,8 +2980,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"\nGeneration (kWh):")
         s = ""
         for d in sorted(pv_history.keys())[-gen_days:]:
-            s += f"  {d}: {pv_history[d]:4.1f},"
-        output(s[:-1])
+            s += f"  {d} {pv_history[d]:4.1f}"
+        output(s)
         generation = pv_sum / gen_days
         output(f"  Average of last {gen_days} days: {generation:.1f}kWh")
     # choose expected value and produce generation time line
@@ -3026,8 +3053,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     target_kwh = target_soc / 100 * capacity if target_soc is not None else 0
     if target_kwh > (end_residual + kwh_needed):
         kwh_needed = target_kwh - end_residual
+    elif full_charge is not None or force_charge == 2:
+        kwh_needed = capacity - start_residual
+    elif test_charge is not None:
+        output(f"\nTest charge of {test_charge}kWh")
+        kwh_needed = test_charge
+        charge_message = "** test charge **"
     # work out charge needed
-    if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and full_charge is None and test_charge is None and force_charge != 2:
+    if kwh_min > reserve and kwh_needed < charge_config['min_kwh']:
         output(f"\nNo charging needed\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
         charge_message = "no charge needed"
         kwh_needed = 0.0
@@ -3042,22 +3075,16 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 work_mode_timed[t]['min_soc'] = start_soc
         (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
     else:
-        charge_message = "with charge added"
         if test_charge is None:
             output(f"\nCharge needed {kwh_needed:.2f}kWh\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
-        else:
-            output(f"\nTest charge of {test_charge}kWh")
-            charge_message = "** test charge **"
-            kwh_needed = test_charge
+            charge_message = "with charge added"
         # work out time to add kwh_needed to battery
         taper_time = 10/60 if (start_residual + kwh_needed) >= (capacity * 0.95) else 0
         hours = round_time(kwh_needed / (charge_power * charge_loss) + taper_time)
-        # full charge if requested or charge time exceeded or charge needed exceeds capacity
-        if full_charge is not None or force_charge == 2 or hours > charge_time or (start_residual + kwh_needed) > (capacity * 1.01):
+        # charge time exceeded or charge needed exceeds capacity
+        if hours > charge_time or (start_residual + kwh_needed) > capacity:
             kwh_needed = capacity - start_residual
-            if test_charge is None:
-                hours = charge_time
-                output(f"  Full charge time used")
+            hours = charge_time
         elif hours < charge_config['min_hours']:
             hours = charge_config['min_hours']
         end_soc = min([int((start_residual + kwh_needed) / capacity * 100 + 0.5), 100])
@@ -3105,14 +3132,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
         h = base_hour + 1
         t = steps_per_hour
-        s += " " * (16 if show_data == 2 else 15) * (h % data_wrap)
+        s += " " * (13 if show_data == 2 else 12) * (h % data_wrap)
         while t < len(time_line):
             s += "\n" if t > steps_per_hour and h % data_wrap == 0 else ""
             s += f"  {hours_time(time_line[t])}"
-            s += f" = {bat_timed[t]:5.2f}," if show_data == 2 else f" = {bat_timed[t] / capacity * 100:3.0f}%,"
+            s += f" {bat_timed[t]:5.2f}" if show_data == 2 else f" {bat_timed[t] / capacity * 100:3.0f}%"
             h += 1
             t += steps_per_hour
-        output(s[:-1])
+        output(s)
     if show_plot > 0:
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
