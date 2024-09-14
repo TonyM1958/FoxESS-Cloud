@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  10 September 2024
+Updated:  13 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.5.9"
+version = "1.6.0"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1139,7 +1139,7 @@ def build_strategy_from_schedule():
     for p in schedule['pollcy']:
         period = {}
         period['start'] = round_time(p['startH'] + p['startM'] / 60)
-        period['end'] = round_time(p['endH'] + p['endM'] / 60 + 1/60)
+        period['end'] = round_time(p['endH'] + (p['endM'] + 1) / 60)
         period['mode'] = p.get('workMode')
         period['min_soc'] = p.get('minsocongrid')
         period['max_soc'] = p.get('maxSoc')
@@ -1599,7 +1599,7 @@ def report_value_profile(result):
         value = 0.0
         # sum and count available values by hour
         for i in range(0, len(day['data'])):
-            value = day['data'][i]['value'] if day['data'][i]['value'] is not None else value
+            value = day['values'][i] if day['values'][i] is not None else value
             data[i] = (data[i][0] + value, data[i][1]+1)
             hours += 1
         totals += day['total'] * (24 / hours if hours >= 1 else 1)
@@ -1617,6 +1617,9 @@ def report_value_profile(result):
     for t in range(0, 24):
         result.append(by_hour[t] * daily_average / current_total)
     return (daily_average, result)
+
+# forwards compatibility
+get_history = get_raw
 
 ##################################################################################################
 # get energy report data in kWh
@@ -1767,8 +1770,10 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         sum = None
         max = None
         min = None
+        values = []
         for j, y in enumerate(var['data']):
             value = y.get('value')
+            values.append(value)
             if value is None:
                 output(f"** get_report(), warning: missing data for {var['variable']} on {d} at index {j}", 1)
                 continue
@@ -1782,6 +1787,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         var['total'] = sum if report_type != 'day' else side_result[i]['data'][int(main_date['day'])-1]['value']
         var['name'] = report_names[report_vars.index(var['variable'])]
         var['type'] = report_type
+        var['values'] = values
         if summary < 2:
             var['sum'] = sum
             var['average'] = var['total'] / count if count > 0 and var['total'] is not None else None
@@ -2261,7 +2267,7 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'plunge_price': [0, 5],               # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
+    'plunge_price': [1, 10],              # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
     'plunge_slots': 6,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 0,                       # show pricing data
@@ -2333,7 +2339,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
             start = prices[t]['start']
             end = round_time(start + 0.5)
             price = prices[t]['price']
-            strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': price, 'expires': prices[t]['expires']})
+            strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': price, 'valid_to': prices[t]['valid_to']})
             output(f"  {hours_time(start)}-{hours_time(end)} at {price:.1f}p", 1)
     tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3']:
@@ -2548,10 +2554,8 @@ def forecast_value_timed(forecast, today, tomorrow, base_hour, run_time, time_of
         h += 1 / steps_per_hour
     while h < 48:
         day = today if h < 24 else tomorrow
-        if steps_per_hour == 1:
-            profile.append(c_float(forecast.daily[day]['hourly'].get(int(h % 24))))
-        else:
-            profile.append(c_float(forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2))))
+        profile.append(c_float(forecast.daily[day]['hourly'].get(int(h % 24)) if steps_per_hour == 1
+            else forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2))))
         h += 1 / steps_per_hour
     while len(profile) < run_time:
         profile.append(0.0)
@@ -2672,7 +2676,10 @@ charge_config = {
     'derate_step': 5,                 # scale for derating factors in C
     'derating': [24, 15, 10, 2],      # max charge current e.g. 5C step = 22C, 17C, 12C, 7C
     'data_wrap': 6,                   # data items to show per line
-    'target_soc': None                # set the target SoC for charging
+    'target_soc': None,               # set the target SoC for charging
+    'shading': {                      # effect of shading on Solcast / forecast.solar
+        'am': {'delay': 1.2, 'loss': 0.2},
+        'pm': {'delay': 1.5, 'loss': 0.2}}
 }
 
 # app key for charge_needed (used to send output via pushover)
@@ -2931,7 +2938,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solcast_value = None
     solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (system_time.hour in forecast_times or run_after == 0):
-        fsolcast = Solcast(quiet=True, estimated=1 if charge_today else 0)
+        fsolcast = Solcast(quiet=True, estimated=1 if charge_today else 0, shading=charge_config.get('shading'))
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
             solcast_value = fsolcast.daily[forecast_day]['kwh']
             solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, base_hour, run_time, time_offset)
@@ -2948,7 +2955,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     solar_value = None
     solar_profile = None
     if forecast is None and solar_arrays is not None and (system_time.hour in forecast_times or run_after == 0):
-        fsolar = Solar(quiet=True)
+        fsolar = Solar(quiet=True, shading=charge_config.get('shading'))
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
             solar_value = fsolar.daily[forecast_day]['kwh']
             solar_timed = forecast_value_timed(fsolar, today, tomorrow, base_hour, run_time, 0)
@@ -3023,7 +3030,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             discharge_timed[i] = discharge_timed[i] * (1.0 - duration)
             work_mode_timed[i]['charge'] = charge_power * duration * charge_loss
         elif timed_mode > 0 and work_mode == 'ForceDischarge':
-            fdpwr = work_mode_timed[i]['fdpwr'] / discharge_loss
+            fdpwr = work_mode_timed[i]['fdpwr'] / discharge_loss / 1000
             fdpwr = min([discharge_limit, export_limit + discharge_timed[i] * charge_loss, fdpwr])
             discharge_timed[i] = fdpwr * duration / charge_loss + discharge_timed[i] * (1.0 - duration) - charge_timed[i] * duration
         elif force_charge > 0 and i >= int(time_to_start) and i < int(time_to_end):
@@ -3662,6 +3669,23 @@ def c_float(n):
         return 0
     return result
 
+# default sunrise and sunset times by month (generated by sunrise_set.ipynb)
+sun_times = [
+    ('08:13', '16:07'), ('07:46', '16:55'), ('06:51', '17:48'),     # Jan, Feb, Mar
+    ('05:41', '18:41'), ('04:37', '19:31'), ('03:55', '20:15'),     # Apr. May, Jun
+    ('03:54', '20:27'), ('04:31', '19:54'), ('05:20', '18:51'),     # Jul, Aug, Sep
+    ('06:09', '17:43'), ('07:01', '16:38'), ('07:51', '16:00')]     # Oct, Nov, Dec
+
+def get_suntimes(date, utc=0):
+    global sun_times
+    month = int(date[5:7]) - 1
+    month1 = (month + 1) % 12
+    part = (int(date[8:10]) - 1) / 31
+    time_offset = daylight_saving(date) if utc == 0 else 0
+    rise = hours_time(time_hours(sun_times[month][0]) * (1-part) + time_hours(sun_times[month1][0]) * part + time_offset)
+    set = hours_time(time_hours(sun_times[month][1]) * (1-part) + time_hours(sun_times[month1][1]) * part + time_offset)
+    return (rise, set)
+
 ##################################################################################################
 # Code for loading and displaying yield forecasts from Solcast.com.au.
 ##################################################################################################
@@ -3678,7 +3702,7 @@ class Solcast :
     Load Solcast Estimate / Actuals / Forecast daily yield
     """ 
 
-    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0) :
+    def __init__(self, days = 7, reload = 2, quiet = False, estimated=0, shading=None) :
         # days sets the number of days to get for forecasts (and estimated if enabled)
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
@@ -3688,6 +3712,7 @@ class Solcast :
         if estimated == 1:
             data_sets += ['estimated_actuals']
         self.data = {}
+        self.shading = shading
         self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
         self.tomorrow = datetime.strftime(datetime.date(datetime.now() + timedelta(days=1)), '%Y-%m-%d')
         self.save = solcast_save #.replace('.', '_%.'.replace('%', self.today.replace('-','')))
@@ -3746,21 +3771,16 @@ class Solcast :
             for rid in self.data[t].keys() :            # aggregate sites
                 if self.data[t][rid] is not None :
                     for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
-                        period_end = f.get('period_end')
+                        period_end = f.get('period_end')    # time is UTC
+                        value = c_float(f.get('pv_estimate'))
                         date = period_end[:10]
                         time = round_time(time_hours(period_end[11:16])-0.5)
                         key = hours_time(time)
-                        hour = int(time)
                         if date not in self.daily.keys() :
-                            self.daily[date] = {'hourly': {}, 'kwh': 0.0, 'pt30': {}}
-                        if self.daily[date]['hourly'].get(hour) is None:
-                            self.daily[date]['hourly'][hour] = 0.0
+                            self.daily[date] = {'pt30': {}, 'hourly': {}, 'kwh': 0.0, 'sun': get_suntimes(date, utc=1)}
                         if self.daily[date]['pt30'].get(key) is None:
                             self.daily[date]['pt30'][key] = 0.0
-                        value = c_float(f.get('pv_estimate'))
                         self.daily [date]['pt30'][key] += value
-                        self.daily[date]['kwh'] += value / 2        # 30 minute power kW, power / 2 = kWh
-                        self.daily[date]['hourly'][hour] += value / 2
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)
@@ -3768,7 +3788,35 @@ class Solcast :
         while self.days > 2 * days :
             self.keys = self.keys[1:-1]
             self.days = len(self.keys)
-        self.values = [self.daily[d]['kwh'] for d in self.keys]
+        # fill out forecast to cover 24 hours
+        for date in self.keys:
+            for t in [hours_time(t / 2) for t in range(0,48)]:
+                if self.daily[date]['pt30'].get(t) is None:
+                    self.daily[date]['pt30'][t] = 0.0
+        # apply shading
+        if self.shading is not None:
+            for date in self.keys:
+                times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
+                if self.shading.get('am') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am']['delay']
+                    loss = self.shading['am']['loss']
+                    for t in [t for t in times if t < shaded]:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+                if self.shading.get('pm') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm']['delay']
+                    loss = self.shading['pm']['loss']
+                    for t in [t for t in times if t > shaded]:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+        # calculate hourly values and total
+        for date in self.keys:
+            for t in self.daily[date]['pt30'].keys():
+                value = self.daily[date]['pt30'][t] / 2
+                hour = int(time_hours(t))
+                if self.daily[date]['hourly'].get(hour) is None:
+                    self.daily[date]['hourly'][hour] = 0.0
+                self.daily[date]['hourly'][hour] += value
+                self.daily[date]['kwh'] += value
+        self.values = [self.daily[date]['kwh'] for date in self.keys]
         self.total = sum(self.values)
         if self.days > 0 :
             self.avg = self.total / self.days
@@ -3837,7 +3885,7 @@ class Solcast :
             day = self.tomorrow
         # plot forecasts
         times = sorted([t for t in self.daily[day]['hourly'].keys()])
-        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
         color = 'orange' if day > self.today else 'green'
         plt.plot(times, [self.daily[day]['hourly'][t] for t in times], color=color, linestyle='solid', linewidth=2)
         title = f"Solcast hourly power on {day} (UTC)"
@@ -3869,12 +3917,83 @@ class Solcast :
             day = self.tomorrow
         # plot forecasts
         times = sorted([time_hours(t) for t in self.daily[day]['pt30'].keys()])
-        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
         color = 'orange' if day > self.today else 'green'
         plt.plot(times, [self.daily[day]['pt30'][hours_time(t)] for t in times], color=color, linestyle='solid', linewidth=2)
         title = f"Solcast 30 minute power on {day} (UTC)"
         title += f". Total yield = {self.daily[day]['kwh']:.1f}kwh"    
         plt.title(title, fontsize=12)
+        plt.grid()
+        plot_show()
+        return
+
+    def compare(self, day=None, v=None, raw=0):
+        if day is None:
+            day = self.today
+        if type(day) is list:
+            for d in day:
+                self.compare(d)
+            return
+        if v is None:
+            v = ['pvPower']
+        time_offset = daylight_saving(day)
+        total_actual = None
+        self.actual = get_history('day', d=day, v=v)
+        plots = {}
+        for v in self.actual:
+            times = []
+            actual_values = []
+            average = 0.0
+            for i in range(0, len(v.get('data'))):
+                average += v['data'][i]['value'] / 6
+                if i % 6 == 5:
+                    times.append(round_time((i - 5) / 12))
+                    actual_values.append(average)
+                    average = 0
+            plots[v['variable']] = actual_values
+            if v['variable'] == 'pvPower':
+                total_actual = v.get('kwh')
+        if total_actual is None:
+            if debug_setting > 1:
+                print(f"** Solcast.compare(): no actual data for {day}")
+            return
+        if raw > 0:
+            data_sets = ['estimated_actuals', 'forecasts']
+            self.estimate = {}
+            for t in [t for t in data_sets if self.data.get(t) is not None]:
+                for r in self.data[t].keys() :            # process sites
+                    if self.data[t][r] is not None :
+                        for f in self.data[t][r] :
+                            period_end = f.get('period_end')
+                            date = period_end[:10]
+                            if date == day:
+                                if self.estimate.get(r) is None:
+                                    self.estimate[r] = {}
+                                time = round_time(time_hours(period_end[11:16])-0.5 + time_offset)
+                                value = c_float(f.get('pv_estimate'))
+                                self.estimate[r][hours_time(time)] = value
+            for r in self.estimate.keys():
+                estimate_values = [self.estimate[r][hours_time(t)] for t in times]
+                plots[r] = estimate_values
+        total_forecast = 0.0
+        if self.daily.get(day) is not None:
+            sun_times = get_suntimes(day)
+            print(f"\n{day}:\n  Sunrise {sun_times[0]}, Sunset {sun_times[1]}")
+            forecast_values = [self.daily[day]['pt30'][hours_time(t - time_offset)] for t in times]
+            total_forecast = sum(forecast_values) / 2
+            plots['forecast'] = forecast_values
+        if total_actual is not None:
+            print(f"  Total actual: {total_actual:.3f}kWh")
+        if total_forecast is not None:
+            print(f"  Total forecast: {total_forecast:.3f}kWh")
+        print()
+        title = f"Forecast / Actual PV Power on {day}"
+        plt.figure(figsize=(figure_width, figure_width/3))
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
+        for p in plots.keys():
+            plt.plot(times, plots[p], label=p)
+        plt.title(title, fontsize=12)
+        plt.legend()
         plt.grid()
         plot_show()
         return
@@ -3919,12 +4038,14 @@ class Solar :
     """ 
 
     # get solar forecast and return total expected yield
-    def __init__(self, reload=0, quiet=False):
+    def __init__(self, reload=0, quiet=False, shading=None):
         global solar_arrays, solar_save, solar_total, solar_url, solar_api_key
+        self.shading = shading
         self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
         self.tomorrow = datetime.strftime(datetime.date(datetime.now() + timedelta(days=1)), '%Y-%m-%d')
         self.arrays = None
         self.results = None
+        self.shading = shading
         self.save = solar_save #.replace('.', '_%.'.replace('%',self.today.replace('-','')))
         if reload == 1 and os.path.exists(self.save):
             os.remove(self.save)
@@ -3965,36 +4086,54 @@ class Solar :
                 file.close()
         self.daily = {}
         for k in self.results.keys():
-            if self.results[k].get('watt_hours_day') is not None:
-                whd = self.results[k]['watt_hours_day']
-                for d in whd.keys():
-                    if d not in self.daily.keys():
-                        self.daily[d] = {'hourly': {}, 'kwh': 0.0, 'pt30': {}}
-                    self.daily[d]['kwh'] += whd[d] / 1000
-            if self.results[k].get('watt_hours_period') is not None:
-                whp = self.results[k]['watt_hours_period']
-                for dt in whp.keys():
+            if self.results[k].get('watts') is not None:
+                watts = self.results[k]['watts']
+                for dt in watts.keys():
                     date = dt[:10]
                     hour = int(dt[11:13])
-                    if hour not in self.daily[date]['hourly'].keys():
-                        self.daily[date]['hourly'][hour] = 0.0
-                    self.daily[date]['hourly'][hour] += whp[dt] / 1000
-        # fill out hourly forecast to cover 24 hours and add 30 minute data
-        for d in self.daily.keys():
-            for h in range(0,24):
-                if self.daily[d]['hourly'].get(h) is None:
-                    self.daily[d]['hourly'][h] = 0.0
-                value = self.daily[d]['hourly'][h]
-                self.daily[d]['pt30'][hours_time(h)] = value
-                self.daily[d]['pt30'][hours_time(h + 0.5)] = value
-        # drop forecast for today as it already happened
+                    if self.daily.get(date) is None:
+                        self.daily[date] = {'hourly': {}, 'pt30': {}, 'kwh': 0.0, 'sun': get_suntimes(date)}
+                    value = watts[dt] / 1000
+                    for t in [hours_time(hour), hours_time(hour + 0.5)]:
+                        if self.daily[date]['pt30'].get(t) is None:
+                            self.daily[date]['pt30'][t] = 0.0
+                        self.daily[date]['pt30'][t] += value
         self.keys = sorted(self.daily.keys())
         self.days = len(self.keys)
-        self.values = [self.daily[d]['kwh'] for d in self.keys]
+        # fill out forecast to cover 24 hours
+        for date in self.keys:
+            for t in [hours_time(t / 2) for t in range(0,48)]:
+                if self.daily[date]['pt30'].get(t) is None:
+                    self.daily[date]['pt30'][t] = 0.0
+        # apply shading
+        if self.shading is not None:
+            for date in self.keys:
+                times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
+                if self.shading.get('am') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am']['delay']
+                    loss = self.shading['am']['loss']
+                    for t in [t for t in times if t < shaded]:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+                if self.shading.get('pm') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm']['delay']
+                    loss = self.shading['pm']['loss']
+                    for t in [t for t in times if t > shaded]:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+        # calculate hourly values and total
+        for date in self.keys:
+            for t in self.daily[date]['pt30'].keys():
+                value = self.daily[date]['pt30'][t] / 2
+                hour = int(time_hours(t))
+                if self.daily[date]['hourly'].get(hour) is None:
+                    self.daily[date]['hourly'][hour] = 0.0
+                self.daily[date]['hourly'][hour] += value
+                self.daily[date]['kwh'] += value
+        self.values = [self.daily[date]['kwh'] for date in self.keys]
         self.total = sum(self.values)
-        if self.days > 0:
+        if self.days > 0 :
             self.avg = self.total / self.days
         return
+
 
     def __str__(self) :
         # return printable Solar info
@@ -4065,7 +4204,7 @@ class Solar :
             print(f"Solar: no data for {day}")
             return
         times = sorted([h for h in self.daily[day]['hourly'].keys()])
-        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
         color = 'orange' if day > self.today else 'green'
         plt.plot(times, [self.daily[day]['hourly'][t] for t in times], color=color, linestyle='solid', linewidth=2)
         title = f"Solar power on {day}"
@@ -4104,7 +4243,7 @@ class Solar :
             print(f"Solar: no data for {day}")
             return
         times = sorted([time_hours(t) for t in self.daily[day]['pt30'].keys()])
-        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='right')
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
         color = 'orange' if day > self.today else 'green'
         plt.plot(times, [self.daily[day]['pt30'][hours_time(t)] for t in times], color=color, linestyle='solid', linewidth=2)
         title = f"Solar 30 minute power on {day}"
@@ -4114,7 +4253,73 @@ class Solar :
         plot_show()
         return
 
-
+    def compare(self, day=None, v=None, raw=0):
+        if day is None:
+            day = self.today
+        if type(day) is list:
+            for d in day:
+                self.compare(d)
+            return
+        if v is None:
+            v = ['pvPower']
+        total_actual = None
+        self.actual = get_history('day', d=day, v=v)
+        plots = {}
+        for v in self.actual:
+            times = []
+            actual_values = []
+            average = 0.0
+            for i in range(0, len(v.get('data'))):
+                average += v['data'][i]['value'] / 6
+                if i % 6 == 5:
+                    times.append(round_time((i - 5) / 12))
+                    actual_values.append(average)
+                    average = 0
+            plots[v['variable']] = actual_values
+            if v['variable'] == 'pvPower':
+                total_actual = v.get('kwh')
+        if total_actual is None:
+            if debug_setting > 1:
+                print(f"** Solcast.compare(): no actual data for {day}")
+            return
+        if raw > 0:
+            self.estimate = {}
+            for r in self.results.keys() :            # process arrays
+                if self.results[r]['watts'] is not None :
+                    for f in self.results[r]['watts'].keys() :
+                        date = f[:10]
+                        if date == day:
+                            if self.estimate.get(r) is None:
+                                self.estimate[r] = {}
+                            time = round_time(time_hours(f[11:16]))
+                            value = self.results[r]['watts'][f] / 1000
+                            self.estimate[r][hours_time(time)] = value 
+                            self.estimate[r][hours_time(time + 0.5)] = value
+            for r in self.estimate.keys():
+                estimate_values = [c_float(self.estimate[r].get(hours_time(t))) for t in times]
+                plots[r] = estimate_values
+        total_forecast = 0.0
+        if self.daily.get(day) is not None:
+            sun_times = get_suntimes(day)
+            print(f"\n{day}:\n  Sunrise {sun_times[0]}, Sunset {sun_times[1]}")
+            forecast_values = [self.daily[day]['pt30'][hours_time(t)] for t in times]
+            total_forecast = sum(forecast_values) / 2
+            plots['forecast'] = forecast_values
+        if total_actual is not None:
+            print(f"  Total actual: {total_actual:.3f}kWh")
+        if total_forecast is not None:
+            print(f"  Total forecast: {total_forecast:.3f}kWh")
+        print()
+        title = f"Forecast / Actual PV Power on {day}"
+        plt.figure(figsize=(figure_width, figure_width/3))
+        plt.xticks(times, [hours_time(t) for t in times], rotation=90, ha='center')
+        for p in plots.keys():
+            plt.plot(times, plots[p], label=p)
+        plt.title(title, fontsize=12)
+        plt.legend()
+        plt.grid()
+        plot_show()
+        return
 
 ##################################################################################################
 ##################################################################################################

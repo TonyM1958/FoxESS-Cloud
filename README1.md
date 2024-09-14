@@ -363,7 +363,9 @@ derating: [24, 15, 10, 2]     # derated charge current for each temperature step
 force: 1                      # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
 data_wrap: 6                  # data items to show per line
 target_soc: None              # target soc for charging
+shading: {}                   # effect of shading on Solcast / Solar (see below)
 ```
+
 These values are stored / available in f.charge_config.
 
 The default battery open circuit voltage curve versus SoC from 0% to 100% is:
@@ -581,7 +583,7 @@ f.set_pvoutput(d, system_id, tou, push, run_after)
 
 # Solar Forecasting
 
-# Solcast
+## Solcast
 
 Get and display solar data from your solcast.com account using your API key:
 
@@ -596,6 +598,7 @@ Returns a 7 day forecast. Optional parameters are:
 + estimated: whether to get history / estimated data. 1 = yes, 0 = no. Default is 0.
 + reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
 + quiet: True to stop Solcast producing progress messages
++ shading: parameters to control shading at the start and end of the day (see Solar Forecasts)
 
 Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
 
@@ -603,12 +606,18 @@ Forecast data is saved to f.solcast_save. The default is 'solcast.txt'.
 fcast.plot_daily()
 fcast.plot_hourly(day)
 fcast.plot_pt30(day)
+fcast.compare(day, raw, v)
 ```
 
 Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately by hour. plot_pt30() plots 30 minute slots.
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
 
-# Forecast.solar
+compare() will get actual data from your inverter and plot this against the forecast:
++ 'day' is the date to plot (YYYY-MM-DD). The default is today.
++ 'raw' 1 will also plot the raw forecast array (rid) data. Default is 0 (don't plot)
++ 'v' is a list of inverter variables to plot. The default is 'pvPower'
+
+## Forecast.solar
 
 Get and display solar data from forecast.solar for today and tomorrow:
 
@@ -639,6 +648,7 @@ print(fcast)
 Returns a forecast for today and tomorrow. Optional parameters are:
 + reload: cached data handling. 0 = use saved data, 1 = fetch new data, 2 = use saved data for today (default)
 + quiet: set to True to stop Solar producing progress messages
++ shading: parameters to control shading at the start and end of the day
 
 Forecast data is saved to f.solar_save. The default is 'solar.txt'.
 
@@ -646,10 +656,43 @@ Forecast data is saved to f.solar_save. The default is 'solar.txt'.
 fcast.plot_daily()
 fcast.plot_hourly(day)
 fcast.plot_pt30(day)
+fcast.compare(day, raw, v)
 ```
 
 Plots the estimate / forecast data. plot_daily() plots the daily yield. plot_hourly() plots each day separately by hour. plot_pt30() plots 30 minute slots.
 + day: optional. 'today', 'tomorrow', 'all' or a specific list of dates. The default is to plot today and tomorrow
+
+compare() will get actual data from your inverter and plot this against the forecast:
++ 'day' is the date to plot (YYYY-MM-DD). The default is today.
++ 'raw' 1 will also plot the raw forecast array (rid) data. Default is 0 (don't plot)
++ 'v' is a list of inverter variables to plot. The default is 'pvPower'
+
+## Sun Times and Shading
+
+Shading reduces the outut of the solar panels due to shadows covering the sun. The forecasts use a simple shading model that allows for reduced generation due to obstacles that obstruct the panels as the sun rise and sets. This is based on 2 structures:
+
+'f.suntimes' is a list of UTC sunrise and sunset times for the 1st day of each month of the year (12 x value pairs). 'f.suntimes' to values that are specific to you. The default values are based on central England:
+
+```
+sun_times = [
+    ('08:13', '16:07'), ('07:46', '16:55'), ('06:51', '17:48'),     # Jan, Feb, Mar
+    ('05:41', '18:41'), ('04:37', '19:31'), ('03:55', '20:15'),     # Apr. May, Jun
+    ('03:54', '20:27'), ('04:31', '19:54'), ('05:20', '18:51'),     # Jul, Aug, Sep
+    ('06:09', '17:43'), ('07:01', '16:38'), ('07:51', '16:00')]     # Oct, Nov, Dec
+
+f.get_suntimes(date, utc)
+
+'shading': {
+    'am': {'delay': 1.2, 'loss': 0.2},
+    'pm': {'delay': 1.5, 'loss': 0.2}}
+```
+
+'f.get_suntimes' returns the sunrise and sunset times as a tuple for the date provided by interpolating from 'f.sun_times':
++ date: 'YYYY-MM-DD'
++ utc: 1 = return time in UTC. 0 = return local time (default)
+
+'shading' sets the delays and losses caused as the sun rises ('am') and sets ('pm'). The delay is the time after sunrise or before sunset that is applied and 'loss' is the amount that the solar forecast is reduced. The default structure above is used by Solcast and Solar when called from charge_needed() or they can be passed as directly as parameters when forecasts are being created using 'f.Solcast()' and 'f.Solar()'.
+
 
 # Pushover
 
@@ -687,6 +730,14 @@ This setting can be:
 
 
 # Version Info
+
+1.6.0<br>
+Added shading to Solcast and Solar forecasts based on delay to generation around sunrise and sunset.
+Added compare() to Solcast and Solar to compare and plot a forecast against actual generation.
+Added sunrise / sunset times based on location in central England.
+Updated plunge pricing to [1, 10] for day / night charging.
+Fixed invalid key in set_tariff() when plunge pricing is available.
+Fixed incorrect fdpwr when strategy includes Force Discharge.
 
 1.5.9<br>
 Correct times in Agile pricing for changes in daylght saving.
