@@ -76,7 +76,7 @@ By default, this will load the first item in the list provided by the cloud. If 
 + Logger: full or partial serial number
 + Inverter: full or partial serial number
 
-When an item is selected, the functions returns a dictionary containing item details. For an inverter, a list of variables that can be used with the device is also loaded and stored as raw_vars
+When an item is selected, the functions returns a dictionary containing item details. For an inverter, a list of variables that can be used with the device is also loaded and stored as var_list
 
 Once an inverter is selected, you can make other calls to get information:
 
@@ -169,14 +169,15 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 + template: a template ID from get_templates() or find_template()
 + enable: 1 to enable a schedule 0 to disable. The default is 1
 
-## Raw Data
-Raw data reports inverter variables, collected every 5 minutes, on a given date / time and period:
+## History Data
+History data reports inverter variables, collected every 5 minutes, on a given date / time and period:
 
 ```
 f.invert_ct2 = 1
-f.get_raw(time_span, d, v, summary, save, load, plot, station)
+f.get_history(time_span, d, v, summary, save, load, plot, station)
 ```
 
+'f.get_history' is also available as 'f.get_raw' for backward compatibility:
 + time_span determines the period covered by the data, for example, 'hour', 'day' or 'week'. The default is 'hour'
 + d is a date and time in the format 'YYYY-MM-DD HH:MM:SS'. The default is today's date and time. d may also be a list of dates
 + v is a variable, or list of variables (see below)
@@ -186,7 +187,7 @@ f.get_raw(time_span, d, v, summary, save, load, plot, station)
 + plot is optional. 1 plots the results with a chart per unit and per day. 2 plots multiple days on the same chart. Default is 0, no plots
 + station is optional. 1 gets data for a site (using f.station_id), 0 gets data for a device (using f.device_id). The default is 0.
 
-The list of variables that can be queried is stored in raw_vars. There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of raw_vars can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
+The list of variables that can be queried is stored in f.var_list (and also available as f.raw_vars). There is also a pred-defined list power_vars that lists the main power values provided by the inverter. Data generation for the full list of var_list can be slow and return a lot of data, so it's best to select the vars you want from the list if you can.
 
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
@@ -196,10 +197,10 @@ For example, this Jupyter Lab cell will load an inverter and return power data a
 
 ```
 d = '2023-06-17 00:00:00'
-result=f.get_raw('day', d=d, v=f.power_vars)
+result=f.get_history('day', d=d, v=f.power_vars)
 ```
 
-Setting the optional parameter 'summary' when calling get_raw() provides a summary of the raw data
+Setting the optional parameter 'summary' when calling get_history() provides a summary of the raw data
 
 + summary = 0: basic raw_data, no summary
 + summary = 1: summary is calculated
@@ -731,6 +732,14 @@ This setting can be:
 
 # Version Info
 
+1.6.1<br>
+Correct charge power during Force Charge.
+Correct expiration of plunge charge slots.
+Correct duplication of forecast and actual for current time period.
+Add fcast.yesterday as attribute to forecasts.
+Dropped settings for forecast adjust.
+Added f.var_list and f.get_history as aliases for f.raw_vars and f.get_raw for consistency with openapi.
+
 1.6.0<br>
 Added shading to Solcast and Solar forecasts based on delay to generation around sunrise and sunset.
 Added compare() to Solcast and Solar to compare and plot a forecast against actual generation.
@@ -759,7 +768,6 @@ Add 'run_after' to set_pvoutput() for runtime control in scheduled jobs.
 Updated Solcast and Solar to include 30 minute forecast data and plotting.
 Re-work charge_needed() to support steps_per_hour to set battery processing resolution.
 
-
 1.5.5<br>
 Change forecast_times to use system time for consistency with schedules when using Saturn Cloud.
 Change default Agile product to AGILE-24-04-03.
@@ -775,7 +783,6 @@ Reduce number of time periods used by stratgies for Octopus Flux and Agile.
 Revise calculation of charge power to include inverter losses and reduce grid loss.
 Update so charge times display correctly when clocks change.
 Update set_tariff 'times' to include option to set 'force'.
-
 
 1.5.2<br>
 **breaking changes**

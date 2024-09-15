@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  13 September 2024
+Updated:  14 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.4.8"
+version = "2.4.9"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2059,6 +2059,7 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
     global tariff, base_time
     if use is None:
         use = tariff
+    base_time_adjust = 0
     if strategy is None and tariff is not None:
         strategy = []
         if tariff.get('strategy') is not None:
@@ -2067,7 +2068,6 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
         if use.get('agile') is not None and use['agile'].get('strategy') is not None:
             base_time_adjust = hours_difference(base_time, use['agile'].get('base_time') )
             for s in use['agile']['strategy']:
-                s['expires'] = int((s['valid_to'] - base_time_adjust) * steps_per_hour)
                 strategy.append(s)
     if strategy is None or len(strategy) == 0:
         return []
@@ -2081,14 +2081,17 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
             continue
         # add segment
         min_soc_now = s['min_soc'] if s.get('min_soc') is not None and s['min_soc'] > 10 else 10
-        mode = s['mode']
-        max_soc = s['max_soc'] if s.get('max_soc') is not None else 100
+        mode = s['mode'] if s.get('mode') is not None else 'ForceCharge'
+        max_soc = s['max_soc'] if s.get('max_soc') is not None else None
         fdsoc = s.get('fdsoc')
         fdpwr = s.get('fdpwr')
         price = s.get('price')
-        segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'max_soc': max_soc, 'fdsoc': fdsoc, 'fdpwr': fdpwr, 'price': price}
+        expires = int((s['valid_to'] - base_time_adjust) * steps_per_hour) if s.get('valid_to') is not None else None
+        segment = {'start': start, 'end': end, 'mode': mode, 'min_soc': min_soc_now, 'max_soc': max_soc,
+            'fdsoc': fdsoc, 'fdpwr': fdpwr, 'price': price, 'expires': expires}
         if quiet == 0:
-            s = f"   {hours_time(start)}-{hours_time(end)} {mode}, min_soc {min_soc_now}%, max_soc {max_soc}%"
+            s = f"   {hours_time(start)}-{hours_time(end)} {mode}, min_soc {min_soc_now}%"
+            s += f", max_soc {max_soc}%" if max_soc is not None else ""
             s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
             s += f", {price:.1f}p/kWh" if price is not None else ""
             output(s, 1)
@@ -2166,9 +2169,11 @@ def get_agile_times(tariff=agile_octopus, d=None):
     # extract times and prices. Times are Zulu (UTC)
     prices = []         # ordered list of 30 minute prices
     for i in range(0, len(results)):
+        start = (now.hour + i / 2) % 24
         time_offset = daylight_saving(results[i]['valid_from'][:16]) if daylight_saving is not None else 0
         prices.append({
-            'start': (now.hour + i / 2) % 24,
+            'start': start,
+            'end': round_time(start + 0.5),
             'time': hours_time(time_hours(results[i]['valid_from'][11:16]) + time_offset + time_shift),
             'price': results[i]['value_inc_vat'],
             'valid_to': i / 2 + 0.5})
@@ -2179,19 +2184,17 @@ def get_agile_times(tariff=agile_octopus, d=None):
     plunge_price = [plunge_price] if type(plunge_price) is not list else plunge_price
     plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 6
     for i in range(0, min([48, len(prices)])):
-        h = int(((now.hour - 7 + i / 2) % 24) * len(plunge_price) / 24)
-        if prices[i] is not None and prices[i]['price'] < plunge_price[h]:
+        # hour relative index into list of plunge prices, starting at 7am
+        x = int(((now.hour - 7 + i / 2) % 24) * len(plunge_price) / 24)
+        if prices[i] is not None and prices[i]['price'] < plunge_price[x]:
             plunge.append(i)
     plunge = sorted(plunge, key=lambda s: prices[s]['price'])[:plunge_slots]
     strategy = []
     if len(plunge) > 0:
         output(f"\nPlunge slots:", 1)
         for t in plunge:
-            start = prices[t]['start']
-            end = round_time(start + 0.5)
-            price = prices[t]['price']
-            strategy.append({'start': start, 'end': end, 'mode': 'ForceCharge', 'price': price, 'valid_to': prices[t]['valid_to']})
-            output(f"  {hours_time(start)}-{hours_time(end)} at {price:.1f}p", 1)
+            strategy.append(prices[t])
+            output(f"  {hours_time(prices[t]['start'])}-{hours_time(prices[t]['end'])} at {prices[t]['price']:.1f}p", 1)
     tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3']:
         if tariff.get(key) is None:
@@ -2245,7 +2248,6 @@ def get_agile_times(tariff=agile_octopus, d=None):
                 s += f"\n  {hours_time(p['start'])}-{hours_time(p['end'])} at {p['price']:.1f}p"
         output(f"\nCharge times{s}" if s != "" else "", 1)
         plt.title(f"Pricing on {today} p/kWh inc VAT", fontsize=10)
-        plt.title(f"Pricing from {today} to {tomorrow} (p/kWh))", fontsize=10)
         plt.legend(fontsize=8)
         plt.grid()
         plot_show()
@@ -2406,12 +2408,18 @@ def forecast_value_timed(forecast, today, tomorrow, base_hour, run_time, time_of
         h += 1 / steps_per_hour
     while h < 48:
         day = today if h < 24 else tomorrow
-        profile.append(c_float(forecast.daily[day]['hourly'].get(int(h % 24)) if steps_per_hour == 1
-            else forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2))))
+        if forecast.daily.get(day) is None:
+            value = 0.0
+        elif steps_per_hour == 1:
+            value = c_float(forecast.daily[day]['hourly'].get(int(h % 24)))
+        else:
+            value = c_float(forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2)))
+        profile.append(value)
         h += 1 / steps_per_hour
     while len(profile) < run_time:
         profile.append(0.0)
     return profile[:run_time]
+
 
 # build the timed work mode profile from the tariff strategy:
 def strategy_timed(timed_mode, base_hour, run_time, min_soc=10, max_soc=100, current_mode=None):
@@ -2420,14 +2428,14 @@ def strategy_timed(timed_mode, base_hour, run_time, min_soc=10, max_soc=100, cur
     min_soc_now = min_soc
     max_soc_now = max_soc
     current_mode = 'SelfUse' if current_mode is None else current_mode
-    h = base_hour
     strategy = get_strategy() if timed_mode > 0 else None
+    h = base_hour
     for i in range(0, run_time):
-        period = {'mode': current_mode, 'min_soc': min_soc_now, 'max_soc': max_soc_now, 'fdpwr': 0, 'fdsoc': min_soc_now, 'duration': 1.0, 'charge': 0.0, 'pv': 0.0, 'discharge': 0.0}
+        period = {'mode': current_mode, 'min_soc': min_soc_now, 'max_soc': max_soc, 'fdpwr': 0, 'fdsoc': min_soc_now, 'duration': 1.0, 'charge': 0.0, 'pv': 0.0, 'discharge': 0.0}
         if strategy is not None:
             period['mode'] = 'SelfUse'
             for d in strategy:
-                if hour_in(h, d) and (d.get('expires') is None or d['expires'] < i):
+                if hour_in(h, d) and (d.get('expires') is None or i < d['expires']):
                     mode = d['mode']
                     period['mode'] = mode
                     min_soc_now = d['min_soc'] if d.get('min_soc') is not None else min_soc
@@ -2439,7 +2447,7 @@ def strategy_timed(timed_mode, base_hour, run_time, min_soc=10, max_soc=100, cur
                             period['fdsoc'] = d['fdsoc'] if d['fdsoc'] > min_soc_now else min_soc_now
                         if d.get('fdpwr') is not None:
                             period['fdpwr'] = d['fdpwr']
-                    period['duration'] = duration_in(h, d)
+                    period['duration'] = duration_in(h, d) * steps_per_hour
         work_mode_timed.append(period)
         h = round_time(h + 1 / steps_per_hour)
     return work_mode_timed
@@ -2495,7 +2503,8 @@ base_time = None
 charge_config = {
     'contingency': [20,10,5,15],      # % of consumption. Single value or [winter, spring, summer, autumn]
     'capacity': None,                 # Battery capacity (over-ride)
-    'min_soc': None,                  # Minimum Soc (over-ride)
+    'min_soc': None,                  # Minimum Soc. Default 10%
+    'max_soc': None,                  # Maximum Soc. Default 100%
     'charge_current': None,           # max battery charge current setting in A
     'discharge_current': None,        # max battery discharge current setting in A
     'export_limit': None,             # maximum export power in kW
@@ -2516,8 +2525,6 @@ charge_config = {
     'use_today': 21.0,                # hour when todays consumption and generation can be used
     'min_hours': 0.25,                # minimum charge time in decimal hours
     'min_kwh': 0.5,                   # minimum to add in kwh
-    'solcast_adjust': 100,            # % adjustment to make to Solcast forecast
-    'solar_adjust':  100,             # % adjustment to make to Solar forecast
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
@@ -2530,7 +2537,7 @@ charge_config = {
     'data_wrap': 6,                   # data items to show per line
     'target_soc': None,               # set the target SoC for charging
     'shading': {                      # effect of shading on Solcast / forecast.solar
-        'am': {'delay': 1.2, 'loss': 0.2},
+        'am': {'delay': 1.0, 'loss': 0.2},
         'pm': {'delay': 1.5, 'loss': 0.2}}
 }
 
@@ -2650,7 +2657,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"time_to_next = {time_to_next}, full_charge = {full_charge}")
     # get device and battery info from inverter
     if test_soc is None:
-        min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
         get_battery()
         if battery is None or battery['status'] != 1:
             output(f"\nBattery status is not available")
@@ -2675,7 +2681,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         current_soc = test_soc
         capacity = 14.6
         residual = test_soc * capacity / 100
-        min_soc = 10
         bat_volt = 315.4
         bat_power = 0.0
         temperature = 30
@@ -2683,6 +2688,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         device_power = 6.0
         device_current = 25
         model = 'H1-6.0-E'
+    min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
+    max_soc = charge_config['max_soc'] if charge_config['max_soc'] is not None else 100
     volt_curve = charge_config['volt_curve']
     nominal_soc = charge_config['nominal_soc']
     volt_nominal = interpolate(nominal_soc / 10, volt_curve)
@@ -2695,8 +2702,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Voltage:     {bat_volt:.1f}V")
     output(f"  Current:     {bat_current:.1f}A")
     output(f"  State:       {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
-    output(f"  Current SoC: {current_soc}%")
     output(f"  Min SoC:     {min_soc}% ({reserve:.2f}kWh)")
+    output(f"  Current SoC: {current_soc}%")
+    output(f"  Max SoC:     {max_soc}% ({capacity * max_soc / 100:.2f}kWh)")
     output(f"  Temperature: {temperature:.1f}°C")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
@@ -2797,11 +2805,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 output(f"\nSolcast forecast for {today} = {fsolcast.daily[today]['kwh']:.1f}, {tomorrow} = {fsolcast.daily[tomorrow]['kwh']:.1f}")
             else:
                 output(f"\nSolcast forecast for {forecast_day} = {solcast_value:.1f}kWh")
-            adjust = charge_config['solcast_adjust']
-            if adjust != 100:
-                solcast_value = solcast_value * adjust / 100
-                solcast_timed = [v * adjust / 100 for v in solcast_timed]
-                output(f"  Adjusted forecast: {solcast_value:.1f}kWh ({adjust}%)")
     # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
@@ -2814,11 +2817,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 output(f"\nSolar forecast for {today} = {fsolar.daily[today]['kwh']:.1f}, {tomorrow} = {fsolar.daily[tomorrow]['kwh']:.1f}")
             else:
                 output(f"\nSolar forecast for {forecast_day} = {solar_value:.1f}kWh")
-            adjust = charge_config['solar_adjust']
-            if adjust != 100:
-                solar_value = solar_value * adjust / 100
-                solar_timed = [v * adjust / 100 for v in solar_timed]
-                output(f"  Adjusted forecast: {solar_value:.1f}kWh ({adjust}%)")
     if solcast_value is None and solar_value is None and debug_setting > 1:
         output(f"\nNo forecasts available at this time")
     # get generation data
@@ -2871,7 +2869,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # produce time lines for charge, discharge and work mode
     charge_timed = [min([charge_limit, x * charge_config['pv_loss']]) * charge_loss for x in generation_timed]
     discharge_timed = [min([discharge_limit, x / discharge_loss]) / charge_loss + bms_loss for x in consumption_timed]
-    work_mode_timed = strategy_timed(timed_mode, base_hour, run_time, min_soc=min_soc, current_mode=current_mode)
+    work_mode_timed = strategy_timed(timed_mode, base_hour, run_time, min_soc=min_soc, max_soc=max_soc, current_mode=current_mode)
     for i in range(0, len(work_mode_timed)):
         # get work mode
         work_mode = work_mode_timed[i]['mode']
@@ -3559,13 +3557,11 @@ class Solcast :
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
         global debug_setting, solcast_url, solcast_api_key, solcast_save
-        data_sets = ['forecasts']
-        if estimated == 1:
-            data_sets += ['estimated_actuals']
         self.data = {}
         self.shading = shading
         self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
         self.tomorrow = datetime.strftime(datetime.date(datetime.now() + timedelta(days=1)), '%Y-%m-%d')
+        self.yesterday = datetime.strftime(datetime.date(datetime.now() - timedelta(days=1)), '%Y-%m-%d')
         self.save = solcast_save #.replace('.', '_%.'.replace('%', self.today.replace('-','')))
         if reload == 1 and os.path.exists(self.save):
             os.remove(self.save)
@@ -3579,9 +3575,6 @@ class Solcast :
                 self.data = {}
             elif debug_setting > 0 and not quiet:
                 print(f"Using data for {self.data['date']} from {self.save}")
-                if self.data.get('estimated_actuals') is None:
-                    data_sets = ['forecasts']
-                    estimated = 0
         if len(self.data) == 0 :
             if solcast_api_key is None or solcast_api_key == 'my.solcast_api_key>':
                 print(f"\nSolcast: solcast_api_key not set, exiting")
@@ -3602,7 +3595,7 @@ class Solcast :
                 print(f"Getting forecast for {self.today} from solcast.com")
             self.data['date'] = self.today
             params = {'format' : 'json', 'hours' : 168, 'period' : 'PT30M'}     # always get 168 x 30 min values
-            for t in data_sets :
+            for t in ['forecasts'] if estimated == 0 else ['forecasts', 'estimated_actuals']:
                 self.data[t] = {}
                 for rid in [s['resource_id'] for s in sites] :
                     response = requests.get(solcast_url + 'rooftop_sites/' + rid + '/' + t, auth = self.credentials, params = params)
@@ -3618,20 +3611,26 @@ class Solcast :
                 json.dump(self.data, file, sort_keys = True, indent=4, ensure_ascii= False)
                 file.close()
         self.daily = {}
-        for t in data_sets :
+        loaded = {}     # track what we have loaded so we don't duplicate between forecast and actuals
+        for t in ['forecasts'] if self.data.get('estimated_actuals') is None else ['forecasts', 'estimated_actuals']:
             for rid in self.data[t].keys() :            # aggregate sites
-                if self.data[t][rid] is not None :
-                    for f in self.data[t][rid] :            # aggregate 30 minute slots for each day
-                        period_end = f.get('period_end')    # time is UTC
-                        value = c_float(f.get('pv_estimate'))
-                        date = period_end[:10]
-                        time = round_time(time_hours(period_end[11:16])-0.5)
-                        key = hours_time(time)
-                        if date not in self.daily.keys() :
-                            self.daily[date] = {'pt30': {}, 'hourly': {}, 'kwh': 0.0, 'sun': get_suntimes(date, utc=1)}
-                        if self.daily[date]['pt30'].get(key) is None:
-                            self.daily[date]['pt30'][key] = 0.0
-                        self.daily [date]['pt30'][key] += value
+                if loaded.get(rid) is None:
+                    loaded[rid] = {}
+                for f in self.data[t][rid] :            # get 30 minute slots for each day
+                    period_end = f.get('period_end')    # time is UTC
+                    if loaded[rid].get(period_end) is None:
+                        loaded[rid][period_end] = t
+                    elif loaded[rid][period_end] != t:
+                        continue
+                    value = c_float(f.get('pv_estimate'))
+                    date = period_end[:10]
+                    time = round_time(time_hours(period_end[11:16])-0.5)
+                    key = hours_time(time)
+                    if date not in self.daily.keys() :
+                        self.daily[date] = {'pt30': {}, 'hourly': {}, 'kwh': 0.0, 'sun': get_suntimes(date, utc=1)}
+                    if self.daily[date]['pt30'].get(key) is None:
+                        self.daily[date]['pt30'][key] = 0.0
+                    self.daily [date]['pt30'][key] += value
         # ignore first and last dates as these only cover part of the day, so are not accurate
         self.keys = sorted(self.daily.keys())[1:-1]
         self.days = len(self.keys)

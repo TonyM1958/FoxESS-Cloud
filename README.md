@@ -751,6 +751,13 @@ This setting can be:
 
 # Version Info
 
+2.4.9<br>
+Correct charge power during Force Charge.
+Correct expiration of plunge charge slots.
+Correct duplication of forecast and actual for current time period.
+Add fcast.yesterday as attribute to forecasts.
+Dropped settings for forecast adjust.
+
 2.4.8<br>
 Added shading to Solcast and Solar forecasts based on delay to generation around sunrise and sunset.
 Added compare() to Solcast and Solar to compare and plot a forecast against actual generation.
