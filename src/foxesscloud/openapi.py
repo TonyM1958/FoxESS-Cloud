@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  14 September 2024
+Updated:  15 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.4.9"
+version = "2.5.0"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1113,7 +1113,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     # adjust exclusive time to inclusive
     end = round_time(time_hours(end) - 1/60)
     if start is None or end is None or start >= end:
-        output(f"set_period(): ** invalid period times: {hours_time(start)} - {hours_time(end)}")
+        output(f"set_period(): ** invalid period times: {hours_time(start)}-{hours_time(end)}")
         return None
     mode = 'SelfUse' if mode is None else mode
     if mode not in work_modes:
@@ -1871,27 +1871,29 @@ def hour_overlap(period1, period2):
         return True
     return False
 
-# Time in a decimal hour that falls within a time period
-def duration_in(h, period):
+# Time in a step that falls within a time period
+def duration_in(h, period, steps=1):
     if period is None:
         return None
-    duration = 1.0
+    interval = 1 / steps
+    duration = interval
+    h_end = h + interval
     s = period.get('start')
     e = period.get('end')
     if s is None or e is None:
         return None
     if s == e:
         return 0.0
-    if e > s and (h >= e or (h + 1) <= s):    # normal time
+    if e > s and (h >= e or h_end <= s):    # normal time
             return 0.0
-    if e < s and (h >= e and (h + 1) <= s):   # wrap around time
+    if e < s and (h >= e and h_end <= s):   # wrap around time
             return 0.0
-    if s > h and s < (h + 1):
+    if s > h and s < h_end:
         duration -= (s - h)
-    if e > h and e < (h + 1):
-        duration -= (h + 1 - e)
-    duration = 1.0 if duration > 1.0 else 0.0 if duration < 0.0 else duration
-    return duration
+    if e > h and e < h_end:
+        duration -= (h_end - e)
+    duration = interval if duration > interval else 0.0 if duration < 0.0 else duration
+    return round(duration,3)
 
 # Return the hours in a time period with optional value check
 def period_hours(period, check = None, value = 1):
@@ -1902,7 +1904,7 @@ def period_hours(period, check = None, value = 1):
     return round_time(period['end'] - period['start'])
 
 def format_period(period):
-    return f"{hours_time(period['start'])} - {hours_time(period['end'])}"
+    return f"{hours_time(period['start'])}-{hours_time(period['end'])}"
 
 #work out if a date falls in BST or GMT. Returns 1 for BST, 0 for GMT
 def british_summer_time(d=None):
@@ -2077,7 +2079,7 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
         start = s['start']
         end = s['end']
         if hour_overlap(s, remove):
-            output(f"   {hours_time(start)} to {hours_time(end)} ** removed ** (overlaps charge period)", 2)
+            output(f"   {hours_time(start)}-{hours_time(end)} ** removed ** (overlaps charge period)", 2)
             continue
         # add segment
         min_soc_now = s['min_soc'] if s.get('min_soc') is not None and s['min_soc'] > 10 else 10
@@ -2194,7 +2196,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
         output(f"\nPlunge slots:", 1)
         for t in plunge:
             strategy.append(prices[t])
-            output(f"  {hours_time(prices[t]['start'])}-{hours_time(prices[t]['end'])} at {prices[t]['price']:.1f}p", 1)
+            output(f"  {format_period(prices[t])} at {prices[t]['price']:.1f}p", 1)
     tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3']:
         if tariff.get(key) is None:
@@ -2245,7 +2247,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
             if tariff['agile'].get(key) is not None and len(tariff['agile'][key]['times']) > 0:
                 p = tariff['agile'][key]['times'][-1]
                 plt.plot(x_timed, [p['price'] if x in p['best'] else None for x in x_timed], label=f"{key} {p['price']:.1f}p")
-                s += f"\n  {hours_time(p['start'])}-{hours_time(p['end'])} at {p['price']:.1f}p"
+                s += f"\n  {format_period(p)} at {p['price']:.1f}p"
         output(f"\nCharge times{s}" if s != "" else "", 1)
         plt.title(f"Pricing on {today} p/kWh inc VAT", fontsize=10)
         plt.legend(fontsize=8)
@@ -2322,7 +2324,7 @@ def set_tariff(find, update=1, times=None, forecast_times=None, strategy=None, d
             if len(t) > 3:
                 use[key]['force'] = t[3]
             gmt = ' GMT' if tariff[key].get('gmt') is not None else ''
-            output(f"  {key} period: {hours_time(t[1])} to {hours_time(t[2])}{gmt}")
+            output(f"  {key} period: {hours_time(t[1])}-{hours_time(t[2])}{gmt}")
     # update dynamic charge times
     if use.get('agile') is not None:
         result = get_agile_times(tariff=use, d=d)
@@ -2459,16 +2461,16 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
     allowed_drain = charge_config['allowed_drain'] if charge_config.get('allowed_drain') is not None else 4
     bms_loss = (charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05)
     charge_loss = charge_config['charge_loss']
-    charge_limit = charge_config['charge_limit'] * charge_loss
-    float_charge = charge_config['float_charge'] * charge_loss
+    charge_limit = charge_config['charge_limit']
+    float_charge = charge_config['float_charge']
     for i in range(0, len(work_mode_timed)):
         bat_timed.append(kwh_current)
         w = work_mode_timed[i]
         max_now = w['max_soc'] * capacity / 100
         if kwh_current < max_now and w['charge'] > 0.0:
-            kwh_current += min([w['charge'], charge_limit - w['pv']]) / steps_per_hour
+            kwh_current += min([w['charge'], charge_limit - w['pv']]) * charge_loss / steps_per_hour
             kwh_current = max_now if kwh_current > max_now else kwh_current
-        kwh_current += (w['pv'] - w['discharge']) / steps_per_hour
+        kwh_current += (w['pv'] - w['discharge']) / charge_loss / steps_per_hour
         if kwh_current > capacity:
             # battery is full
             kwh_current = capacity
@@ -2480,7 +2482,7 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
             reserve_drain = kwh_current if reserve_drain is None or kwh_current > reserve_drain else reserve_drain
             kwh_current = reserve_drain
             if reserve_drain <= reserve_limit:
-                reserve_drain = min([reserve_now, reserve_drain + float_charge / steps_per_hour])
+                reserve_drain = min([reserve_now, reserve_drain + float_charge * charge_loss / steps_per_hour])
             else:
                 # BMS power drain
                 reserve_drain -= bms_loss / steps_per_hour
@@ -2537,8 +2539,10 @@ charge_config = {
     'data_wrap': 6,                   # data items to show per line
     'target_soc': None,               # set the target SoC for charging
     'shading': {                      # effect of shading on Solcast / forecast.solar
-        'am': {'delay': 1.0, 'loss': 0.2},
-        'pm': {'delay': 1.5, 'loss': 0.2}}
+        'solcast': {'adjust': 0.95, 'am_delay': 1.0, 'am_loss': 0.2, 'pm_delay': 1.0, 'pm_loss': 0.2},
+        'solar':   {'adjust': 1.20, 'am_delay': 1.0, 'am_loss': 0.2, 'pm_delay': 1.0, 'pm_loss': 0.2}
+        },
+    'save': 'charge_needed.txt'       # save calculation data for analysis
 }
 
 # app key for charge_needed (used to send output via pushover)
@@ -2867,8 +2871,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             output(f"\nSettings will not be updated when forecast is not available")
             update_settings = 0
     # produce time lines for charge, discharge and work mode
-    charge_timed = [min([charge_limit, x * charge_config['pv_loss']]) * charge_loss for x in generation_timed]
-    discharge_timed = [min([discharge_limit, x / discharge_loss]) / charge_loss + bms_loss for x in consumption_timed]
+    charge_timed = [min([charge_limit, x * charge_config['pv_loss']]) for x in generation_timed]
+    discharge_timed = [min([discharge_limit, x / discharge_loss]) + bms_loss for x in consumption_timed]
     work_mode_timed = strategy_timed(timed_mode, base_hour, run_time, min_soc=min_soc, max_soc=max_soc, current_mode=current_mode)
     for i in range(0, len(work_mode_timed)):
         # get work mode
@@ -2877,7 +2881,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         # apply changes due to work mode
         if timed_mode > 0 and work_mode == 'ForceCharge':
             discharge_timed[i] = discharge_timed[i] * (1.0 - duration)
-            work_mode_timed[i]['charge'] = charge_power * duration * charge_loss
+            work_mode_timed[i]['charge'] = charge_power * duration
         elif timed_mode > 0 and work_mode == 'ForceDischarge':
             fdpwr = work_mode_timed[i]['fdpwr'] / discharge_loss / 1000
             fdpwr = min([discharge_limit, export_limit + discharge_timed[i] * charge_loss, fdpwr])
@@ -2950,7 +2954,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         price = charge_period.get('price') if charge_period is not None else None
         start_timed = time_to_start + charge_offset * steps_per_hour
         end_timed = (start_timed + hours * steps_per_hour) if force_charge == 0 else time_to_end
-        output(f"  Charge {hours_time(adjusted_hour(start_timed, time_line))} to {hours_time(adjusted_hour(end_timed, time_line))}" + (f" at {price:5.2f}p/kWh" if price is not None else ""))
+        output(f"  Charge {hours_time(adjusted_hour(start_timed, time_line))}-{hours_time(adjusted_hour(end_timed, time_line))}" + (f" at {price:5.2f}p/kWh" if price is not None else ""))
         for i in range(int(time_to_start), int(end_timed) + 1):
             j = i + 1
             # work out time (fraction of hour) when charging in hour from i to j
@@ -2966,7 +2970,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 t = 0.0                             # complete hour before start or after end
             output(f"i = {i}, j = {j}, t = {t}", 3)
             if i >= start_timed:
-                work_mode_timed[i]['charge'] = charge_power * t * charge_loss
+                work_mode_timed[i]['charge'] = charge_power * t
                 work_mode_timed[i]['max_soc'] = end_soc if timed_mode > 1 else target_soc if target_soc is not None else 100
                 work_mode_timed[i]['discharge'] *= (1-t)
             elif force_charge > 0 and timed_mode > 1:
@@ -3003,12 +3007,12 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
         plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
-            title = f"Battery SoC % ({charge_message})"
-            plt.plot(x_timed, [round(bat_timed[x] * 100 / capacity, 1) for x in x_timed], label='Battery', color='blue')
+            title = f"Predicted Battery SoC % at {base_time}({charge_message})"
+            plt.plot(x_timed, [bat_timed[x] * 100 / capacity for x in x_timed], label='Battery', color='blue')
             plt.plot(x_timed, [work_mode_timed[x]['min_soc'] for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
             plt.plot(x_timed, [work_mode_timed[x]['max_soc'] for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
         else:
-            title = f"Energy Flow kWh ({charge_message})"
+            title = f"Predicted Energy Flow kWh at {base_time} ({charge_message})"
             plt.plot(x_timed, [bat_timed[x] for x in x_timed], label='Battery', color='blue')
             plt.plot(x_timed, [generation_timed[x] for x in x_timed], label='Generation', color='green')
             plt.plot(x_timed, [consumption_timed[x] for x in x_timed], label='Consumption', color='red')
@@ -3020,9 +3024,23 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 plt.plot(x_timed, [work_mode_timed[x]['charge'] for x in x_timed], label='Grid Charge', color='pink', linestyle='dotted')
         plt.title(title, fontsize=10)
         plt.grid()
-        if show_plot > 1:
-            plt.legend(fontsize=8)
+        plt.legend(fontsize=8, loc='upper right')
         plot_show()
+    if charge_config.get('save') is not None:
+        file_name = charge_config['save'].replace('###', today)
+        data = {}
+        data['base_time'] = base_time
+        data['steps'] = steps_per_hour
+        data['capacity'] = capacity
+        data['config'] = charge_config
+        data['time'] = time_line
+        data['bat'] = bat_timed
+        data['work_mode'] = work_mode_timed
+        data['generation'] = generation_timed
+        data['consumption'] = consumption_timed
+        file = open(file_name, 'w')
+        json.dump(data, file, sort_keys = True, indent=4, ensure_ascii= False)
+        file.close()
     # setup charging
     if update_settings == 1:
         # work out the charge times and set. First period is battery hold, second period is battery charge / hold
@@ -3040,6 +3058,91 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output_close(plot=show_plot)
     return None
 
+##################################################################################################
+# CHARGE_COMPARE - load saved data and compare with actual
+##################################################################################################
+
+def charge_compare(save=None, v=None, show_plot=3):
+    global charge_config
+    if save is None and charge_config.get('save') is not None:
+        save = charge_config.get('save').replace('###', base_time.replace(' ', 'T'))
+    if save is None:
+        print(f"** charge_compare(): please provide a saved file to load")
+        return
+    file = open(save)
+    data = json.load(file)
+    file.close()
+    if data is None or data.get('base_time') is None:
+        print(f"** charge_compare(): no data to load")
+        return
+    charge_message = f"using '{save}'"
+    base_time = data.get('base_time')
+    steps_per_hour = data.get('steps')
+    capacity = data.get('capacity')
+    time_line = data.get('time')
+    bat_timed = data.get('bat')
+    generation_timed = data.get('generation')
+    consumption_timed = data.get('consumption')
+    work_mode_timed = data.get('work_mode')
+    run_time = len(time_line)
+    base_hour = time_hours(base_time[11:16])
+    start_day = base_time[:10]
+    now = datetime.strptime(base_time, '%Y-%m-%d %H:%M')
+    end_day = datetime.strftime(now + timedelta(hours=run_time / steps_per_hour), '%Y-%m-%d')
+    if v is None:
+        v = ['pvPower', 'loadsPower', 'SoC']
+    actuals = get_history('day', d=date_list(s=start_day, e=end_day, today=1), v=v)
+    plots = {}
+    names = {}
+    count = {}
+    n = int(12 / steps_per_hour)
+    for d in actuals:
+        var = d['variable']
+        name = d['name'] if d.get('name') is not None else var
+        if plots.get(var) is None:
+            plots[var] = [None] * run_time
+            count[var] = [0] * run_time
+            names[var] = name
+        for i in range(0, len(d.get('data'))):
+            value = d['data'][i]['value']
+            time = d['data'][i]['time'][:16]
+            t = int(hours_difference(time, base_time) * steps_per_hour)
+            if t >= 0 and t < run_time:
+                if plots[var][t] is None:
+                    plots[var][t] = 0.0
+                plots[var][t] += value * ((capacity / 100) if var == 'SoC' else 1.0)
+                count[var][t] += 1
+    for v in plots.keys():
+        for i in range(0, run_time):
+            plots[v][i] = plots[v][i] / count[v][i] if count[v][i] > 0 else None
+    plt.figure(figsize=(figure_width, figure_width/2))
+    x_timed = [i for i in range(steps_per_hour, run_time)]
+    x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
+    plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
+    if show_plot == 1:
+        title = f"Predicted Battery SoC % at {base_time}({charge_message})"
+        plt.plot(x_timed, [bat_timed[x] * 100 / capacity for x in x_timed], label='Battery', color='blue')
+        plt.plot(x_timed, [work_mode_timed[x]['min_soc'] for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
+        plt.plot(x_timed, [work_mode_timed[x]['max_soc'] for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
+        plt.plot(x_timed, [(plots['SoC'][x] * 100 / capacity) if plots['SoC'][x] is not None else None for x in x_timed], label='SoC')
+    else:
+        title = f"Predicted Energy Flow kWh at {base_time} ({charge_message})"
+        plt.plot(x_timed, [bat_timed[x] for x in x_timed], label='Battery', color='blue')
+        plt.plot(x_timed, [generation_timed[x] for x in x_timed], label='Generation', color='green')
+        plt.plot(x_timed, [consumption_timed[x] for x in x_timed], label='Consumption', color='red')
+        plt.plot(x_timed, [round(capacity * work_mode_timed[x]['min_soc'] / 100, 1) for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
+        plt.plot(x_timed, [round(capacity * work_mode_timed[x]['max_soc'] / 100, 1) for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
+        if show_plot == 3:
+            plt.plot(x_timed, [work_mode_timed[x]['pv'] for x in x_timed], label='PV Charge', color='orange', linestyle='dotted')
+            plt.plot(x_timed, [work_mode_timed[x]['discharge'] for x in x_timed], label='Discharge', color='brown', linestyle='dotted')
+            plt.plot(x_timed, [work_mode_timed[x]['charge'] for x in x_timed], label='Grid Charge', color='pink', linestyle='dotted')
+        for var in plots.keys():
+            plt.plot(x_timed, [plots[var][x] for x in x_timed], label=names[var])
+    plt.title(title, fontsize=10)
+    plt.grid()
+    plt.legend(fontsize=8, loc='upper right')
+    plot_show()
+    return
 
 ##################################################################################################
 # Battery Info / Battery Monitor
@@ -3644,17 +3747,21 @@ class Solcast :
                 if self.daily[date]['pt30'].get(t) is None:
                     self.daily[date]['pt30'][t] = 0.0
         # apply shading
-        if self.shading is not None:
+        if self.shading is not None and self.shading.get('solcast') is not None:
             for date in self.keys:
                 times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
-                if self.shading.get('am') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am']['delay']
-                    loss = self.shading['am']['loss']
+                if self.shading['solcast'].get('adjust') is not None:
+                    loss = self.shading['solcast']['adjust']
+                    for t in times:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+                if self.shading['solcast'].get('am_delay') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['solcast']['am_delay']
+                    loss = self.shading['solcast']['am_loss']
                     for t in [t for t in times if t < shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
-                if self.shading.get('pm') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm']['delay']
-                    loss = self.shading['pm']['loss']
+                if self.shading['solcast'].get('pm_delay') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['solcast']['pm_delay']
+                    loss = self.shading['solcast']['pm_loss']
                     for t in [t for t in times if t > shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
         # calculate hourly values and total
@@ -3956,17 +4063,21 @@ class Solar :
                 if self.daily[date]['pt30'].get(t) is None:
                     self.daily[date]['pt30'][t] = 0.0
         # apply shading
-        if self.shading is not None:
+        if self.shading is not None and self.shading.get('solar') is not None:
             for date in self.keys:
                 times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
-                if self.shading.get('am') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am']['delay']
-                    loss = self.shading['am']['loss']
+                if self.shading['solar'].get('adjust') is not None:
+                    loss = self.shading['solar']['adjust']
+                    for t in times:
+                        self.daily[date]['pt30'][hours_time(t)] *= loss
+                if self.shading['solar'].get('am_delay') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['solar']['am_delay']
+                    loss = self.shading['solar']['am_loss']
                     for t in [t for t in times if t < shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
-                if self.shading.get('pm') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm']['delay']
-                    loss = self.shading['pm']['loss']
+                if self.shading['solar'].get('pm_delay') is not None:
+                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['solar']['pm_delay']
+                    loss = self.shading['solar']['pm_loss']
                     for t in [t for t in times if t > shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
         # calculate hourly values and total

@@ -382,6 +382,7 @@ force: 1                      # 1 = disable strategy periods when setting charge
 data_wrap: 6                  # data items to show per line
 target_soc: None              # target soc for charging
 shading: {}                   # effect of shading on Solcast / Solar (see below)
+save: 'charge_needed.txt'     # where to save calculation data for charge_compare(). '###' gets replaced with todays date.
 ```
 
 These values are stored / available in f.charge_config.
@@ -396,6 +397,20 @@ When operating in strategy mode (timed_mode=2), charge_needed will create a sche
 This example shows the results reported by charge needed:
 
 ![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/8b77956b-c326-43cd-b165-20d806b1e7e8)
+
+
+## Charge Compare
+
+Provides a comparison of a prediction, saved by charge_needed(), with the actuals
+
+```
+f.charge_compare(save, v, show_plot)
+```
+
+Produces a plot of the saved data from charge_needed() overlaid with data from get_history():
++ 'save': the name of the file to load
++ 'v': the variables to plot. The default is 'pvPower', 'loadsPower' and 'SoC'
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
 
 ## Battery Info
@@ -703,15 +718,16 @@ sun_times = [
 f.get_suntimes(date, utc)
 
 'shading': {
-    'am': {'delay': 1.2, 'loss': 0.2},
-    'pm': {'delay': 1.5, 'loss': 0.2}}
+        'solcast': {'adjust': 0.95, 'am_delay': 1.0, 'am_loss': 0.2, 'pm_delay': 1.0, 'pm_loss': 0.2},
+        'solar':   {'adjust': 1.20, 'am_delay': 1.0, 'am_loss': 0.2, 'pm_delay': 1.0, 'pm_loss': 0.2}
+        },
 ```
 
 'f.get_suntimes' returns the sunrise and sunset times as a tuple for the date provided by interpolating from 'f.sun_times':
 + date: 'YYYY-MM-DD'
 + utc: 1 = return time in UTC. 0 = return local time (default)
 
-'shading' sets the delays and losses caused as the sun rises ('am') and sets ('pm'). The delay is the time after sunrise or before sunset that is applied and 'loss' is the amount that the solar forecast is reduced. The default structure above is used by Solcast and Solar when called from charge_needed() or they can be passed as directly as parameters when forecasts are being created using 'f.Solcast()' and 'f.Solar()'.
+'shading' adjusts the forecast and sets delays and losses caused as the sun rise and set for Solcast and Solar. The forecast is multiplied by 'adjust'. The (AM/PM) delay is the time after sunrise or before sunset that is applied and 'loss' is the amount that the solar forecast is reduced. The default structure above is used by Solcast and Solar when called from charge_needed() or they can be passed directly as parameters when forecasts are being created using 'f.Solcast()' and 'f.Solar()'.
 
 
 # Pushover
@@ -750,6 +766,12 @@ This setting can be:
 
 
 # Version Info
+
+2.5.0<br>
+Fix duration_in() to work with more steps per hour.
+Improve charge calibrationn when using Force Charge.
+Add 'save' to charge_needed() to save calculation data.
+Add charge_compare() to compare predicted and actual battery state.
 
 2.4.9<br>
 Correct charge power during Force Charge.
