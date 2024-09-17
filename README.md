@@ -404,12 +404,13 @@ This example shows the results reported by charge needed:
 Provides a comparison of a prediction, saved by charge_needed(), with the actuals
 
 ```
-f.charge_compare(save, v, show_plot)
+f.charge_compare(save, v, show_data, show_plot)
 ```
 
 Produces a plot of the saved data from charge_needed() overlaid with data from get_history():
 + 'save': the name of the file to load
 + 'v': the variables to plot. The default is 'pvPower', 'loadsPower' and 'SoC'
++ show_data: 1 show battery SoC data by hour (default)
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
 
 
@@ -766,6 +767,11 @@ This setting can be:
 
 
 # Version Info
+
+2.5.1<br>
+Fix anomaly in scheduler support when get_device and get_flag return different results.
+Add 'show_data' to charge_compare() and display run time and starting SoC.
+Fix incorrect SoC actual data in charge_compare().
 
 2.5.0<br>
 Fix duration_in() to work with more steps per hour.

@@ -378,6 +378,21 @@ lifepo4_curve = [51.30, 52.00, 52.30, 52.40, 52.50, 52.60, 52.70, 52.80, 52.9, 5
 When operating in strategy mode (timed_mode=2), charge_needed will create a schedule that includes the strategy for the tariff with additional time periods added to charge from grid and (optionall) to stop the battery discharging. In other modes, charge_needed() will disable any schedules and set the battery charge times.
 
 
+## Charge Compare
+
+Provides a comparison of a prediction, saved by charge_needed(), with the actuals
+
+```
+f.charge_compare(save, v, show_data, show_plot)
+```
+
+Produces a plot of the saved data from charge_needed() overlaid with data from get_history():
++ 'save': the name of the file to load
++ 'v': the variables to plot. The default is 'pvPower', 'loadsPower' and 'SoC'
++ show_data: 1 show battery SoC data by hour (default)
++ show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
+
+
 ## Battery Info
 
 Provides detailed information on the current state of the batteries:
@@ -734,6 +749,11 @@ This setting can be:
 
 
 # Version Info
+
+1.6.3<br>
+Fix anomaly in scheduler support when get_device and get_flag return different results.
+Add 'show_data' to charge_compare() and display run time and starting SoC.
+Fix incorrect SoC actual data in charge_compare().
 
 1.6.2<br>
 Fix duration_in() to work with more steps per hour.

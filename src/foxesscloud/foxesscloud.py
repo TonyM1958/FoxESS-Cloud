@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  15 September 2024
+Updated:  17 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.6.2"
+version = "1.6.3"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1073,8 +1073,6 @@ def get_flag():
     global token, device_id, device_sn, schedule, debug_setting, messages
     if get_device() is None:
         return None
-    if schedule is not None and schedule.get('support') is not None:
-        return schedule
     output(f"getting flag", 2)
     params = {'deviceSN': device_sn}
     response = signed_get(path="/generic/v0/device/scheduler/get/flag", params=params)
@@ -1284,22 +1282,24 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     return period
 
 # set a schedule from a period or list of periods
-def set_schedule(periods=None, template=None, enable=1):
+def set_schedule(periods=None, template=None, enable=True):
     global token, device_sn, debug_setting, messages, schedule, templates
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
         output(f"** set_schedule(), not supported on this device")
         return None
+    if type(enable) is int:
+        enable = True if enable == 1 else False
     if schedule is None:
         schedule = get_schedule()
     output(f"set_schedule(): enable = {enable}, periods = {periods}, template={template}", 2)
     if periods is not None and type(periods) is not list:
         periods = [periods]
     if (periods is None or len(periods) == 0) and template is None:
-        enable = 0
+        enable = False
     params = {'deviceSN': device_sn}
-    if enable == 0:
+    if enable == False:
         output(f"\nDisabling schedule", 1)
         setting_delay()
         response = signed_get(path="/generic/v0/device/scheduler/disable", params=params)
@@ -1310,7 +1310,7 @@ def set_schedule(periods=None, template=None, enable=1):
         if errno != 0:
             output(f"** set_schedule(), disable, {errno_message(errno)}")
             return None
-        schedule['enable'] = False
+        schedule['enable'] = enable
     else:
         template_id = None
         if periods is not None:
@@ -1344,7 +1344,7 @@ def set_schedule(periods=None, template=None, enable=1):
         if errno != 0:
             output(f"** set_schedule(), enable, {errno_message(errno)}")
             return None
-        schedule['enable'] = True
+        schedule['enable'] = enable
     return schedule
 
 
@@ -3071,7 +3071,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "** test charge **"
     # work out charge needed
     if kwh_min > reserve and kwh_needed < charge_config['min_kwh']:
-        output(f"\nNo charging needed ({base_time})\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
+        output(f"\nNo charging needed ({today} {hours_time(hour_now)} {current_soc}%)\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
@@ -3086,7 +3086,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
     else:
         if test_charge is None:
-            output(f"\nCharge needed {kwh_needed:.2f}kWh ({base_time})\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
+            output(f"\nCharge needed {kwh_needed:.2f}kWh ({today} {hours_time(hour_now)} {current_soc}%)\n  Forecast/Consumption: {expected:.1f}/{consumption:.1f} {expected / consumption * 100:.0f}%")
             charge_message = "with charge added"
         # work out time to add kwh_needed to battery
         taper_time = 10/60 if (start_residual + kwh_needed) >= (capacity * 0.95) else 0
@@ -3143,7 +3143,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         h = base_hour + 1
         t = steps_per_hour
         s += " " * (13 if show_data == 2 else 12) * (h % data_wrap)
-        while t < len(time_line):
+        while t < len(time_line) and bat_timed[t] is not None:
             s += "\n" if t > steps_per_hour and h % data_wrap == 0 else ""
             s += f"  {hours_time(time_line[t])}"
             s += f" {bat_timed[t]:5.2f}" if show_data == 2 else f" {bat_timed[t] / capacity * 100:3.0f}%"
@@ -3180,6 +3180,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         file_name = charge_config['save'].replace('###', today)
         data = {}
         data['base_time'] = base_time
+        data['hour_now'] = hour_now
+        data['current_soc'] = current_soc
         data['steps'] = steps_per_hour
         data['capacity'] = capacity
         data['config'] = charge_config
@@ -3213,7 +3215,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
 # CHARGE_COMPARE - load saved data and compare with actual
 ##################################################################################################
 
-def charge_compare(save=None, v=None, show_plot=3):
+def charge_compare(save=None, v=None, show_data=1, show_plot=3):
     global charge_config
     if save is None and charge_config.get('save') is not None:
         save = charge_config.get('save').replace('###', base_time.replace(' ', 'T'))
@@ -3228,6 +3230,8 @@ def charge_compare(save=None, v=None, show_plot=3):
         return
     charge_message = f"using '{save}'"
     base_time = data.get('base_time')
+    hour_now = data.get('hour_now')
+    current_soc = data.get('current_soc')
     steps_per_hour = data.get('steps')
     capacity = data.get('capacity')
     time_line = data.get('time')
@@ -3236,8 +3240,9 @@ def charge_compare(save=None, v=None, show_plot=3):
     consumption_timed = data.get('consumption')
     work_mode_timed = data.get('work_mode')
     run_time = len(time_line)
-    base_hour = time_hours(base_time[11:16])
+    base_hour = int(time_hours(base_time[11:16]))
     start_day = base_time[:10]
+    print(f"Run at {start_day} {hours_time(hour_now)} with SoC = {current_soc}%")
     now = datetime.strptime(base_time, '%Y-%m-%d %H:%M')
     end_day = datetime.strftime(now + timedelta(hours=run_time / steps_per_hour), '%Y-%m-%d')
     if v is None:
@@ -3256,43 +3261,62 @@ def charge_compare(save=None, v=None, show_plot=3):
             names[var] = name
         for i in range(0, len(d.get('data'))):
             value = d['data'][i]['value']
+            if value is not None and var == 'SoC':
+                value *= capacity / 100     # convert % to kWh
             time = d['data'][i]['time'][:16]
             t = int(hours_difference(time, base_time) * steps_per_hour)
             if t >= 0 and t < run_time:
                 if plots[var][t] is None:
-                    plots[var][t] = 0.0
-                plots[var][t] += value * ((capacity / 100) if var == 'SoC' else 1.0)
-                count[var][t] += 1
+                    plots[var][t] = value
+                    count[var][t] = 1
+                elif var != 'SoC':
+                    plots[var][t] += value
+                    count[var][t] += 1
     for v in plots.keys():
         for i in range(0, run_time):
             plots[v][i] = plots[v][i] / count[v][i] if count[v][i] > 0 else None
-    plt.figure(figsize=(figure_width, figure_width/2))
-    x_timed = [i for i in range(steps_per_hour, run_time)]
-    x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
-    plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
-    if show_plot == 1:
-        title = f"Predicted Battery SoC % at {base_time}({charge_message})"
-        plt.plot(x_timed, [bat_timed[x] * 100 / capacity for x in x_timed], label='Battery', color='blue')
-        plt.plot(x_timed, [work_mode_timed[x]['min_soc'] for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
-        plt.plot(x_timed, [work_mode_timed[x]['max_soc'] for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
-        plt.plot(x_timed, [(plots['SoC'][x] * 100 / capacity) if plots['SoC'][x] is not None else None for x in x_timed], label='SoC')
-    else:
-        title = f"Predicted Energy Flow kWh at {base_time} ({charge_message})"
-        plt.plot(x_timed, [bat_timed[x] for x in x_timed], label='Battery', color='blue')
-        plt.plot(x_timed, [generation_timed[x] for x in x_timed], label='Generation', color='green')
-        plt.plot(x_timed, [consumption_timed[x] for x in x_timed], label='Consumption', color='red')
-        plt.plot(x_timed, [round(capacity * work_mode_timed[x]['min_soc'] / 100, 1) for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
-        plt.plot(x_timed, [round(capacity * work_mode_timed[x]['max_soc'] / 100, 1) for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
-        if show_plot == 3:
-            plt.plot(x_timed, [work_mode_timed[x]['pv'] for x in x_timed], label='PV Charge', color='orange', linestyle='dotted')
-            plt.plot(x_timed, [work_mode_timed[x]['discharge'] for x in x_timed], label='Discharge', color='brown', linestyle='dotted')
-            plt.plot(x_timed, [work_mode_timed[x]['charge'] for x in x_timed], label='Grid Charge', color='pink', linestyle='dotted')
-        for var in plots.keys():
-            plt.plot(x_timed, [plots[var][x] for x in x_timed], label=names[var])
-    plt.title(title, fontsize=10)
-    plt.grid()
-    plt.legend(fontsize=8, loc='upper right')
-    plot_show()
+    if show_data > 0 and plots.get('SoC') is not None:
+        data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
+        s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC %:\n"
+        h = base_hour + 1
+        t = steps_per_hour
+        s += " " * (13 if show_data == 2 else 12) * (h % data_wrap)
+        while t < len(time_line) and plots['SoC'][t] is not None:
+            s += "\n" if t > steps_per_hour and h % data_wrap == 0 else ""
+            s += f"  {hours_time(time_line[t])}"
+            s += f" {plots['SoC'][t]:5.2f}" if show_data == 2 else f" {plots['SoC'][t] / capacity * 100:3.0f}%"
+            h += 1
+            t += steps_per_hour
+        print(s)
+    if show_plot > 0:
+        print()
+        plt.figure(figsize=(figure_width, figure_width/2))
+        x_timed = [i for i in range(steps_per_hour, run_time)]
+        x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
+        plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
+        if show_plot == 1:
+            title = f"Predicted Battery SoC % at {base_time}({charge_message})"
+            plt.plot(x_timed, [bat_timed[x] * 100 / capacity for x in x_timed], label='Battery', color='blue')
+            plt.plot(x_timed, [work_mode_timed[x]['min_soc'] for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
+            plt.plot(x_timed, [work_mode_timed[x]['max_soc'] for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
+            plt.plot(x_timed, [(plots['SoC'][x] * 100 / capacity) if plots['SoC'][x] is not None else None for x in x_timed], label='SoC')
+        else:
+            title = f"Predicted Energy Flow kWh at {base_time} ({charge_message})"
+            plt.plot(x_timed, [bat_timed[x] for x in x_timed], label='Battery', color='blue')
+            plt.plot(x_timed, [generation_timed[x] for x in x_timed], label='Generation', color='green')
+            plt.plot(x_timed, [consumption_timed[x] for x in x_timed], label='Consumption', color='red')
+            plt.plot(x_timed, [round(capacity * work_mode_timed[x]['min_soc'] / 100, 1) for x in x_timed], label='Min SoC', color='grey', linestyle='dotted')
+            plt.plot(x_timed, [round(capacity * work_mode_timed[x]['max_soc'] / 100, 1) for x in x_timed], label='Max SoC', color='coral', linestyle='dotted')
+            if show_plot == 3:
+                plt.plot(x_timed, [work_mode_timed[x]['pv'] for x in x_timed], label='PV Charge', color='orange', linestyle='dotted')
+                plt.plot(x_timed, [work_mode_timed[x]['discharge'] for x in x_timed], label='Discharge', color='brown', linestyle='dotted')
+                plt.plot(x_timed, [work_mode_timed[x]['charge'] for x in x_timed], label='Grid Charge', color='pink', linestyle='dotted')
+            for var in plots.keys():
+                plt.plot(x_timed, [plots[var][x] for x in x_timed], label=names[var])
+        plt.title(title, fontsize=10)
+        plt.grid()
+        plt.legend(fontsize=8, loc='upper right')
+        plot_show()
     return
 
 
