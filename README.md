@@ -225,7 +225,7 @@ The summary includes the following attributes:
 
 For power values (unit = kW), the summary performs a Riemann sum of the data, integrating kW over the day to estimate energy in kWh. In this case, the following attributes are also added:
 + kwh: the total energy generated or consumed
-+ kwh_off: the total energy consumed or generated during the off-peak time of use (off_peak1, off_peak2, off_peak3)
++ kwh_off: the total energy consumed or generated during the off-peak time of use (off_peak1, off_peak2, off_peak3, off_peak4)
 + kwh_peak: the total energy consumed or generated during the peak time of use (peak1, peak2)
 + kwh_neg: the total energy from -ve power flow (all other totals are based on +ve power flow)
 
@@ -551,7 +551,7 @@ The best charging period is determined based on the weighted average of the 30 m
 
 set_tariff() can configure multiple off-peak and peak periods for any tariff using the 'times' parameter. Times is a list of tuples:
 + containing values for key, 'start', 'end' and optional 'force'.
-+ recongnised keys are: 'off_peak1', 'off_peak2', 'off_peak3', 'peak1', 'peak2'
++ recongnised keys are: 'off_peak1', 'off_peak2', 'off_peak3', 'off_peak4', 'peak1', 'peak2'
 + a tuple containing a key with no values will remove the time period from the tariff.
 
 For example, this parameter configures an AM charging period between 11pm and 8am and a PM charging period between 12 noon and 4pm and removes the time period 'peak2':
@@ -767,6 +767,12 @@ This setting can be:
 
 
 # Version Info
+
+2.5.2<br>
+Updates to allow charge_needed() to run during a charge period.
+Add suport for 'off_peak4' charge period.
+Change Solcast forecast in charge_needed() so it does not get todays estimate to save API calls.
+Include contingency and reserve when checking minimum battery level.
 
 2.5.1<br>
 Fix anomaly in scheduler support when get_device and get_flag return different results.
