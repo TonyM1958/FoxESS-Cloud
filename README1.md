@@ -50,6 +50,9 @@ If a value is set for f.plot_file, any charts created will also be saved to an i
 
 If you set f.pushover_user_key to your user_key for pushover.net, a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
 
+You can set 'f.storage' to a path to save files to a different location such as cloud storage. The default is to use the current working directory.
+
+
 ## Information
 Load information about the user, site or device:
 
@@ -709,7 +712,7 @@ f.get_suntimes(date, utc)
 + date: 'YYYY-MM-DD'
 + utc: 1 = return time in UTC. 0 = return local time (default)
 
-'shading' adjusts the forecast and sets delays and losses caused as the sun rise and set for Solcast and Solar. The forecast is multiplied by 'adjust'. The (AM/PM) delay is the time after sunrise or before sunset that is applied and 'loss' is the amount that the solar forecast is reduced. The default structure above is used by Solcast and Solar when called from charge_needed() or they can be passed directly as parameters when forecasts are being created using 'f.Solcast()' and 'f.Solar()'.
+'shading' adjusts the forecast and sets delays and losses caused as the sun rise and set for Solcast and Solar. The forecast is multiplied by 'adjust'. The (AM/PM) delay is the time after sunrise or before sunset that is applied and 'loss' is the amount that the solar forecast is reduced. The default structure above is used by Solcast and Solar when called from charge_needed() or they can be passed directly as parameters when forecasts are being created using 'f.Solcast()' and 'f.Solar()'. If the delays are presented as a list, they are values for winter, spring, summer and autumn.
 
 
 
@@ -749,6 +752,13 @@ This setting can be:
 
 
 # Version Info
+
+1.6.5<br>
+Reverted change to allow updates during a charge period to avoid removing charge in progress.
+Update contingency and show how this relates to battery SoC.
+Add PV cover, the ratio of PV generation to consumption.
+Add f.storage path so files can be saved to different locations if needed.
+Allow delays in 'shading' to be a seaonal list of 4 values (winter, spring, summer, autumn).
 
 1.6.4<br>
 Updates to allow charge_needed() to run during a charge period.

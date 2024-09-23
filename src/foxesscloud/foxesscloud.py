@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  22 September 2024
+Updated:  23 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.6.4"
+version = "1.6.5"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -18,6 +18,25 @@ debug_setting = 1
 # constants
 month_names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+import os.path
+import json
+import time
+from datetime import datetime, timedelta, timezone
+from copy import deepcopy
+import requests
+from requests.auth import HTTPBasicAuth
+import hashlib
+import math
+import matplotlib.pyplot as plt
+
+fox_domain = "https://www.foxesscloud.com"
+fox_client_id = "5245784"
+fox_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+time_zone = 'Europe/London'
+
+# optional path to use for file storage 
+storage = ''
 
 # global plot parameters
 figure_width = 9       # width of plots
@@ -39,27 +58,6 @@ def plot_show():
     plt.show()
     return
 
-import os.path
-import json
-import time
-from datetime import datetime, timedelta, timezone
-from copy import deepcopy
-import requests
-from requests.auth import HTTPBasicAuth
-import hashlib
-#from random_user_agent.user_agent import UserAgent
-#from random_user_agent.params import SoftwareName, OperatingSystem
-import math
-import matplotlib.pyplot as plt
-
-#software_names = [SoftwareName.CHROME.value]
-#operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
-#user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
-
-fox_domain = "https://www.foxesscloud.com"
-fox_client_id = "5245784"
-fox_user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-time_zone = 'Europe/London'
 
 ##################################################################################################
 ##################################################################################################
@@ -221,11 +219,11 @@ token_renewal = timedelta(hours=2).seconds       # interval before token needs t
 
 # login and get token if required. Check if token has expired and renew if required.
 def get_token():
-    global username, password, fox_user_agent, fox_client_id, time_zone, token_store, device_list, device, device_id, debug_setting, token_save, token_renewal, messages
+    global username, password, fox_user_agent, fox_client_id, time_zone, token_store, device_list, device, device_id, debug_setting, token_save, token_renewal, messages, storage
     if token_store is None:
         token_store = {'token': None, 'valid_from': None, 'valid_for': token_renewal, 'user_agent': fox_user_agent, 'lang': 'en', 'time_zone': time_zone, 'client_id': fox_client_id}
-    if token_store['token'] is None and os.path.exists(token_save):
-        file = open(token_save)
+    if token_store['token'] is None and os.path.exists(storage + token_save):
+        file = open(storage + token_save)
         token_store = json.load(file)
         file.close()
         if token_store.get('time_zone') is None:
@@ -260,7 +258,7 @@ def get_token():
         output(f"** no token  in result data")
     token_store['valid_from'] = time_now.isoformat()
     if token_save is not None :
-        file = open(token_save, 'w')
+        file = open(storage + token_save, 'w')
         json.dump(token_store, file, indent=4, ensure_ascii=False)
         file.close()
     return token_store['token']
@@ -1375,7 +1373,7 @@ sample_time = 5.0       # 5 minutes default
 sample_rounding = 2     # round to 30 seconds
 
 def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
-    global token, device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time
+    global token, device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time, storage
     if station == 0 and get_device() is None:
         return None
     elif station == 1 and get_site() is None:
@@ -1423,12 +1421,12 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
             output(f"** get_raw(), no raw data, {errno_message(errno)}")
             return None
     else:
-        file = open(load)
+        file = open(storage + load)
         result = json.load(file)
         file.close()
     if save is not None:
         file_name = save + "_raw_" + time_span + "_" + d[0:10].replace('-','') + ".txt"
-        file = open(file_name, 'w', encoding='utf-8')
+        file = open(storage + file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
     for var in result:
@@ -1758,12 +1756,12 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         for x in v:
             result.append({'variable': x, 'data': [], 'date': d})
     if load is not None:
-        file = open(load)
+        file = open(storage + load)
         result = json.load(file)
         file.close()
     elif save is not None:
         file_name = save + "_rep_" + report_type + "_" + d.replace('-','') + ".txt"
-        file = open(file_name, 'w', encoding='utf-8')
+        file = open(storage + file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
     if summary == 0:
@@ -2571,12 +2569,12 @@ def forecast_value_timed(forecast, today, tomorrow, base_hour, run_time, time_of
     while h < 48:
         day = today if h < 24 else tomorrow
         if forecast.daily.get(day) is None:
-            value = 0.0
+            value = None
         elif steps_per_hour == 1:
-            value = c_float(forecast.daily[day]['hourly'].get(int(h % 24)))
+            value = forecast.daily[day]['hourly'].get(int(h % 24))
         else:
-            value = c_float(forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2)))
-        profile.append(value)
+            value = forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2))
+        profile.append(c_float(value))
         h += 1 / steps_per_hour
     while len(profile) < run_time:
         profile.append(0.0)
@@ -2662,7 +2660,7 @@ base_time = None
 
 # charge_needed settings
 charge_config = {
-    'contingency': [20,10,5,15],      # % of consumption. Single value or [winter, spring, summer, autumn]
+    'contingency': [15,10,5,10],      # % of consumption. Single value or [winter, spring, summer, autumn]
     'capacity': None,                 # Battery capacity (over-ride)
     'min_soc': None,                  # Minimum Soc. Default 10%
     'max_soc': None,                  # Maximum Soc. Default 100%
@@ -2719,7 +2717,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour, base_time
+    global timed_strategy, steps_per_hour, base_time, storage
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2778,10 +2776,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         times.append({'key': 'off_peak1', 'start': round_time(base_hour + 1), 'end': round_time(base_hour + 4), 'force': force_charge})
         output(f"Charge time: {hours_time(base_hour + 1)}-{hours_time(base_hour + 4)}")
     time_to_end1 = None
-    start_now = (int(hour_now * 2 + 1) / 2) % 24
     for t in times:
-        if hour_in(start_now, t):
-            t['start'] = start_now
+        if hour_in(hour_now, t) and update_settings > 0:
+            update_settings = 0
+            output(f"\nSettings will not be updated during a charge period")
         time_to_start = round_time(t['start'] - base_hour) * steps_per_hour
         time_to_start += hour_adjustment * steps_per_hour if time_to_start > time_change else 0
         charge_time = round_time(t['end'] - t['start'])
@@ -2965,8 +2963,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
             solcast_value = fsolcast.daily[forecast_day]['kwh']
             solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, base_hour, run_time, time_offset)
-            output(f"\nSolcast forecast:\n  {today}: {fsolcast.daily[today]['kwh']:.1f} (remaining)\n  {tomorrow}: {fsolcast.daily[tomorrow]['kwh']:.1f}")
-    # get forecast.solar data and produce time line
+            solcast_from = time_hours(fsolcast.daily[today]['from']) if fsolcast.daily[today].get('from') is not None else 0
+            output(f"\nSolcast forecast for {tomorrow}: {fsolcast.daily[tomorrow]['kwh']:.1f}")    # get forecast.solar data and produce time line
     solar_value = None
     solar_profile = None
     if forecast is None and solar_arrays is not None and (system_time.hour in forecast_times or run_after == 0):
@@ -2974,7 +2972,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
             solar_value = fsolar.daily[forecast_day]['kwh']
             solar_timed = forecast_value_timed(fsolar, today, tomorrow, base_hour, run_time, 0)
-            output(f"\nSolar forecast:\n  {today}: {fsolar.daily[today]['kwh']:.1f}\n  {tomorrow}: {fsolar.daily[tomorrow]['kwh']:.1f}")
+            output(f"\nSolar forecast for {tomorrow}: {fsolar.daily[tomorrow]['kwh']:.1f}")
     if solcast_value is None and solar_value is None and debug_setting > 1:
         output(f"\nNo forecasts available at this time")
     # get generation data
@@ -3075,23 +3073,22 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         charge_message = "** test charge **"
     # work out charge needed
     if kwh_min > (reserve + kwh_contingency) and kwh_needed < charge_config['min_kwh']:
-        output(f"\nNo charging needed ({today} {hours_time(hour_now)} {current_soc:3.0f}%)")
+        output(f"\nNo charging needed ({today} {hours_time(hour_now)} {current_soc:.0f}%)")
         charge_message = "no charge needed"
         kwh_needed = 0.0
         hours = 0.0
         start_timed = time_to_end
         end_timed = time_to_end
         end_soc = int(end_residual / capacity * 100 + 0.5)
-        output(f"  End SoC: {end_soc}% at {hours_time(adjusted_hour(time_to_end, time_line))}")
-        # rebuild the battery residual with min_soc for battery hold
+        # update min_soc for battery hold
         if force_charge > 0 and timed_mode > 1:
             for t in range(int(time_to_start), int(time_to_end)):
                 work_mode_timed[t]['min_soc'] = start_soc
-        (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
     else:
         if test_charge is None:
-            output(f"\nCharge needed {kwh_needed:.2f}kWh ({today} {hours_time(hour_now)} {current_soc:3.0f}%)")
+            output(f"\nCharge needed {kwh_needed:.2f}kWh ({today} {hours_time(hour_now)} {current_soc:.0f}%)")
             charge_message = "with charge added"
+        output(f"  Start SoC:   {start_residual / capacity * 100:.0f}% at {hours_time(adjusted_hour(time_to_start, time_line))} ({start_residual:.2f}kWh)")
         # work out time to add kwh_needed to battery
         taper_time = 10/60 if (start_residual + kwh_needed) >= (capacity * 0.95) else 0
         hours = round_time(kwh_needed / (charge_power * charge_loss) + taper_time)
@@ -3108,7 +3105,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         price = charge_period.get('price') if charge_period is not None else None
         start_timed = time_to_start + charge_offset * steps_per_hour
         end_timed = (start_timed + hours * steps_per_hour) if force_charge == 0 else time_to_end
-        output(f"  Charge:     {hours_time(adjusted_hour(start_timed, time_line))}-{hours_time(adjusted_hour(end_timed, time_line))}" + (f" at {price:5.2f}p/kWh" if price is not None else ""))
+        output(f"  Charge:      {hours_time(adjusted_hour(start_timed, time_line))}-{hours_time(adjusted_hour(end_timed, time_line))}" + (f" at {price:5.2f}p/kWh" if price is not None else ""))
         for i in range(int(time_to_start), int(end_timed) + 1):
             j = i + 1
             # work out time (fraction of hour) when charging in hour from i to j
@@ -3129,18 +3126,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 work_mode_timed[i]['discharge'] *= (1-t)
             elif force_charge > 0 and timed_mode > 1:
                 work_mode_timed[i]['min_soc'] = start_soc
-        # rebuild the battery residual with the charge added and min_soc
-        (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
-        end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
-        # show the state
-        output(f"  Start SoC: {start_residual / capacity * 100:3.0f}% at {hours_time(adjusted_hour(time_to_start, time_line))} ({start_residual:.2f}kWh)")
-        output(f"  End SoC:   {end_residual / capacity * 100:3.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
-    # show what we have worked out
-    if show_data == 3:
-        output(f"\nTime, Generation, Charge, Consumption, Discharge, Residual, kWh")
-        for i in range(0, run_time):
-            h = base_hour + i / steps_per_hour
-            output(f"  {hours_time(h)}, {generation_timed[i]:6.3f}, {charge_timed[i]:6.3f}, {consumption_timed[i]:6.3f}, {discharge_timed[i]:6.3f}, {bat_timed[i]:6.3f}")
+    # rebuild the battery residual with the charge added and min_soc
+    (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
+    end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
+    # show the results
+    output(f"  End SoC:     {end_residual / capacity * 100:.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
+    output(f"  Contingency: {kwh_contingency / capacity * 100:.0f}% SoC ({kwh_contingency:.2f}kWh)")
+    if not charge_today:
+        output(f"  PV cover:    {expected / consumption * 100:.0f}% ({expected:.1f}/{consumption:.1f})")
     if show_data > 0:
         data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
         s = f"\nBattery Energy kWh:\n" if show_data == 2 else f"\nBattery SoC:\n"
@@ -3194,7 +3187,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         data['work_mode'] = work_mode_timed
         data['generation'] = generation_timed
         data['consumption'] = consumption_timed
-        file = open(file_name, 'w')
+        file = open(storage + file_name, 'w')
         json.dump(data, file, sort_keys = True, indent=4, ensure_ascii= False)
         file.close()
     # setup charging
@@ -3220,13 +3213,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
 ##################################################################################################
 
 def charge_compare(save=None, v=None, show_data=1, show_plot=3):
-    global charge_config
+    global charge_config, storage
     if save is None and charge_config.get('save') is not None:
         save = charge_config.get('save').replace('###', base_time.replace(' ', 'T'))
     if save is None:
         print(f"** charge_compare(): please provide a saved file to load")
         return
-    file = open(save)
+    file = open(storage + save)
     data = json.load(file)
     file.close()
     if data is None or data.get('base_time') is None:
@@ -3246,7 +3239,7 @@ def charge_compare(save=None, v=None, show_data=1, show_plot=3):
     run_time = len(time_line)
     base_hour = int(time_hours(base_time[11:16]))
     start_day = base_time[:10]
-    print(f"Run at {start_day} {hours_time(hour_now)} with SoC {current_soc:3.0f}%")
+    print(f"Run at {start_day} {hours_time(hour_now)} with SoC {current_soc:.0f}%")
     now = datetime.strptime(base_time, '%Y-%m-%d %H:%M')
     end_day = datetime.strftime(now + timedelta(hours=run_time / steps_per_hour), '%Y-%m-%d')
     if v is None:
@@ -3490,15 +3483,16 @@ def write(f, s, m='a'):
 # log battery information in CSV format at 'interval' minutes apart for 'run' times
 # log 1: battery info, 2: add cell volts, 3: add cell temps
 def battery_monitor(interval=30, run=48, log=1, count=None, save=None, overwrite=0):
+    global storage
     run_time = interval * run / 60
     print(f"\n---------------- battery_monitor ------------------")
     print(f"Expected runtime = {hours_time(run_time, day=True)} (hh:mm/days)")
     if save is not None:
-        print(f"Saving data to {save} ")
+        print(f"Saving data to {storage + save} ")
     print()
     s = f"time,soc,residual,bat_volt,bat_current,bat_temp,nbat,ncell,ntemp,volts*,imbalance*,temps*"
     s += ",cell_volts*" if log == 2 else ",cell_volts*,cell_temps*" if log ==3 else ""
-    write(save, s, 'w' if overwrite == 1 else 'a')
+    write(storage + save, s, 'w' if overwrite == 1 else 'a')
     i = run
     while i > 0:
         t1 = time.time()
@@ -3839,17 +3833,18 @@ class Solcast :
         # reload: 0 = use solcast.json, 1 = load new forecast, 2 = use solcast.json if date matches
         # The forecasts and estimated both include the current date, so the total number of days covered is 2 * days - 1.
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
-        global debug_setting, solcast_url, solcast_api_key, solcast_save
+        global debug_setting, solcast_url, solcast_api_key, solcast_save, storage
         self.data = {}
         self.shading = None if shading is None else shading if shading.get('solcast') is None else shading['solcast'] 
         self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
+        self.quarter = int(self.today[5:7]) // 3 % 4
         self.tomorrow = datetime.strftime(datetime.date(datetime.now() + timedelta(days=1)), '%Y-%m-%d')
         self.yesterday = datetime.strftime(datetime.date(datetime.now() - timedelta(days=1)), '%Y-%m-%d')
         self.save = solcast_save #.replace('.', '_%.'.replace('%', self.today.replace('-','')))
-        if reload == 1 and os.path.exists(self.save):
-            os.remove(self.save)
-        if self.save is not None and os.path.exists(self.save):
-            file = open(self.save)
+        if reload == 1 and os.path.exists(storage + self.save):
+            os.remove(storage + self.save)
+        if self.save is not None and os.path.exists(storage + self.save):
+            file = open(storage + self.save)
             self.data = json.load(file)
             file.close()
             if len(self.data) == 0:
@@ -3890,7 +3885,7 @@ class Solcast :
                         return
                     self.data[t][rid] = response.json().get(t)
             if self.save is not None :
-                file = open(self.save, 'w')
+                file = open(storage + self.save, 'w')
                 json.dump(self.data, file, sort_keys = True, indent=4, ensure_ascii= False)
                 file.close()
         self.daily = {}
@@ -3922,26 +3917,30 @@ class Solcast :
         while self.days > days * (1 + estimated) :
             self.keys = self.keys[estimated:-1]
             self.days = len(self.keys)
-        # fill out forecast to cover 24 hours
+        # fill out forecast to cover 24 hours and set forecast start time
         for date in self.keys:
             for t in [hours_time(t / 2) for t in range(0,48)]:
                 if self.daily[date]['pt30'].get(t) is None:
                     self.daily[date]['pt30'][t] = 0.0
+                elif self.daily[date].get('from') is None:
+                    self.daily[date]['from'] = t
         # apply shading
         if self.shading is not None:
             for date in self.keys:
                 times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
                 if self.shading.get('adjust') is not None:
-                    loss = self.shading['adjust']
+                    loss = self.shading['adjust'] if type(self.shading['adjust']) is not list else self.shading['adjust'][self.quarter]
                     for t in times:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
                 if self.shading.get('am_delay') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am_delay']
+                    delay = self.shading['am_delay'] if type(self.shading['am_delay']) is not list else self.shading['am_delay'][self.quarter]
+                    shaded = time_hours(self.daily[date]['sun'][0]) + delay
                     loss = self.shading['am_loss']
                     for t in [t for t in times if t < shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
                 if self.shading.get('pm_delay') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm_delay']
+                    delay = self.shading['pm_delay'] if type(self.shading['pm_delay']) is not list else self.shading['pm_delay'][self.quarter]
+                    shaded = time_hours(self.daily[date]['sun'][1]) - delay
                     loss = self.shading['pm_loss']
                     for t in [t for t in times if t > shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
@@ -4177,19 +4176,19 @@ class Solar :
 
     # get solar forecast and return total expected yield
     def __init__(self, reload=0, quiet=False, shading=None):
-        global solar_arrays, solar_save, solar_total, solar_url, solar_api_key
-        self.shading = shading
+        global solar_arrays, solar_save, solar_total, solar_url, solar_api_key, storage
+        self.shading = None if shading is None else shading if shading.get('solar') is None else shading['solar'] 
         self.today = datetime.strftime(datetime.date(datetime.now()), '%Y-%m-%d')
+        self.quarter = int(self.today[5:7]) // 3 % 4
         self.tomorrow = datetime.strftime(datetime.date(datetime.now() + timedelta(days=1)), '%Y-%m-%d')
         self.yesterday = datetime.strftime(datetime.date(datetime.now() - timedelta(days=1)), '%Y-%m-%d')
         self.arrays = None
         self.results = None
-        self.shading = None if shading is None else shading if shading.get('solar') is None else shading['solar'] 
         self.save = solar_save #.replace('.', '_%.'.replace('%',self.today.replace('-','')))
-        if reload == 1 and os.path.exists(self.save):
-            os.remove(self.save)
-        if self.save is not None and os.path.exists(self.save):
-            file = open(self.save)
+        if reload == 1 and os.path.exists(storage + self.save):
+            os.remove(storage + self.save)
+        if self.save is not None and os.path.exists(storage + self.save):
+            file = open(storage + self.save)
             data = json.load(file)
             file.close()
             if data.get('date') is not None and (data['date'] == self.today and reload != 1):
@@ -4220,7 +4219,7 @@ class Solar :
             if self.save is not None :
                 if debug_setting > 0 and not quiet:
                     print(f"Saving data to {self.save}")
-                file = open(self.save, 'w')
+                file = open(storage + self.save, 'w')
                 json.dump({'date': self.today, 'arrays': self.arrays, 'results': self.results}, file, indent=4, ensure_ascii= False)
                 file.close()
         self.daily = {}
@@ -4249,16 +4248,18 @@ class Solar :
             for date in self.keys:
                 times = sorted(time_hours(t) for t in self.daily[date]['pt30'].keys())
                 if self.shading.get('adjust') is not None:
-                    loss = self.shading['adjust']
+                    loss = self.shading['adjust'] if type(self.shading['adjust']) is not list else self.shading['adjust'][self.quarter]
                     for t in times:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
                 if self.shading.get('am_delay') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][0]) + self.shading['am_delay']
+                    delay = self.shading['am_delay'] if type(self.shading['am_delay']) is not list else self.shading['am_delay'][self.quarter]
+                    shaded = time_hours(self.daily[date]['sun'][0]) + delay
                     loss = self.shading['am_loss']
                     for t in [t for t in times if t < shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
                 if self.shading.get('pm_delay') is not None:
-                    shaded = time_hours(self.daily[date]['sun'][1]) - self.shading['pm_delay']
+                    delay = self.shading['pm_delay'] if type(self.shading['pm_delay']) is not list else self.shading['pm_delay'][self.quarter]
+                    shaded = time_hours(self.daily[date]['sun'][1]) - delay
                     loss = self.shading['pm_loss']
                     for t in [t for t in times if t > shaded]:
                         self.daily[date]['pt30'][hours_time(t)] *= loss
@@ -4464,6 +4465,7 @@ class Solar :
         plot_show()
         return
 
+
 ##################################################################################################
 ##################################################################################################
 # Pushover API
@@ -4477,7 +4479,7 @@ pushover_url = "https://api.pushover.net/1/messages.json"
 foxesscloud_app_key = "aqj8up6jeg9hu4zr1pgir3368vda4q"
 
 def pushover_post(message, file=None, app_key=None):
-    global pushover_user_key, pushover_url, foxesscloud_app_key, debug_setting
+    global pushover_user_key, pushover_url, foxesscloud_app_key, debug_setting, storage
     if pushover_user_key is None or message is None:
         return None
     if app_key is None:
@@ -4485,7 +4487,7 @@ def pushover_post(message, file=None, app_key=None):
     if len(message) > 1024:
         message = message[-1024:]
     body = {'token': app_key, 'user': pushover_user_key, 'message': message}
-    files = {'attachment': open(file, 'rb')} if file is not None else None
+    files = {'attachment': open(storage + file, 'rb')} if file is not None else None
     response = requests.post(pushover_url, data=body, files=files)
     if response.status_code != 200:
         print(f"** pushover_post() got response code {response.status_code}: {response.reason}")
