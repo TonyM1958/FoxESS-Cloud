@@ -514,11 +514,11 @@ This gets the latest 30 minute pricing and uses this to work out the best off pe
 + forecast_times: a list of times when a forecast can be obtained from Solcast / forecast.solar, aligned with the host system time
 + strategy: an optional list of times and work modes (see below)
 + update: optional, 1 (the default) sets the current tariff to Agile Octopus. Setting to 0 does not change the current tariff
-+ weighting: optional, default is None (see below)
++ weighting: optional, default is None / flat (see below)
 + time_shift: optional system time shift in hours. The default is for system time to be UTC and to apply the current day light saving time (e.g. GMT/BST)
 + plunge_price: list of prices in p/kWh when plunge pricing is used (see below). The default is [0, 5].
 + plunge_slots: the number of 30 minute slots to use for plunge pricing. The default is 6, allowing up to 3 hours.
-+ show_data: show 30 minute Agile pricing data. Default is 0.
++ show_data: show 30 minute Agile pricing data. Default is 1.
 + show_plot: plot 30 minute Agile pricing data. Default is 1.
 
 Product codes include: 
@@ -548,9 +548,7 @@ Region codes include:
 Pricing for tomorrow is updated around 5pm each day. If run before this time, prices from yesterday are used. By default, prices for tomorrow are fetched after 5pm. The setting for this is:
 + f.agile_update_time = 17
 
-The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally). You can change the weighting by providing 'weighting'. The following preset weightings are provided:
-+ f.front_loaded: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
-+ f.first_hour: [1.0, 1.0]
+The best charging period is determined based on the weighted average of the 30 minute prices over the duration. The default is flat (all prices are weighted equally, except the last slot, which is pro rata to the charge duration used). You can over-ride the default weighting by providing a list of 30 minute values to apply.
 
 set_tariff() can configure multiple off-peak and peak periods for any tariff using the 'times' parameter. Times is a list of tuples:
 + containing values for key, 'start', 'end' and optional 'force'.
@@ -770,6 +768,12 @@ This setting can be:
 
 
 # Version Info
+
+2.5.4<br>
+Remove preset 'weighting' that were not used.
+Update weighting to apply the requested charge duration correctly.
+Reformat price and SoC tables to reduce wrapping and make them easier to read on small screens.
+Change default for set_tariff() to show Agile 30 minute prices.
 
 2.5.3<br>
 Reverted change to allow updates during a charge period to avoid removing charge in progress.
