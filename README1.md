@@ -751,6 +751,11 @@ This setting can be:
 
 # Version Info
 
+1.6.7<br>
+Improve validation of plunge price periods so they don't repeat across days.
+Correct start and end soc times and values when charging using best Agile time periods.
+Extend charge times when charge needed exceeds battery capacity.
+
 1.6.6<br>
 Remove preset 'weighting' that were not used.
 Update weighting to apply the requested charge duration correctly.
