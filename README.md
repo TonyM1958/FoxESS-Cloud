@@ -769,11 +769,15 @@ This setting can be:
 
 # Version Info
 
+2.5.6<br>
+Change plunge slots to 8 and plungs pricing to [3,10].
+Change min_hours setting in charge_needed to 0.5 (30 minutes) and round up charge times to increments of this.
+Show data and plot starting at t=0.
+
 2.5.5<br>
 Improve validation of plunge price periods so they don't repeat across days.
 Correct start and end soc times and values when charging using best Agile time periods.
 Extend charge times when charge needed exceeds battery capacity.
-
 
 2.5.4<br>
 Remove preset 'weighting' that were not used.

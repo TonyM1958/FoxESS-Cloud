@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  26 September 2024
+Updated:  27 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.5.5"
+version = "2.5.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2134,8 +2134,8 @@ tariff_config = {
     'region': "H",                        # region code to use for Octopus API
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
-    'plunge_price': [1, 10],              # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
-    'plunge_slots': 6,                    # number of 30 minute slots to use
+    'plunge_price': [3, 10],              # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
+    'plunge_slots': 8,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 1,                       # show pricing data
     'show_plot': 1                        # plot pricing data
@@ -2545,7 +2545,7 @@ charge_config = {
     'consumption_days': 3,            # number of days to use for average consumption (1-7)
     'consumption_span': 'week',       # 'week' = last n days or 'weekday' = last n weekdays
     'use_today': 21.0,                # hour when todays consumption and generation can be used
-    'min_hours': 0.25,                # minimum charge time in decimal hours
+    'min_hours': 0.5,                 # minimum charge time in decimal hours
     'min_kwh': 0.5,                   # minimum to add in kwh
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
@@ -2642,7 +2642,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     for t in times:
         if hour_in(hour_now, t) and update_settings > 0:
             update_settings = 0
-            output(f"\nSettings will not be updated during a charge period")
+            output(f"\nSettings will not be updated during a charge period {format_period(t)}")
         time_to_start = round_time(t['start'] - base_hour) * steps_per_hour
         time_to_start += hour_adjustment * steps_per_hour if time_to_start > time_change else 0
         charge_time = round_time(t['end'] - t['start'])
@@ -2933,7 +2933,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         kwh_needed = test_charge
         charge_message = "** test charge **"
     # work out charge needed
-    if kwh_min > (reserve + kwh_contingency) and kwh_needed < charge_config['min_kwh'] and test_charge is None:
+    if kwh_min > reserve and kwh_needed < charge_config['min_kwh'] and test_charge is None:
         output(f"\nNo charging needed:")
         output(f"  SoC now:     {current_soc:.0f}% at {hours_time(hour_now)} on {today}")
         charge_message = "no charge needed"
@@ -2953,17 +2953,18 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"  SoC now:     {current_soc:.0f}% at {hours_time(hour_now)} on {today}")
         # work out time to add kwh_needed to battery
         charge_rate = charge_power * charge_loss
-        hours = round_time(kwh_needed / charge_rate)
+        hours = kwh_needed / charge_rate
         # check if charge time exceeded or charge needed exceeds capacity
-        hours_to_full = round_time((capacity - start_residual) / (charge_rate) + 10)
-        if hours < charge_config['min_hours']:
-            hours = charge_config['min_hours']
-        elif hours > charge_time:
+        hours_to_full = (capacity - start_residual) / charge_rate
+        if hours > charge_time:
             hours = charge_time
         elif hours > hours_to_full:
             kwh_shortfall = (hours - hours_to_full) * charge_rate        # amount of energy that won't be added
-            required = hours_to_full + charge_time * kwh_shortfall / (end_residual - start_residual)  # time to recover energy not added
-            hours = required if required < charge_time else charge_time
+            required = hours_to_full + charge_time * kwh_shortfall / abs(start_residual - end_residual)  # hold time to recover energy not added
+            hours = required if required > hours and required < charge_time else charge_time
+        # round charge time
+        min_hours = charge_config['min_hours']
+        hours = int(hours / min_hours + 0.99) * min_hours
         # rework charge and discharge
         charge_period = get_best_charge_period(start_at, hours)
         charge_offset = round_time(charge_period['start'] - start_at) if charge_period is not None else 0
@@ -3005,11 +3006,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if show_data > 0:
         data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
         s = f"\nBattery Energy kWh:" if show_data == 2 else f"\nBattery SoC:"
-        h = base_hour + 1
-        t = steps_per_hour
+        h = base_hour
+        t = 0
         while t < len(time_line) and bat_timed[t] is not None:
             col = h % data_wrap
-            s += (f"\n  {hours_time(time_line[t])}" + " " * col *  6) if t == steps_per_hour or col == 0 else ""
+            s += (f"\n  {hours_time(time_line[t])}" + " " * col *  6) if t == 0 or col == 0 else ""
             s += f" {bat_timed[t]:5.2f}" if show_data == 2 else f"  {bat_timed[t] / capacity * 100:3.0f}%"
             h += 1
             t += steps_per_hour
@@ -3017,8 +3018,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if show_plot > 0:
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
-        x_timed = [i for i in range(steps_per_hour, run_time)]
-        x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
+        x_timed = [i for i in range(0, run_time)]
+        x_ticks = [i for i in range(0, run_time, steps_per_hour)]
         plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Predicted Battery SoC % at {base_time}({charge_message})"
@@ -3141,11 +3142,11 @@ def charge_compare(save=None, v=None, show_data=1, show_plot=3):
     if show_data > 0 and plots.get('SoC') is not None:
         data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
         s = f"\nBattery Energy kWh:" if show_data == 2 else f"\nBattery SoC:"
-        h = base_hour + 1
-        t = steps_per_hour
+        h = base_hour
+        t = 0
         while t < len(time_line) and bat_timed[t] is not None:
             col = h % data_wrap
-            s += (f"\n  {hours_time(time_line[t])}" + " " * col * 6) if t == steps_per_hour or col == 0 else ""
+            s += (f"\n  {hours_time(time_line[t])}" + " " * col * 6) if t == 0 or col == 0 else ""
             s += f" {plots['SoC'][t]:5.2f}" if show_data == 2 else f"  {plots['SoC'][t] / capacity * 100:3.0f}%"
             h += 1
             t += steps_per_hour
@@ -3153,8 +3154,8 @@ def charge_compare(save=None, v=None, show_data=1, show_plot=3):
     if show_plot > 0:
         print()
         plt.figure(figsize=(figure_width, figure_width/2))
-        x_timed = [i for i in range(steps_per_hour, run_time)]
-        x_ticks = [i for i in range(steps_per_hour, run_time, steps_per_hour)]
+        x_timed = [i for i in range(0, run_time)]
+        x_ticks = [i for i in range(0, run_time, steps_per_hour)]
         plt.xticks(ticks=x_ticks, labels=[hours_time(time_line[x]) for x in x_ticks], rotation=90, fontsize=8, ha='center')
         if show_plot == 1:
             title = f"Predicted Battery SoC % at {base_time}({charge_message})"
