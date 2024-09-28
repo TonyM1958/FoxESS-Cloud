@@ -769,6 +769,10 @@ This setting can be:
 
 # Version Info
 
+2.5.7<br>
+Fix problem with schedules being set for plunge periods that are more than 24 hours in the future.
+Add date to plunge period display.
+
 2.5.6<br>
 Change plunge slots to 8 and plungs pricing to [3,10].
 Change min_hours setting in charge_needed to 0.5 (30 minutes) and round up charge times to increments of this.

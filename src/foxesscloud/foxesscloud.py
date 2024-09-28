@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  27 September 2024
+Updated:  28 September 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.6.8"
+version = "1.6.9"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -742,7 +742,7 @@ def charge_periods(st1=None, en1=None, st2=None, en2=None, min_soc=10, end_soc=1
             charge.append({'start': st1, 'end': st3, 'mode': 'SelfUse', 'min_soc': start_soc})
             st1 = st3
         charge.append({'start': st1, 'end': en1, 'mode': 'SelfUse', 'min_soc': min_soc})
-    strategy = get_strategy(remove=span)[:(8 - len(charge))]
+    strategy = get_strategy(remove=span, limit=24)[:(8 - len(charge))]
     for c in charge:
         strategy.append(c)
     periods = []
@@ -2208,7 +2208,7 @@ test_strategy = [
         {'start': 21, 'end': 22, 'mode': 'ForceCharge'}]
 
 # return a strategy that has been sorted and filtered for charge times:
-def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
+def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0, limit=None):
     global tariff, base_time
     if use is None:
         use = tariff
@@ -2221,8 +2221,9 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0):
         if use.get('agile') is not None and use['agile'].get('strategy') is not None:
             base_time_adjust = hours_difference(base_time, use['agile'].get('base_time') )
             for s in use['agile']['strategy']:
-                s['valid_for'] = [int((s['hour'] - base_time_adjust) * steps_per_hour + i) for i in range(0, steps_per_hour // 2)] if s.get('hour') is not None else None
-                strategy.append(s)
+                if limit is None or s.get('hour') is None or s['hour'] - base_time_adjust < 24:
+                    s['valid_for'] = [int((s['hour'] - base_time_adjust) * steps_per_hour + i) for i in range(0, steps_per_hour // 2)] if s.get('hour') is not None else None
+                    strategy.append(s)
     if strategy is None or len(strategy) == 0:
         return []
     updated = []
@@ -2344,7 +2345,8 @@ def get_agile_times(tariff=agile_octopus, d=None):
         output(f"\nPlunge slots:", 1)
         for t in plunge:
             strategy.append(prices[t])
-            output(f"  {format_period(prices[t])} at {prices[t]['price']:.1f}p", 1)
+            date = (now + timedelta(hours = prices[t]['hour'])).strftime("%Y-%m-%d")
+            output(f"  {format_period(prices[t])} at {prices[t]['price']:.1f}p on {date}", 1)
     tariff['agile']['strategy'] = strategy
     for key in ['off_peak1', 'off_peak2', 'off_peak3', 'off_peak4']:
         if tariff.get(key) is None:
