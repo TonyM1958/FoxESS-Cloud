@@ -126,7 +126,7 @@ You can change inverter settings using:
 
 ```
 f.set_min(minGridSoc, minSoc)
-f.set_charge(ch1, st1, en1, ch2, st2, en2)
+f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_work_mode(mode)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
 f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
@@ -144,6 +144,7 @@ set_charge() takes the charge times from the battery_settings and applies these 
 + ch2: enable charge from grid for period 2 (True or False)
 + st2: the start time for period 2
 + en2: the end time for period 2
++ enable: set to 0 to show settings but stop inverter settings being updated. Default is 1.
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
 
@@ -750,6 +751,14 @@ This setting can be:
 
 
 # Version Info
+
+1.7.0<br>
+Fix incorrect charging setup when force_charge=1.
+Rework charge_periods() to consolidate charge periods to reduce number of time segments when timed_mode=2.
+Add 'enable' parameter to set_charge().
+Change 'force' to 'hold' in preset tariffs.
+Stop plunge slots being used when timed_mode is 0 or 1.
+Change default plunge_price to [3,3] and plunge_slots to 6.
 
 1.6.9<br>
 Fix problem with schedules being set for plunge periods that are more than 24 hours in the future.
