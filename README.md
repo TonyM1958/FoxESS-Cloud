@@ -349,44 +349,46 @@ Given the data available, the modelling works as follows:
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
 ```
-contingency: [20,10,5,10]     # % of consumption. Single or [winter, spring, summer, autumn] values
-capacity: None                # Battery capacity in kWh (over-rides generated value if set)
-charge_current: None          # max battery charge current setting in A. None uses a value derrived from the inverter model
-discharge_current: None       # max battery discharge current setting in A. None uses a value derrived from the inverter model
-export_limit: None            # maximum export power in kW. None uses the inverter power rating
-discharge_loss: 0.98          # loss converting battery discharge power to grid power
-pv_loss: 0.95                 # loss converting PV power to battery charge power
-grid_loss: 0.975              # loss converting grid power to battery charge power
-inverter_power: None          # inverter power consumption in W (dynamically set)
-bms_power: 50                 # BMS power consumption in W
-force_charge_power: 5.00      # power used when Force Charge is scheduled
-allowed_drain: 4,             # % tolerance below min_soc before float charge starts
-float_current: 4,             # BMS float charge current in A
-bat_resistance: 0.070         # internal resistance of a battery in ohms
-volt_curve: lifepo4_curve     # battery OCV from 0% to 100% SoC
-nominal_soc: 55               # SoC for nominal open circuit voltage
-generation_days: 3            # number of days to use for average generation (1-7)
-consumption_days: 3           # number of days to use for average consumption (1-7)
-consumption_span: 'week'      # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
-use_today: 21.0               # hour when today's generation and consumption data will be used
-min_hours: 0.25               # minimum charge time to set (in decimal hours)
-min_kwh: 0.5                  # minimum charge to add in kwh
-solcast_adjust: 100           # % adjustment to make to Solcast forecast
-solar_adjust:  100            # % adjustment to make to Solar forecast
-forecast_selection: 1         # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
-annual_consumption: None      # optional annual consumption in kWh. If set, this replaces consumption history
-timed_mode: 0                 # 0 = None, 1 = use timed work mode, 2 = strategy mode
-special_contingency: 30       # contingency for special days when consumption might be higher
+contingency: [20,10,5,10]      # % of consumption. Single or [winter, spring, summer, autumn] values
+capacity: None                 # Battery capacity in kWh (over-rides generated value if set)
+charge_current: None           # max battery charge current setting in A. None uses a value derrived from the inverter model
+discharge_current: None        # max battery discharge current setting in A. None uses a value derrived from the inverter model
+export_limit: None             # maximum export power in kW. None uses the inverter power rating
+dc_ac_loss: 0.970              # loss converting battery DC power to AC grid power
+pv_loss: 0.950                 # loss converting PV power to DC battery charge power
+ac_dc_loss: 0.960              # loss converting AC grid power to DC battery charge power
+charge_loss: [0.975, 1.040]    # loss in battery energy for each kWh added (based on residual_handling)
+discharge_loss: [0.975, 0.975] # loss in battery energy for each kWh removed (based on residual_handling)
+inverter_power: None           # inverter power consumption in W (dynamically set)
+bms_power: 50                  # BMS power consumption in W
+force_charge_power: 5.00       # power used when Force Charge is scheduled
+allowed_drain: 4,              # % tolerance below min_soc before float charge starts
+float_current: 4,              # BMS float charge current in A
+bat_resistance: 0.070          # internal resistance of a battery in ohms
+volt_curve: lifepo4_curve      # battery OCV from 0% to 100% SoC
+nominal_soc: 55                # SoC for nominal open circuit voltage
+generation_days: 3             # number of days to use for average generation (1-7)
+consumption_days: 3            # number of days to use for average consumption (1-7)
+consumption_span: 'week'       # 'week' = last 7 days or 'weekday' = last 7 weekdays e.g. Saturdays
+use_today: 21.0                # hour when today's generation and consumption data will be used
+min_hours: 0.25                # minimum charge time to set (in decimal hours)
+min_kwh: 0.5                   # minimum charge to add in kwh
+solcast_adjust: 100            # % adjustment to make to Solcast forecast
+solar_adjust:  100             # % adjustment to make to Solar forecast
+forecast_selection: 1          # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
+annual_consumption: None       # optional annual consumption in kWh. If set, this replaces consumption history
+timed_mode: 0                  # 0 = None, 1 = use timed work mode, 2 = strategy mode
+special_contingency: 30        # contingency for special days when consumption might be higher
 special_days: ['12-25', '12-26', '01-01']
-full_charge: None             # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
-derate_temp: 21               # battery temperature in C when derating charge current is applied
-derate_step: 5                # step size for derating e.g. 21, 16, 11
-derating: [24, 15, 10, 2]     # derated charge current for each temperature step e.g. 21C, 16C, 11C, 6C
-force: 1                      # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
-data_wrap: 6                  # data items to show per line
-target_soc: None              # target soc for charging
-shading: {}                   # effect of shading on Solcast / Solar (see below)
-save: 'charge_needed.txt'     # where to save calculation data for charge_compare(). '###' gets replaced with todays date.
+full_charge: None              # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
+derate_temp: 28                # battery temperature in C when derating charge current is applied
+derate_step: 5                 # step size for derating e.g. 21, 16, 11
+derating: [24, 15, 10, 2]      # derated charge current for each temperature step e.g. 28C, 23C, 18C, 13C
+force: 1                       # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
+data_wrap: 6                   # data items to show per line
+target_soc: None               # target soc for charging (over-rides calculated value)
+shading: {}                    # effect of shading on Solcast / Solar (see below)
+save: 'charge_needed.txt'      # where to save calculation data for charge_compare(). '###' gets replaced with todays date.
 ```
 
 These values are stored / available in f.charge_config.
@@ -769,6 +771,11 @@ This setting can be:
 
 
 # Version Info
+
+2.5.9<br>
+Change loss parameters to separate AC/DC, DC/AC conversion losses and battery charge / discharge losses.
+Update charge calibration for new BMS firmware.
+Increase de-rating temperature from 21C to 28C for new BMS firmware.
 
 2.5.8<br>
 Fix incorrect charging setup when force_charge=1.
