@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  02 October 2024
+Updated:  05 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.1"
+version = "1.7.2"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2545,7 +2545,7 @@ def forecast_value_timed(forecast, today, tomorrow, base_hour, run_time, time_of
     profile = []
     h = base_hour - time_offset
     while h < 0:
-        profile.append(0.0)
+        profile.append(None)
         h += 1 / steps_per_hour
     while h < 48:
         day = today if h < 24 else tomorrow
@@ -2555,10 +2555,10 @@ def forecast_value_timed(forecast, today, tomorrow, base_hour, run_time, time_of
             value = forecast.daily[day]['hourly'].get(int(h % 24))
         else:
             value = forecast.daily[day]['pt30'].get(hours_time(int(h * 2) / 2))
-        profile.append(c_float(value))
+        profile.append(value)
         h += 1 / steps_per_hour
     while len(profile) < run_time:
-        profile.append(0.0)
+        profile.append(None)
     return profile[:run_time]
 
 # build the timed work mode profile from the tariff strategy:
@@ -2599,8 +2599,8 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
     global charge_config, steps_per_hour, residual_handling
     allowed_drain = charge_config['allowed_drain'] if charge_config.get('allowed_drain') is not None else 4
     bms_loss = (charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05)
-    charge_loss = charge_config['charge_loss'][residual_handling - 1]
-    discharge_loss = charge_config['discharge_loss'][residual_handling - 1]
+    charge_loss = charge_config['charge_loss'][residual_handling - 1] if type(charge_config.get('charge_loss')) is list else charge_config['charge_loss']
+    discharge_loss = charge_config['discharge_loss'][residual_handling - 1] if type(charge_config.get('discharge_loss')) is list else charge_config['discharge_loss']
     charge_limit = charge_config['charge_limit']
     float_charge = charge_config['float_charge']
     for i in range(0, len(work_mode_timed)):
@@ -2692,7 +2692,7 @@ charge_config = {
     'pv_loss': 0.950,                 # loss converting PV power to DC battery charge power
     'ac_dc_loss': 0.960,              # loss converting AC grid power to DC battery charge power
     'charge_loss': [0.975, 1.040],    # loss in battery energy for each kWh added (based on residual_handling)
-    'discharge_loss': [0.975, 0.975], # loss in battery energy for each kWh removed (based on residual_handling)
+    'discharge_loss': 0.975,          # loss in battery energy for each kWh removed (based on residual_handling)
     'inverter_power': 101,            # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
     'force_charge_power': 5.00,       # charge power in kW when using force charge
@@ -2927,14 +2927,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     charge_config['charge_limit'] = charge_limit
     charge_config['charge_power'] = charge_power
     charge_config['float_charge'] = float_charge
-    charge_loss = charge_config['charge_loss'][residual_handling - 1]
+    charge_loss = charge_config['charge_loss'][residual_handling - 1] if type(charge_config.get('charge_loss')) is list else charge_config['charge_loss']
+    pv_loss = charge_config['pv_loss']
     # work out discharge limit = max power coming from the battery before ac conversion losses
     dc_ac_loss = charge_config['dc_ac_loss']
     discharge_limit = device_power / dc_ac_loss
     discharge_current = device_current if charge_config['discharge_current'] is None else charge_config['discharge_current']
     discharge_power = discharge_current * bat_ocv / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
-    discharge_loss = charge_config['discharge_loss'][residual_handling - 1]
+    discharge_loss = charge_config['discharge_loss'][residual_handling - 1] if type(charge_config.get('discharge_loss')) is list else charge_config['discharge_loss']
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / dc_ac_loss
@@ -3048,8 +3049,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             output(f"\nSettings will not be updated when forecast is not available")
             update_settings = 0
     # produce time lines for charge, discharge and work mode
-    charge_timed = [min([charge_limit, x * charge_config['pv_loss']]) for x in generation_timed]
-    discharge_timed = [min([discharge_limit, x / dc_ac_loss]) + bms_loss for x in consumption_timed]
+    charge_timed = [min([charge_limit, c_float(x) * pv_loss]) for x in generation_timed]
+    discharge_timed = [min([discharge_limit, c_float(x) / dc_ac_loss]) + bms_loss for x in consumption_timed]
     work_mode_timed = strategy_timed(timed_mode, base_hour, run_time, min_soc=min_soc, max_soc=max_soc, current_mode=current_mode)
     for i in range(0, len(work_mode_timed)):
         # get work mode
@@ -3240,10 +3241,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
 # CHARGE_COMPARE - load saved data and compare with actual
 ##################################################################################################
 
-def charge_compare(save=None, v=None, show_data=1, show_plot=3):
+def charge_compare(save=None, v=None, show_data=1, show_plot=3, d=None):
     global charge_config, storage
+    now = datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+    yesterday = datetime.strftime(datetime.date(now - timedelta(days=1)), '%Y-%m-%d')
     if save is None and charge_config.get('save') is not None:
-        save = charge_config.get('save').replace('###', base_time.replace(' ', 'T'))
+        save = charge_config.get('save').replace('###', yesterday)
+        if not os.path.exists(storage + save):
+            save = None
     if save is None:
         print(f"** charge_compare(): please provide a saved file to load")
         return
