@@ -101,25 +101,30 @@ f.get_earnings()
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
 
-+ get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
+get_firmware() returns the current inverter firmware versions. The result is stored as f.firmware.
 
-+ get_battery() returns the current battery status, including soc, voltage, current, power, temperature and residual energy. The result is stored as f.battery. If the optional parameter info is set to 1, the bayyery serial numbers and firmware versions are added to f.battery['info']
+get_battery() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery. Additional battery attributes include:
++ 'info': a list of BMS and battery serial numbers and firmware versions
++ 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
++ 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
++ 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
++ 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
 
-+ get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
+get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
-+ get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
+get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
 
-+ get_named_setings(), get the value for a setting. Details of settings are held in the dictionary f.named_settings.
+get_named_setings(), get the value for a setting. Details of settings are held in the dictionary f.named_settings.
 
-+ get_work_mode() returns the current work mode. The result is stored in f.work_mode.
+get_work_mode() returns the current work mode. The result is stored in f.work_mode.
 
-+ get_flag() returns the flag information for Mode Scheduler, indicating if this is supported or enabled and also if maxsoc is a required parameter.
+get_flag() returns the flag information for Mode Scheduler, indicating if this is supported or enabled and also if maxsoc is a required parameter.
 
-+ get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
+get_templates() returns the type 1 and type 2 templates that are stored on the server. The result is stored in f.templates. You can search for templates by name using f.find_template(name)
 
-+ get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
+get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 
-+ get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
+get_earnings() returns the power generated and earning data that is displayed on the Fox web site and in the app.
 
 ## Inverter Settings
 You can change inverter settings using:
@@ -753,6 +758,9 @@ This setting can be:
 
 
 # Version Info
+
+1.7.2<br>
+Rework charge de-rating with temperature, losses and other info provided by get_battery() to take new BMS behaviour into account.
 
 1.7.1<br>
 Change loss parameters to separate AC/DC, DC/AC conversion losses and battery charge / discharge losses.

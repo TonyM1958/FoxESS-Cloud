@@ -545,8 +545,24 @@ battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
 # 1 = returns Residual Energy. 2 = resturns Residual Capacity
 residual_handling = 1
 
+# charge rates based on residual_handling
+battery_params = {
+#    cell temp    -5  0   5  10  15  20  25  30  35  40  45  50 55
+#    bms temp      5 10  15  20  25  30  35  40  45  50  55  60 65 
+    1: {'table': [ 0, 2, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 0],
+        'step': 5,
+        'offset': 5,
+        'charge_loss': 0.975,
+        'discharge_loss': 0.975},
+    2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
+        'step': 5,
+        'offset': 5,
+        'charge_loss': 1.040,
+        'discharge_loss': 0.975},
+}
+
 def get_battery(v = None, info=0):
-    global device_sn, battery, debug_setting, residual_handling
+    global device_sn, battery, debug_setting, residual_handling, battery_params
     if get_device() is None:
         return None
     output(f"getting battery", 2)
@@ -560,10 +576,20 @@ def get_battery(v = None, info=0):
     if residual_handling == 2:
         capacity = battery.get('residual')
         soc = battery.get('soc')
-        battery['residual'] = capacity * soc / 100 if capacity is not None and soc is not None else capacity
-    if info == 1:
-        output(f"** get_battery(): info is not available via Open API")
+        residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
+    else:
+        residual = battery.get('residual')
+        soc = battery.get('soc')
+        capacity = residual / soc * 100 if residual is not None and soc is not None and soc > 0 else None
+    battery['capacity'] = round(capacity, 3)
+    battery['residual'] = round(residual, 3)
     battery['status'] = 1
+    battery['charge_rate'] = 50
+    params = battery_params[residual_handling]
+    battery['charge_loss'] = params['charge_loss']
+    battery['discharge_loss'] = params['discharge_loss']
+    if battery.get('temperature') is not None:
+        battery['charge_rate'] = params['table'][int((battery['temperature'] - params['offset']) / params['step'])]
     return battery
 
 ##################################################################################################
@@ -2459,11 +2485,11 @@ def strategy_timed(timed_mode, base_hour, run_time, min_soc=10, max_soc=100, cur
 # build the timed battery residual from the charge / discharge, work mode and min_soc
 # note: all power values are as measured at the inverter battery connection
 def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=None, reserve_drain=None):
-    global charge_config, steps_per_hour, residual_handling
+    global charge_config, steps_per_hour
     allowed_drain = charge_config['allowed_drain'] if charge_config.get('allowed_drain') is not None else 4
     bms_loss = (charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05)
-    charge_loss = charge_config['charge_loss'][residual_handling - 1] if type(charge_config.get('charge_loss')) is list else charge_config['charge_loss']
-    discharge_loss = charge_config['discharge_loss'][residual_handling - 1] if type(charge_config.get('discharge_loss')) is list else charge_config['discharge_loss']
+    charge_loss = charge_config['charge_loss']
+    discharge_loss = charge_config['discharge_loss']
     charge_limit = charge_config['charge_limit']
     float_charge = charge_config['float_charge']
     for i in range(0, len(work_mode_timed)):
@@ -2554,8 +2580,6 @@ charge_config = {
     'dc_ac_loss': 0.97,               # loss converting battery DC power to AC grid power
     'pv_loss': 0.95,                  # loss converting PV power to DC battery charge power
     'ac_dc_loss': 0.962,              # loss converting AC grid power to DC battery charge power
-    'charge_loss': [0.975, 1.040],    # loss in battery energy for each kWh added (based on residual_handling)
-    'discharge_loss': 0.975,          # loss in battery energy for each kWh removed (based on residual_handling)
     'inverter_power': 101,            # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
     'force_charge_power': 5.00,       # charge power in kW when using force charge
@@ -2576,9 +2600,6 @@ charge_config = {
     'special_contingency': 33,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
-    'derate_temp': 28,                # BMS temperature when cold derating starts to be applied
-    'derate_step': 5,                 # scale for derating factors in C
-    'derating': [24, 15, 10, 2],      # max charge current de-rating
     'data_wrap': 6,                   # data items to show per line
     'target_soc': None,               # the target SoC for charging (over-rides calculated value)
     'shading': {                      # effect of shading on Solcast / forecast.solar
@@ -2603,7 +2624,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour, base_time, storage, residual_handling
+    global timed_strategy, steps_per_hour, base_time, storage, battery
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2703,8 +2724,22 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}, time_change = {time_change}")
         output(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_today = {charge_today}")
         output(f"time_to_next = {time_to_next}, full_charge = {full_charge}")
+    if test_soc is not None:
+        current_soc = test_soc
+        capacity = 14.54
+        residual = test_soc * capacity / 100
+        bat_volt = 317.4
+        bat_power = 0.0
+        temperature = 30
+        bms_charge_current = 25
+        charge_loss = 1.040
+        discharge_loss = 0.974
+        bat_current = 0.0
+        device_power = 6.0
+        device_current = 35
+        model = 'H1-6.0-E'
+    else:
     # get device and battery info from inverter
-    if test_soc is None:
         get_battery()
         if battery is None or battery['status'] != 1:
             output(f"\nBattery status is not available")
@@ -2715,27 +2750,16 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']
-        if charge_config.get('capacity') is not None:
-            capacity = charge_config['capacity']
-        elif residual is not None and residual > 0.2 and current_soc is not None and current_soc > 1:
-            capacity = residual * 100 / current_soc
-        else:
+        capacity = charge_config['capacity'] if charge_config.get('capacity') is not None else battery.get('capacity')
+        if capacity is None:
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
+        bms_charge_current = battery.get('charge_rate')
+        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 1.0
+        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 1.0
         device_power = device.get('power')
         device_current = device.get('max_charge_current')
         model = device.get('deviceType')
-    else:
-        current_soc = test_soc
-        capacity = 14.54
-        residual = test_soc * capacity / 100
-        bat_volt = 317.4
-        bat_power = 0.0
-        temperature = 30
-        bat_current = 0.0
-        device_power = 6.0
-        device_current = 25
-        model = 'H1-6.0-E'
     min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
     max_soc = charge_config['max_soc'] if charge_config['max_soc'] is not None else 100
     volt_curve = charge_config['volt_curve']
@@ -2754,26 +2778,13 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Current SoC: {current_soc}%")
     output(f"  Max SoC:     {max_soc}% ({capacity * max_soc / 100:.2f}kWh)")
     output(f"  Temperature: {temperature:.1f}°C")
+    output(f"  Charge Rate: {bms_charge_current:.1f}A")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
-    # charge times are derated based on temperature
+    # charge current may be derated based on temperature
     charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
-    derate_temp = charge_config['derate_temp']
-    if temperature > 36:
-        output(f"\nHigh battery temperature may affect the charge rate")
-    elif round(temperature, 0) <= derate_temp:
-        output(f"\nLow battery temperature may affect the charge rate")
-        derating = charge_config['derating']
-        derate_step = charge_config['derate_step']
-        i = int((derate_temp - temperature) / (derate_step if derate_step is not None and derate_step > 0 else 1))
-        if derating is not None and type(derating) is list and i < len(derating):
-            derated_current = derating[i]
-            if derated_current < charge_current:
-                output(f"  Charge current reduced from {charge_current:.0f}A to {derated_current:.0f}A" )
-                charge_current = derated_current
-        else:
-            bat_hold = 2
-            output(f"  Full charge set")
+    if charge_current > bms_charge_current:
+        charge_current = bms_charge_current
     # inverter losses
     inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     operating_loss = inverter_power / 1000
@@ -2787,10 +2798,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     force_charge_power = charge_config['force_charge_power'] if timed_mode > 1 and charge_config.get('force_charge_power') is not None else 100
     charge_power = min([(device_power - operating_loss) * ac_dc_loss, force_charge_power * ac_dc_loss, charge_limit])
     float_charge = (charge_config['float_current'] if charge_config.get('float_current') is not None else 4) * bat_ocv / 1000
-    charge_config['charge_limit'] = charge_limit
-    charge_config['charge_power'] = charge_power
-    charge_config['float_charge'] = float_charge
-    charge_loss = charge_config['charge_loss'][residual_handling - 1] if type(charge_config.get('charge_loss')) is list else charge_config['charge_loss']
     pv_loss = charge_config['pv_loss']
     # work out discharge limit = max power coming from the battery before ac conversion losses
     dc_ac_loss = charge_config['dc_ac_loss']
@@ -2798,11 +2805,17 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     discharge_current = device_current if charge_config['discharge_current'] is None else charge_config['discharge_current']
     discharge_power = discharge_current * bat_ocv / 1000
     discharge_limit = discharge_power if discharge_power < discharge_limit else discharge_limit
-    discharge_loss = charge_config['discharge_loss'][residual_handling - 1] if type(charge_config.get('discharge_loss')) is list else charge_config['discharge_loss']
     # charging happens if generation exceeds export limit in feedin work mode
     export_power = device_power if charge_config['export_limit'] is None else charge_config['export_limit']
     export_limit = export_power / dc_ac_loss
     current_mode = get_work_mode()
+    # set parameters for battery_timed()
+    charge_config['charge_limit'] = charge_limit
+    charge_config['charge_power'] = charge_power
+    charge_config['float_charge'] = float_charge
+    charge_config['charge_loss'] = charge_loss
+    charge_config['discharge_loss'] = discharge_loss
+    # display what we have
     output(f"\ncharge_config = {json.dumps(charge_config, indent=2)}", 3)
     output(f"\nDevice Info:")
     output(f"  Model:     {model}")
@@ -3252,14 +3265,14 @@ battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
 def battery_info(log=0, plot=1, count=None, info=1):
-    global debug_setting, battery_info_app_key
+    global debug_setting, battery_info_app_key, residual_handling
     output_spool(battery_info_app_key)
     bat = get_battery(info=info)
     if bat is None:
         output_close()
         return None
     nbat = None
-    if bat.get('info') is not None:
+    if info == 1 and bat.get('info') is not None:
         for b in bat['info']:
             output(f"\nSN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
             nbat = 0
@@ -3272,7 +3285,7 @@ def battery_info(log=0, plot=1, count=None, info=1):
     bat_current = bat['current']
     bat_power = bat['power']
     bms_temperature = bat['temperature']
-    capacity = residual / current_soc * 100
+    capacity = bat['capacity']
     cell_volts = get_cell_volts()
     if cell_volts is None:
         output_close()
@@ -3327,6 +3340,7 @@ def battery_info(log=0, plot=1, count=None, info=1):
     output(f"Cell Volts:          {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
     output(f"Cell Imbalance:      {imbalance(cell_volts):.2f}%:")
     output(f"BMS Temperature:     {bms_temperature:.1f}°C")
+    output(f"BMS Charge Rate:     {bat.get('charge_rate'):.1f}A (estimated)")
     output(f"Battery Temperature: {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
     output(f"\nInfo by battery:")
     for i in range(0, nbat):

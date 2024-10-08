@@ -102,7 +102,12 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
-get_battery() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery.
+get_battery() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery. Additional battery attributes include:
++ 'info': a list of BMS and battery serial numbers and firmware versions
++ 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
++ 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
++ 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
++ 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
 
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge times.
 
@@ -357,8 +362,6 @@ export_limit: None             # maximum export power in kW. None uses the inver
 dc_ac_loss: 0.970              # loss converting battery DC power to AC grid power
 pv_loss: 0.950                 # loss converting PV power to DC battery charge power
 ac_dc_loss: 0.960              # loss converting AC grid power to DC battery charge power
-charge_loss: [0.975, 1.040]    # loss in battery energy for each kWh added (based on residual_handling)
-discharge_loss: [0.975, 0.975] # loss in battery energy for each kWh removed (based on residual_handling)
 inverter_power: None           # inverter power consumption in W (dynamically set)
 bms_power: 50                  # BMS power consumption in W
 force_charge_power: 5.00       # power used when Force Charge is scheduled
@@ -381,9 +384,6 @@ timed_mode: 0                  # 0 = None, 1 = use timed work mode, 2 = strategy
 special_contingency: 30        # contingency for special days when consumption might be higher
 special_days: ['12-25', '12-26', '01-01']
 full_charge: None              # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
-derate_temp: 28                # battery temperature in C when derating charge current is applied
-derate_step: 5                 # step size for derating e.g. 21, 16, 11
-derating: [24, 15, 10, 2]      # derated charge current for each temperature step e.g. 28C, 23C, 18C, 13C
 force: 1                       # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
 data_wrap: 6                   # data items to show per line
 target_soc: None               # target soc for charging (over-rides calculated value)
@@ -771,6 +771,9 @@ This setting can be:
 
 
 # Version Info
+
+2.6.0<br>
+Rework charge de-rating with temperature, losses and other info provided by get_battery() to take new BMS behaviour into account.
 
 2.5.9<br>
 Change loss parameters to separate AC/DC, DC/AC conversion losses and battery charge / discharge losses.
