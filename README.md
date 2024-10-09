@@ -91,6 +91,7 @@ Once an inverter is selected, you can make other calls to get information:
 ```
 f.get_generation()
 f.get_battery()
+f.get_batteries()
 f.get_settings()
 f.get_charge()
 f.get_min()
@@ -102,8 +103,8 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
-get_battery() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery. Additional battery attributes include:
-+ 'info': a list of BMS and battery serial numbers and firmware versions
+get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery / f.batteries.
+get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery. Additional battery attributes include:
 + 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
 + 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
 + 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
@@ -771,6 +772,13 @@ This setting can be:
 
 
 # Version Info
+
+2.6.1<br>
+Fix problem where battery discharges below min_soc while waiting for charging to start.
+Update calibration for Force Charge with BMS 1.014 and later.
+Add get_batteries() to return a list of BMS and batteries where inverters support more than 1 BMS.
+Update battery_info() to support multiple BMS.
+Add rated capacity and SoH to battery info if available.
 
 2.6.0<br>
 Rework charge de-rating with temperature, losses and other info provided by get_battery() to take new BMS behaviour into account.

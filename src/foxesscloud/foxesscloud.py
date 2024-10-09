@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 October 2024
+Updated:  09 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.2"
+version = "1.7.3"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -477,6 +477,7 @@ def get_device(sn=None):
     device_id = device.get('deviceID')
     device_sn = device.get('deviceSN')
     battery = None
+    batteries = None
     battery_settings = None
     schedule = None
     templates = None
@@ -575,6 +576,7 @@ def get_firmware():
 ##################################################################################################
 
 battery = None
+batteries = None
 battery_settings = None
 
 # 1 = Residual Energy, 2 = Residual Capacity
@@ -592,7 +594,7 @@ battery_params = {
     2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
-        'charge_loss': 1.040,
+        'charge_loss': 1.080,
         'discharge_loss': 0.975},
 }
 
@@ -625,8 +627,8 @@ def get_battery(info=1):
                 errno = response.json().get('errno')
                 output(f"** get_battery().info, no result data, {errno_message(errno)}")
             else:
-                battery['info'] = result['batteries']
-                if battery['info'][0]['masterVersion'] >= '1.014':
+                battery['info'] = result['batteries'][0]
+                if battery['info']['masterVersion'] >= '1.014':
                     residual_handling = 2
     if battery.get('residual') is not None:
         battery['residual'] /= 1000
@@ -647,6 +649,51 @@ def get_battery(info=1):
     if battery.get('temperature') is not None:
         battery['charge_rate'] = params['table'][int((battery['temperature'] - params['offset']) / params['step'])]
     return battery
+
+def get_batteries(info=1):
+    global token, device_id, battery, debug_setting, messages, batteries, battery_params, residual_handling
+    if get_device() is None:
+        return None
+    output(f"getting batteries", 2)
+    params = {'id': device_id}
+    response = signed_get(path="/generic/v0/device/battery/info", params=params)
+    if response.status_code != 200:
+        output(f"** get_batteries() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        errno = response.json().get('errno')
+        output(f"** get_batteries(), no result data, {errno_message(errno)}")
+        return None
+    batteries = result['batterys']
+    if info == 1:
+        response = signed_get(path="/generic/v0/device/battery/list", params=params)
+        if response.status_code != 200:
+            output(f"** get_battery().info got response code {response.status_code}: {response.reason}")
+        else:
+            result = response.json().get('result')
+            if result is None:
+                errno = response.json().get('errno')
+                output(f"** get_battery().info, no result data, {errno_message(errno)}")
+            else:
+                for i in range(0, len(batteries)):
+                    batteries[i]['info'] = result['batteries'][i]
+    for b in batteries:
+        if b.get('info') is not None and b['info']['masterVersion'] >= '1.014':
+            residual_handling = 2
+        capacity = b['ratedCapacity'] / 1000 * int(b['soh']) / 100
+        soc = b.get('soc')
+        residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
+        b['capacity'] = round(capacity, 3)
+        b['residual'] = round(residual, 3)
+        b['charge_rate'] = 50
+        params = battery_params[residual_handling]
+        b['charge_loss'] = params['charge_loss']
+        b['discharge_loss'] = params['discharge_loss']
+        if b.get('temperature') is not None:
+            b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
+    battery = batteries[0]
+    return batteries
 
 ##################################################################################################
 # get charge times and save to battery_settings
@@ -2723,7 +2770,7 @@ charge_config = {
     'export_limit': None,             # maximum export power in kW
     'dc_ac_loss': 0.970,              # loss converting battery DC power to AC grid power
     'pv_loss': 0.950,                 # loss converting PV power to DC battery charge power
-    'ac_dc_loss': 0.960,              # loss converting AC grid power to DC battery charge power
+    'ac_dc_loss': 0.963,              # loss converting AC grid power to DC battery charge power
     'inverter_power': 101,            # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
     'force_charge_power': 5.00,       # charge power in kW when using force charge
@@ -2848,7 +2895,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     time_to_end = times[0]['time_to_end']
     charge_time = times[0]['charge_time']
     # work out time window and times with clock changes
-    time_to_next = int(time_to_start)
     charge_today = (base_hour + time_to_start / steps_per_hour) < 24
     forecast_day = today if charge_today else tomorrow
     run_to = time_to_end1 if time_to_end < time_to_end1 else time_to_end1 + 24 * steps_per_hour
@@ -2867,7 +2913,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"start_at = {start_at}, end_by = {end_by}, bat_hold = {bat_hold}")
         output(f"base_hour = {base_hour}, hour_adjustment = {hour_adjustment}, change_hour = {change_hour}, time_change = {time_change}")
         output(f"time_to_start = {time_to_start}, run_time = {run_time}, charge_today = {charge_today}")
-        output(f"time_to_next = {time_to_next}, full_charge = {full_charge}")
+        output(f"full_charge = {full_charge}")
     if test_soc is not None:
         current_soc = test_soc
         capacity = 14.54
@@ -2875,9 +2921,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_volt = 317.4
         bat_power = 0.0
         temperature = 30
-        bms_charge_current = 25
-        charge_loss = 1.040
-        discharge_loss = 0.974
+        bms_charge_current = 15
+        charge_loss = 1.080
+        discharge_loss = 0.975
         bat_current = 0.0
         device_power = 6.0
         device_current = 35
@@ -2921,7 +2967,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Min SoC:     {min_soc}% ({reserve:.2f}kWh)")
     output(f"  Current SoC: {current_soc}%")
     output(f"  Max SoC:     {max_soc}% ({capacity * max_soc / 100:.2f}kWh)")
-    output(f"  Charge Rate: {bms_charge_current:.1f}A")
+    output(f"  Max Charge:  {bms_charge_current:.1f}A")
     output(f"  Temperature: {temperature:.1f}°C")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
@@ -3100,7 +3146,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         work_mode_timed[i]['discharge'] = discharge_timed[i]
     # build the battery residual if we don't add any charge and don't limit discharge at min_soc
     kwh_current = residual - (charge_timed[0] - discharge_timed[0]) * (hour_now % 1)
-    (bat_timed, kwh_min) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=capacity)
+    (bat_timed, kwh_min) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next=time_to_end, kwh_min=capacity)
     # work out what we need to add to stay above reserve and provide contingency or to hit target_soc
     contingency = charge_config['special_contingency'] if tomorrow[-5:] in charge_config['special_days'] else charge_config['contingency']
     contingency = contingency[quarter] if type(contingency) is list else contingency
@@ -3178,7 +3224,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
                 work_mode_timed[i]['max_soc'] = target_soc if target_soc is not None else max_soc
                 work_mode_timed[i]['discharge'] *= (1-t)
     # rebuild the battery residual with the charge added and min_soc
-    (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next)
+    (bat_timed, x) = battery_timed(work_mode_timed, kwh_current, capacity, time_to_next=start_timed)
     end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
     # show the results
     output(f"  End SoC:     {end_residual / capacity * 100:.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
@@ -3411,21 +3457,28 @@ def bat_count(cell_count):
 battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
-def battery_info(log=0, plot=1, count=None, info=1):
-    global debug_setting, battery_info_app_key, residual_handling
-    output_spool(battery_info_app_key)
-    bat = get_battery(info=info)
+def battery_info(log=0, plot=1, count=None, info=1, bat=None):
+    global debug_setting, battery_info_app_key
     if bat is None:
-        output_close()
+        bats = get_batteries(info=info)
+        if bats is None:
+            return None
+        for i in range(0, len(bats)):
+            output(f"\n----------------------- BMS {i+1} -----------------------")
+            battery_info(log=log, plot=plot, count=count, info=info, bat=bats[i])
         return None
+    output_spool(battery_info_app_key)
     nbat = None
     if info == 1 and bat.get('info') is not None:
-        for b in bat['info']:
-            output(f"\nSN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
-            nbat = 0
-            for s in b['slaveBatteries']:
-                nbat += 1
-                output(f"SN {s['sn']}, {s['batType']}, Version {s['version']} (Battery {nbat})")
+        b = bat['info']
+        output(f"SN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
+        nbat = 0
+        for s in b['slaveBatteries']:
+            nbat += 1
+            output(f"SN {s['sn']}, {s['batType']}, Version {s['version']} (Battery {nbat})")
+        output()
+    rated_capacity = bat.get('ratedCapacity')
+    bat_soh = bat.get('soh')
     bat_volt = bat['volt']
     current_soc = bat['soc']
     residual = bat['residual']
@@ -3476,7 +3529,10 @@ def battery_info(log=0, plot=1, count=None, info=1):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    output(f"\nCurrent SoC:         {current_soc}%")
+    if rated_capacity is not None:
+        output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
+        output(f"SoH:                 {bat_soh}%")
+    output(f"Current SoC:         {current_soc}%")
     output(f"Capacity:            {capacity:.2f}kWh")
     output(f"Residual:            {residual:.2f}kWh")
     output(f"InvBatVolt:          {bat_volt:.1f}V")
