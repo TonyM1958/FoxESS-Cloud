@@ -773,6 +773,11 @@ This setting can be:
 
 # Version Info
 
+2.6.2<br>
+Update battery calibration for charge_needed() when residual_handling is 2.
+Update get_battery() and get_batteries() to include states for ratedCapacity, soh, residual_handling and soh_supported.
+Update charge_compare(), Solcast() and Solar() so date (d) parameter is more flexible.
+
 2.6.1<br>
 Fix problem where battery discharges below min_soc while waiting for charging to start.
 Update calibration for Force Charge with BMS 1.014 and later.

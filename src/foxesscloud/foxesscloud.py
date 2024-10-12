@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  09 October 2024
+Updated:  12 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.3"
+version = "1.7.4"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -65,7 +65,7 @@ def plot_show():
 ##################################################################################################
 ##################################################################################################
 
-def query_date(d, offset = None):
+def convert_date(d):
     if d is not None and len(d) < 18:
         if len(d) == 10:
             d += ' 00:00:00'
@@ -76,8 +76,12 @@ def query_date(d, offset = None):
     try:
         t = datetime.now() if d is None else datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
     except Exception as e:
-        output(f"** query_date(): {str(e)}")
+        output(f"** convert_date(): {str(e)}")
         return None
+    return t
+
+def query_date(d, offset = None):
+    t = convert_date(d)
     if offset is not None:
         t += timedelta(days = offset)
     return {'year': t.year, 'month': t.month, 'day': t.day, 'hour': t.hour, 'minute': t.minute, 'second': t.second}
@@ -594,8 +598,8 @@ battery_params = {
     2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
-        'charge_loss': 1.080,
-        'discharge_loss': 0.975},
+        'charge_loss': 1.08,
+        'discharge_loss': 0.85},
 }
 
 def get_battery(info=1):
@@ -630,9 +634,13 @@ def get_battery(info=1):
                 battery['info'] = result['batteries'][0]
                 if battery['info']['masterVersion'] >= '1.014':
                     residual_handling = 2
+    battery['residual_handling'] = residual_handling
+    battery['rated_capacity'] = None
+    battery['soh'] = None
+    battery['soh_supported'] = False
     if battery.get('residual') is not None:
         battery['residual'] /= 1000
-    if residual_handling == 2:
+    if battery['residual_handling'] == 2:
         capacity = battery.get('residual')
         soc = battery.get('soc')
         residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
@@ -643,7 +651,7 @@ def get_battery(info=1):
     battery['capacity'] = round(capacity, 3)
     battery['residual'] = round(residual, 3)
     battery['charge_rate'] = 50
-    params = battery_params[residual_handling]
+    params = battery_params[battery['residual_handling']]
     battery['charge_loss'] = params['charge_loss']
     battery['discharge_loss'] = params['discharge_loss']
     if battery.get('temperature') is not None:
@@ -680,18 +688,30 @@ def get_batteries(info=1):
                     batteries[i]['info'] = result['batteries'][i]
     for b in batteries:
         if b.get('info') is not None and b['info']['masterVersion'] >= '1.014':
-            residual_handling = 2
-        capacity = b['ratedCapacity'] / 1000 * int(b['soh']) / 100
-        soc = b.get('soc')
-        residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
-        b['capacity'] = round(capacity, 3)
-        b['residual'] = round(residual, 3)
-        b['charge_rate'] = 50
-        params = battery_params[residual_handling]
-        b['charge_loss'] = params['charge_loss']
-        b['discharge_loss'] = params['discharge_loss']
-        if b.get('temperature') is not None:
-            b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
+            b['residual_handling'] = 2
+        if b.get('soh') is not None and b['soh'].isnumeric():
+            b['soh_supported'] = True
+        else:
+            b['rated_capacity'] = None
+            b['soh'] = None
+            b['soh_supported'] = False
+    for b in batteries:
+        if b.get('soh_supported') is not None and b['soh_supported']:
+            capacity = (b['ratedCapacity'] / 1000 * int(b['soh']) / 100)
+            soc = b.get('soc')
+            residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
+            b['capacity'] = round(capacity, 3)
+            b['residual'] = round(residual, 3)
+            b['charge_rate'] = 50
+            params = battery_params[residual_handling]
+            b['charge_loss'] = params['charge_loss']
+            b['discharge_loss'] = params['discharge_loss']
+            if b.get('temperature') is not None:
+                b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
+        else:
+            get_battery(info=info)
+            batteries = [battery]
+            break
     battery = batteries[0]
     return batteries
 
@@ -2165,9 +2185,9 @@ def hours_difference(t1, t2):
     if t1 == t2:
         return 0.0
     if type(t1) is str:
-        t1 = datetime.strptime(t1, '%Y-%m-%d %H:%M')
+        t1 = convert_date(t1)
     if type(t2) is str:
-        t2 = datetime.strptime(t2, '%Y-%m-%d %H:%M')
+        t2 = convert_date(t2)
     return round((t1 - t2).total_seconds() / 3600,1)
 
 ##################################################################################################
@@ -2344,7 +2364,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
     if d is not None and len(d) < 11:
         d += " 18:00"
     # get dates and times
-    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if d is None else convert_date(d)
     time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
     # adjust system to get local time now
     now = system_time + timedelta(hours=time_offset)
@@ -2815,7 +2835,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour, base_time, storage, battery
+    global timed_strategy, steps_per_hour, base_time, storage, battery, charge_rates
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2843,7 +2863,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if type(forecast_times) is not list:
         forecast_times = [forecast_times]
     # get dates and times
-    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if test_time is None else datetime.strptime(test_time, '%Y-%m-%d %H:%M')
+    system_time = (datetime.now(tz=timezone.utc) + timedelta(hours=time_shift)) if test_time is None else convert_date(test_time)
     time_offset = daylight_saving(system_time) if daylight_saving is not None else 0
     now = system_time + timedelta(hours=time_offset)
     today = datetime.strftime(now, '%Y-%m-%d')
@@ -2916,14 +2936,14 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"full_charge = {full_charge}")
     if test_soc is not None:
         current_soc = test_soc
-        capacity = 14.54
+        capacity = 14.53
         residual = test_soc * capacity / 100
         bat_volt = 317.4
         bat_power = 0.0
         temperature = 30
         bms_charge_current = 15
-        charge_loss = 1.080
-        discharge_loss = 0.975
+        charge_loss = charge_rates[2]['charge_loss']
+        discharge_loss = charge_rates[2]['discharge_loss']
         bat_current = 0.0
         device_power = 6.0
         device_current = 35
@@ -2971,6 +2991,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Temperature: {temperature:.1f}°C")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
+    output(f"  Losses:      {charge_loss * 100:.1f}% charge / {discharge_loss * 100:.1f}% discharge")
     # charge current may be derated based on temperature
     charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
     if charge_current > bms_charge_current:
@@ -3309,10 +3330,10 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
 
 def charge_compare(save=None, v=None, show_data=1, show_plot=3, d=None):
     global charge_config, storage
-    now = datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+    now = convert_date(d)
     yesterday = datetime.strftime(datetime.date(now - timedelta(days=1)), '%Y-%m-%d')
     if save is None and charge_config.get('save') is not None:
-        save = charge_config.get('save').replace('###', yesterday)
+        save = charge_config.get('save').replace('###', yesterday if d is None else d[:10])
         if not os.path.exists(storage + save):
             save = None
     if save is None:
@@ -3339,7 +3360,7 @@ def charge_compare(save=None, v=None, show_data=1, show_plot=3, d=None):
     base_hour = int(time_hours(base_time[11:16]))
     start_day = base_time[:10]
     print(f"Run at {start_day} {hours_time(hour_now)} with SoC {current_soc:.0f}%")
-    now = datetime.strptime(base_time, '%Y-%m-%d %H:%M')
+    now = convert_date(base_time)
     end_day = datetime.strftime(now + timedelta(hours=run_time / steps_per_hour), '%Y-%m-%d')
     if v is None:
         v = ['pvPower', 'loadsPower', 'SoC']
@@ -3372,13 +3393,14 @@ def charge_compare(save=None, v=None, show_data=1, show_plot=3, d=None):
         for i in range(0, run_time):
             plots[v][i] = plots[v][i] / count[v][i] if count[v][i] > 0 else None
     if show_data > 0 and plots.get('SoC') is not None:
-        data_wrap = charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 6
-        s = f"\nBattery Energy kWh:" if show_data == 2 else f"\nBattery SoC:"
+        data_wrap = 1 #charge_config['data_wrap'] if charge_config.get('data_wrap') is not None else 1
+        s = f"\nBattery Energy kWh (predicted / actual):" if show_data == 2 else f"\nBattery SoC (predicted / actual):"
         h = base_hour
         t = 0
         while t < len(time_line) and bat_timed[t] is not None and plots['SoC'][t] is not None:
             col = h % data_wrap
             s += f"\n  {hours_time(time_line[t])}" if t == 0 or col == 0 else ""
+            s += f" {bat_timed[t]:5.2f}" if show_data == 2 else f"  {bat_timed[t] / capacity * 100:3.0f}%"
             s += f" {plots['SoC'][t]:5.2f}" if show_data == 2 else f"  {plots['SoC'][t] / capacity * 100:3.0f}%"
             h += 1
             t += steps_per_hour
@@ -3534,7 +3556,7 @@ def battery_info(log=0, plot=1, count=None, info=1, bat=None):
         output(f"SoH:                 {bat_soh}%")
     output(f"Current SoC:         {current_soc}%")
     output(f"Capacity:            {capacity:.2f}kWh")
-    output(f"Residual:            {residual:.2f}kWh")
+    output(f"Residual:            {residual:.2f}kWh" + (" (SoC x Capacity)" if bat['residual_handling'] == 2 else ""))
     output(f"InvBatVolt:          {bat_volt:.1f}V")
     output(f"InvBatCurrent:       {bat_current:.1f}A")
     output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
@@ -3944,7 +3966,7 @@ class Solcast :
         # The forecasts and estimated also both include the current time, so the data has to be de-duplicated to get an accurate total for a day
         global debug_setting, solcast_url, solcast_api_key, solcast_save, storage
         self.data = {}
-        now = datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+        now = convert_date(d)
         self.shading = None if shading is None else shading if shading.get('solcast') is None else shading['solcast'] 
         self.today = datetime.strftime(datetime.date(now), '%Y-%m-%d')
         self.quarter = int(self.today[5:7]) // 3 % 4
@@ -4288,7 +4310,7 @@ class Solar :
     def __init__(self, reload=0, quiet=False, shading=None, d=None):
         global solar_arrays, solar_save, solar_total, solar_url, solar_api_key, storage
         self.shading = None if shading is None else shading if shading.get('solar') is None else shading['solar'] 
-        now = datetime.now() if d is None else datetime.strptime(d, '%Y-%m-%d %H:%M')
+        now = convert_date(d)
         self.today = datetime.strftime(datetime.date(now), '%Y-%m-%d')
         self.quarter = int(self.today[5:7]) // 3 % 4
         self.tomorrow = datetime.strftime(datetime.date(now + timedelta(days=1)), '%Y-%m-%d')
