@@ -773,6 +773,10 @@ This setting can be:
 
 # Version Info
 
+2.6.3<br>
+Increase default plungs_slots from 6 to 8.
+Correct battery capacity in get_batteries().
+
 2.6.2<br>
 Update battery calibration for charge_needed() when residual_handling is 2.
 Update get_battery() and get_batteries() to include states for ratedCapacity, soh, residual_handling and soh_supported.

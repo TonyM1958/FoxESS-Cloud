@@ -564,7 +564,7 @@ get_strategy() creates a list of time segments from the strategy. If strategy is
 
 Plunge pricing allows for the automatic configuration of charging periods when Agile prices are low:
 + 'plunge_pricing is a list of prices. If the price for a 30 minute period is below this price, a plunge charging period is added to the schedule. 'plunge_pricing' is a value or list of values. When a list is used, the values are spread over 24 hours starting with the first value at 7am. So, for example, if 2 prices are provided, the first applies between 7am and 7pm and the second applies between 7pm and 7am. This allows different prices to be applied for day-time and night-time. If 3 prices are provided, each covers 8 hours so the time slots are 7am-3pm, 3pm-11pm and 11pm-7am. With 4 prices, each covers 6 hours so the time periods are 7am-1pm, 1pm-7pm, 7pm-1am, 1am-7am etc.
-+ 'plunge_slots' sets the maximum number of 30 minute plunge charging slots to use. The default is 6.
++ 'plunge_slots' sets the maximum number of 30 minute plunge charging slots to use. The default is 8.
 
 
 # PV Output
@@ -760,6 +760,11 @@ This setting can be:
 
 
 # Version Info
+
+1.7.5<br>
+Fix problem where incorrect residual handling was being applied to BMS v1.
+Improve calculation of battery capacity, rated capacity and SoH for v1 and v2 BMS.
+Increase default plungs_slots from 6 to 8.
 
 1.7.4<br>
 Update battery calibration for charge_needed() when residual_handling is 2.

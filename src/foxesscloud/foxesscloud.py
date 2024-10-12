@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  12 October 2024
+Updated:  13 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.4"
+version = "1.7.5"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -632,7 +632,7 @@ def get_battery(info=1):
                 output(f"** get_battery().info, no result data, {errno_message(errno)}")
             else:
                 battery['info'] = result['batteries'][0]
-                if battery['info']['masterVersion'] >= '1.014':
+                if battery['info']['masterVersion'] >= '1.014' and battery['info']['masterSN'][:7] == '60BBHV2':
                     residual_handling = 2
     battery['residual_handling'] = residual_handling
     battery['rated_capacity'] = None
@@ -687,32 +687,38 @@ def get_batteries(info=1):
                 for i in range(0, len(batteries)):
                     batteries[i]['info'] = result['batteries'][i]
     for b in batteries:
-        if b.get('info') is not None and b['info']['masterVersion'] >= '1.014':
+        b['residual_handling'] = residual_handling
+        if b.get('info') is not None and b['info']['masterVersion'] >= '1.014' and b['info']['masterSN'][:7] == '60BBHV2':
             b['residual_handling'] = 2
         if b.get('soh') is not None and b['soh'].isnumeric():
+            b['soh'] = int(b['soh'])
             b['soh_supported'] = True
         else:
             b['rated_capacity'] = None
             b['soh'] = None
             b['soh_supported'] = False
-    for b in batteries:
-        if b.get('soh_supported') is not None and b['soh_supported']:
-            capacity = (b['ratedCapacity'] / 1000 * int(b['soh']) / 100)
+    for i, b in enumerate(batteries):
+        if i == 0:
+            residual_handling = b['residual_handling']
+            get_battery(info=0)
+            battery['ratedCapacity'] = b.get('ratedCapacity')
+            b['capacity'] = battery.get('capacity')
+            b['residual'] = battery.get('residual')
+            b['soc'] = battery.get('soc')
+        if b.get('capacity') is None and b.get('soh') is not None:
+            capacity = (b['ratedCapacity'] / 1000 * b['soh'] / 100)
             soc = b.get('soc')
             residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
             b['capacity'] = round(capacity, 3)
             b['residual'] = round(residual, 3)
-            b['charge_rate'] = 50
-            params = battery_params[residual_handling]
-            b['charge_loss'] = params['charge_loss']
-            b['discharge_loss'] = params['discharge_loss']
-            if b.get('temperature') is not None:
-                b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
-        else:
-            get_battery(info=info)
-            batteries = [battery]
-            break
-    battery = batteries[0]
+        if b.get('capacity') is not None and b.get('ratedCapacity') is not None:
+            b['soh'] = round(b['capacity'] / b['ratedCapacity'] * 1000 * 100, 1)
+        b['charge_rate'] = 50
+        params = battery_params[b['residual_handling']]
+        b['charge_loss'] = params['charge_loss']
+        b['discharge_loss'] = params['discharge_loss']
+        if b.get('temperature') is not None:
+            b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
     return batteries
 
 ##################################################################################################
@@ -2351,7 +2357,7 @@ tariff_config = {
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
     'plunge_price': [3, 3],               # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
-    'plunge_slots': 6,                    # number of 30 minute slots to use
+    'plunge_slots': 8,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 1,                       # show pricing data
     'show_plot': 1                        # plot pricing data
@@ -3551,12 +3557,12 @@ def battery_info(log=0, plot=1, count=None, info=1, bat=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    if rated_capacity is not None:
-        output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
-        output(f"SoH:                 {bat_soh}%")
     output(f"Current SoC:         {current_soc}%")
-    output(f"Capacity:            {capacity:.2f}kWh")
-    output(f"Residual:            {residual:.2f}kWh" + (" (SoC x Capacity)" if bat['residual_handling'] == 2 else ""))
+    output(f"Capacity:            {capacity:.2f}kWh" + (" (Residual / SoC x 100)" if bat['residual_handling'] == 1 else ""))
+    output(f"Residual:            {residual:.2f}kWh" + (" (SoC x Capacity / 100)" if bat['residual_handling'] == 2 else ""))
+    if rated_capacity is not None and bat_soh is not None:
+        output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
+        output(f"SoH:                 {bat_soh:.1f}%" + (" (Capacity / Rated Capacity x 100)" if not bat['soh_supported'] else ""))
     output(f"InvBatVolt:          {bat_volt:.1f}V")
     output(f"InvBatCurrent:       {bat_current:.1f}A")
     output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")

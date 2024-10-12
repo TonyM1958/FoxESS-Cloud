@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 October 2024
+Updated:  13 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.6.2"
+version = "2.6.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -605,6 +605,8 @@ def get_battery(info=0, v=None):
 def get_batteries(info=0):
     global battery, batteries
     get_battery(info=info)
+    if battery is None:
+        return None
     batteries = [battery]
     return batteries
 
@@ -2156,7 +2158,7 @@ tariff_config = {
     'update_time': 16.5,                  # time in hours when tomrow's data can be fetched
     'weighting': None,                    # weights for weighted average
     'plunge_price': [3, 3],               # plunge price in p/kWh inc VAT over 24 hours from 7am, 7pm
-    'plunge_slots': 6,                    # number of 30 minute slots to use
+    'plunge_slots': 8,                    # number of 30 minute slots to use
     'data_wrap': 6,                       # prices to show per line
     'show_data': 1,                       # show pricing data
     'show_plot': 1                        # plot pricing data
@@ -3351,12 +3353,12 @@ def battery_info(log=0, plot=1, count=None, info=1, bat=None):
                 for v in cell_temps:
                     s +=f",{v:.0f}"
         return s
-    if rated_capacity is not None:
-        output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
-        output(f"SoH:                 {bat_soh}%")
     output(f"Current SoC:         {current_soc}%")
-    output(f"Capacity:            {capacity:.2f}kWh")
-    output(f"Residual:            {residual:.2f}kWh")
+    output(f"Capacity:            {capacity:.2f}kWh" + (" (Residual / SoC x 100)" if bat['residual_handling'] == 1 else ""))
+    output(f"Residual:            {residual:.2f}kWh" + (" (SoC x Capacity / 100)" if bat['residual_handling'] == 2 else ""))
+    if rated_capacity is not None and bat_soh is not None:
+        output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
+        output(f"SoH:                 {bat_soh:.1f}%" + (" (Capacity / Rated Capacity x 100)" if not bat['soh_supported'] else ""))
     output(f"InvBatVolt:          {bat_volt:.1f}V")
     output(f"InvBatCurrent:       {bat_current:.1f}A")
     output(f"State:               {'Charging' if bat_power < 0 else 'Discharging'} ({abs(bat_power):.3f}kW)")
