@@ -761,6 +761,9 @@ This setting can be:
 
 # Version Info
 
+1.7.6<br>
+Fix divide by zero error when ratedCapacity is returned as 0.
+
 1.7.5<br>
 Fix problem where incorrect residual handling was being applied to BMS v1.
 Improve calculation of battery capacity, rated capacity and SoH for v1 and v2 BMS.

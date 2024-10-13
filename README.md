@@ -773,7 +773,7 @@ This setting can be:
 
 # Version Info
 
-2.6.3<br>
+2.6.4<br>
 Increase default plungs_slots from 6 to 8.
 Correct battery capacity in get_batteries().
 

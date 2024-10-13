@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.5"
+version = "1.7.6"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -690,29 +690,26 @@ def get_batteries(info=1):
         b['residual_handling'] = residual_handling
         if b.get('info') is not None and b['info']['masterVersion'] >= '1.014' and b['info']['masterSN'][:7] == '60BBHV2':
             b['residual_handling'] = 2
-        if b.get('soh') is not None and b['soh'].isnumeric():
-            b['soh'] = int(b['soh'])
-            b['soh_supported'] = True
-        else:
-            b['rated_capacity'] = None
-            b['soh'] = None
-            b['soh_supported'] = False
+        rated_capacity = b.get('ratedCapacity')
+        b['ratedCapacity'] = rated_capacity if rated_capacity is not None and rated_capacity > 100 else None
+        soh = b.get('soh')
+        b['soh'] = int(soh) if soh.isnumeric() and int(soh) > 10 else None
+        b['soh_supported'] = b['soh'] is not None
     for i, b in enumerate(batteries):
         if i == 0:
             residual_handling = b['residual_handling']
             get_battery(info=0)
-            battery['ratedCapacity'] = b.get('ratedCapacity')
             b['capacity'] = battery.get('capacity')
             b['residual'] = battery.get('residual')
             b['soc'] = battery.get('soc')
-        if b.get('capacity') is None and b.get('soh') is not None:
-            capacity = (b['ratedCapacity'] / 1000 * b['soh'] / 100)
+        if b.get('capacity') is None and b.get('ratedCapacity') is not None and b.get('soh') is not None:
+            b['capacity'] = round(b['ratedCapacity'] / 1000 * b['soh'] / 100, 3)
+        if b.get('residual') is None and b.get('capacity') is not None and b.get('soc') is not None:
             soc = b.get('soc')
-            residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
-            b['capacity'] = round(capacity, 3)
+            residual = b['capacity'] * b['soc'] / 100
             b['residual'] = round(residual, 3)
         if b.get('capacity') is not None and b.get('ratedCapacity') is not None:
-            b['soh'] = round(b['capacity'] / b['ratedCapacity'] * 1000 * 100, 1)
+            b['soh'] = round(b['capacity'] * 1000 / b['ratedCapacity'] * 100, 1)
         b['charge_rate'] = 50
         params = battery_params[b['residual_handling']]
         b['charge_loss'] = params['charge_loss']
@@ -2418,9 +2415,9 @@ def get_agile_times(tariff=agile_octopus, d=None):
     plunge = []
     plunge_price = tariff_config['plunge_price'] if tariff_config.get('plunge_price') is not None else 2
     plunge_price = [plunge_price] if type(plunge_price) is not list else plunge_price
-    plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 6
+    plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 8
     for i in range(0, len(prices)):
-        # hour relative index into list of plunge prices, starting at 7am
+        # hour relative index into list of plunge prices and slots, starting at 7am
         x = int(((now.hour - 7 + i / 2) % 24) * len(plunge_price) / 24)
         if prices[i] is not None and prices[i]['price'] < plunge_price[x]:
             plunge.append(i)

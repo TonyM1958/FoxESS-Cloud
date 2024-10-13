@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.6.3"
+version = "2.6.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -2219,7 +2219,7 @@ def get_agile_times(tariff=agile_octopus, d=None):
     plunge = []
     plunge_price = tariff_config['plunge_price'] if tariff_config.get('plunge_price') is not None else 2
     plunge_price = [plunge_price] if type(plunge_price) is not list else plunge_price
-    plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 6
+    plunge_slots = tariff_config['plunge_slots'] if tariff_config.get('plunge_slots') is not None else 8
     for i in range(0, len(prices)):
         # hour relative index into list of plunge prices, starting at 7am
         x = int(((now.hour - 7 + i / 2) % 24) * len(plunge_price) / 24)
