@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  13 October 2024
+Updated:  43 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.6"
+version = "1.7.7"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -593,13 +593,13 @@ battery_params = {
     1: {'table': [ 0, 2, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
-        'charge_loss': 0.975,
-        'discharge_loss': 0.975},
+        'charge_loss': 0.974,
+        'discharge_loss': 0.974},
     2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
         'charge_loss': 1.08,
-        'discharge_loss': 0.85},
+        'discharge_loss': 0.95},
 }
 
 def get_battery(info=1):
@@ -1022,7 +1022,7 @@ def get_remote_settings(key):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        output(f"** get_remote_settings(), no result data, {errno_message(errno)}")
+        output(f"** get_remote_settings(), no result data, {errno_message(response)}")
         return None
     values = result.get('values')
     if values is None:
@@ -1436,7 +1436,7 @@ def set_schedule(periods=None, template=None, enable=True):
 # d = day 'YYYY-MM-DD'. Can also include 'HH:MM' in 'hour' mode
 # v = list of variables to get
 # summary = 0: raw data, 1: add max, min, sum, 2: summarise and drop raw data, 3: calculate state
-# save = "xxxxx": save the raw results to xxxxx_raw_<time_span>_<d>.json
+# save = "xxxxx": save the raw results to xxxxx_history_<time_span>_<d>.json
 # load = "<file>": load the raw results from <file>
 # plot = 0: no plot, 1: plot variables separately, 2: combine variables 
 # station = 0: use device_id, 1: use station_id
@@ -1504,7 +1504,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
         result = json.load(file)
         file.close()
     if save is not None:
-        file_name = save + "_raw_" + time_span + "_" + d[0:10].replace('-','') + ".txt"
+        file_name = save + "_history_" + time_span + "_" + d[0:10].replace('-','') + ".txt"
         file = open(storage + file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
@@ -1709,7 +1709,7 @@ get_history = get_raw
 # d = day 'YYYY-MM-DD'
 # v = list of report variables to get
 # summary = 0, 1, 2: do a quick total energy report for a day
-# save = "xxxxx": save the report results to xxxxx_raw_<time_span>_<d>.json
+# save = "xxxxx": save the report results to xxxxx_report_<time_span>_<d>.json
 # load = "<file>": load the report results from <file>
 # plot = 0: no plot, 1 = plot variables separately, 2 = combine variables
 # station = 0: use device_id, 1 = use station_id
@@ -1839,7 +1839,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         result = json.load(file)
         file.close()
     elif save is not None:
-        file_name = save + "_rep_" + report_type + "_" + d.replace('-','') + ".txt"
+        file_name = save + "_report_" + report_type + "_" + d.replace('-','') + ".txt"
         file = open(storage + file_name, 'w', encoding='utf-8')
         json.dump(result, file, indent=4, ensure_ascii= False)
         file.close()
@@ -2838,7 +2838,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour, base_time, storage, battery, charge_rates
+    global timed_strategy, steps_per_hour, base_time, storage, battery, battery_params
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2945,8 +2945,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = 0.0
         temperature = 30
         bms_charge_current = 15
-        charge_loss = charge_rates[2]['charge_loss']
-        discharge_loss = charge_rates[2]['discharge_loss']
+        charge_loss = battery_params[2]['charge_loss']
+        discharge_loss = battery_params[2]['discharge_loss']
         bat_current = 0.0
         device_power = 6.0
         device_current = 35
@@ -2968,8 +2968,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
         bms_charge_current = battery.get('charge_rate')
-        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 1.0
-        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 1.0
+        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 0.974
+        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 0.974
         device_power = device.get('power')
         device_current = device.get('max_charge_current')
         model = device.get('deviceType')

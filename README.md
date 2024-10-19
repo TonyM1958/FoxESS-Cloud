@@ -97,6 +97,7 @@ f.get_charge()
 f.get_min()
 f.get_flag()
 f.get_schedule()
+f.get_named_settings(name)
 
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
@@ -116,6 +117,10 @@ get_flag() returns the current scheduler enable / support / maxsoc flags
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 
+get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
++ f.named_settings is updated. This is dictionary of information and current value, indexed by 'name.
++ the only name currently supported by Fox is 'ExportLimit' and this is only available for H3 inverters.
+
 
 ## Inverter Settings
 You can change inverter settings using:
@@ -126,6 +131,7 @@ f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
 f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
 f.set_schedule(periods, enable)
+f.set_named_settings(name, value)
 ```
 
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
@@ -165,6 +171,10 @@ charge_periods(): returns a list of periods that describe the strategy for the c
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
 + periods: a time segment or list of time segments created using f.set_period().
 + enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
+
+set_named_settings() sets the 'name' setting to 'value'.
++ 'name' may also be a list of (name, value) pairs.
++ the only 'name' currently supported by Fox is 'ExportLimit' on H3 inverters
 
 
 ## Real Time Data
@@ -772,6 +782,12 @@ This setting can be:
 
 
 # Version Info
+
+2.6.5<br>
+Add get_named_settings() and set_named_settings().
+Update get_work_mode() and set_work_mode() to use named settings (still doesn't work though as blocked by Fox)
+Updated get_history() and get_report() saved filenames to use _history_ and _report_ for consistency.
+Update calibration of 'charge_loss' and 'discharge_loss'.
 
 2.6.4<br>
 Increase default plungs_slots from 6 to 8.

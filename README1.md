@@ -347,8 +347,6 @@ export_limit: None             # maximum export power in kW. None uses the inver
 dc_ac_loss: 0.970              # loss converting battery DC power to AC grid power
 pv_loss: 0.950                 # loss converting PV power to DC battery charge power
 ac_dc_loss: 0.960              # loss converting AC grid power to DC battery charge power
-charge_loss: [0.975, 1.040]    # loss in battery energy for each kWh added (based on residual_handling)
-discharge_loss: [0.975, 0.975] # loss in battery energy for each kWh removed (based on residual_handling)
 inverter_power: None           # inverter power consumption in W (dynamically set)
 bms_power: 50                  # BMS power consumption in W
 force_charge_power: 5.00       # power used when Force Charge is scheduled
@@ -760,6 +758,10 @@ This setting can be:
 
 
 # Version Info
+
+1.7.7<br>
+Updated get_history() and get_report() saved filenames to use _history_ and _report_ for consistency.
+Update calibration of 'charge_loss' and 'discharge_loss'.
 
 1.7.6<br>
 Fix divide by zero error when ratedCapacity is returned as 0.

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  13 October 2024
+Updated:  14 October 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.6.4"
+version = "2.6.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -281,7 +281,7 @@ var_table = None
 var_list = None
 
 def get_vars():
-    global var_table, var_list, debug_setting, messages, lang, token
+    global var_table, var_list, debug_setting, messages, lang
     if api_key is None:
         output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
@@ -558,13 +558,13 @@ battery_params = {
     1: {'table': [ 0, 2, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
-        'charge_loss': 0.975,
-        'discharge_loss': 0.975},
+        'charge_loss': 0.974,
+        'discharge_loss': 0.974},
     2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
         'charge_loss': 1.080,
-        'discharge_loss': 0.85},
+        'discharge_loss': 0.95},
 }
 
 def get_battery(info=0, v=None):
@@ -615,7 +615,7 @@ def get_batteries(info=0):
 ##################################################################################################
 
 def get_charge():
-    global token, device_sn, battery_settings, debug_setting
+    global device_sn, battery_settings, debug_setting
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -647,7 +647,7 @@ def time_period(t, n):
     return result
 
 def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force = 0, enable=1):
-    global token, device_sn, battery_settings, debug_setting, time_period_vars
+    global device_sn, battery_settings, debug_setting, time_period_vars
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -723,7 +723,7 @@ def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force
 ##################################################################################################
 
 def get_min():
-    global token, device_sn, battery_settings, debug_setting
+    global device_sn, battery_settings, debug_setting
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -747,7 +747,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minSocOnGrid = None, minSoc = None, force = 0):
-    global token, device_sn, schedule, battery_settings, debug_setting
+    global device_sn, schedule, battery_settings, debug_setting
     if get_device() is None:
         return None
     if schedule['enable'] == True:
@@ -801,160 +801,71 @@ def get_settings():
 # get remote settings
 ##################################################################################################
 
-remote_settings = None              # raw UI info
-named_settings = None               # processed UI info
-merge_settings = {                  # keys to add
-    'WorkMode': {'keys': {
-        'h115__': 'operation_mode__work_mode',
-        'h116__': 'operation_mode__work_mode',
-        'h117__': 'operation_mode__work_mode',
-#        'k106__': 'operation_mode__work_mode',
-        },
-        'values': ['SelfUse', 'Feedin', 'Backup']},
-    'BatteryVolt': {'keys': {
-        'h115__': ['h115__14', 'h115__15', 'h115__16'],
-        'h116__': ['h116__15', 'h116__16', 'h116__17'],
-        'h117__': ['h117__15', 'h117__16', 'h117__17'],
-#        'k106__': ['k106__xx', 'k106__xx', 'k106__xx'],
-        },
-        'type': 'list',
-        'valueType': 'float',
-        'unit': 'V'},
-    'BatteryTemp': {'keys': {
-        'h115__': 'h115__17',
-        'h116__': 'h116__18',
-        'h117__': 'h117__18',
-#        'k106__': 'k106__xx',
-        },
-        'type': 'list',
-        'valueType': 'int',
-        'unit': '℃'},
-}
+# store for named settings info
+named_settings = {}
 
-def get_ui():
-    global device_id, debug_setting, messages, remote_settings, named_settings, merge_settings
-    if get_device() is None:
-        return None
-    if remote_settings is None:
-        output(f"getting ui settings", 2)
-        params = {'id': device_id}
-        response = signed_get(path="/generic/v0/device/setting/ui", params=params)
-        if response.status_code != 200:
-            output(f"** get_ui() got response code {response.status_code}: {response.reason}")
-            return None
-        result = response.json().get('result')
-        if result is None:
-            errno = response.json().get('errno')
-            output(f"** get_ui(), no result data, {errno_message(errno)}")
-            return None
-        remote_settings = result
-        protocol = remote_settings['protocol'].lower().replace('xx','__')
-        named_settings = {'_protocol': protocol}
-        volt_n = 0
-        volt_keys = []
-        for p in remote_settings['parameters']:
-            if p['name'][:11] == 'BatteryVolt':    # merge BatteryVolts
-                output(f"  found {p['name']} with key {p['key']}", 2)
-                volt_n += 1
-                volt_keys.append(p['key'])
-                if volt_n == 3:
-                    named_settings['BatteryVolt'] = {'keys': volt_keys, 'type': 'list', 'valueType': 'float', 'unit': p['properties'][0]['unit']}
-                elif volt_n > 3:
-                    print(f"** get_ui(): more than 3 groups found for BatteryVolt, n={volt_n}")
-            elif p['name'][:11] == 'BatteryTemp':
-                output(f"  found {p['name']} with key {p['key']}", 2)
-                named_settings['BatteryTemp'] = {'keys': p['key'], 'type': 'list', 'valueType': 'int', 'unit': p['properties'][0]['unit']}
-            else:
-                items = []
-                block = p['block'] and len(p['properties']) > 1
-                for e in p['properties']:
-                    valueType = e['elemType']['valueType']
-                    item = {'name': e['key'].replace(protocol,'')} if block else {'key': e['key']} #, 'group': p['name']}
-                    if e['elemType'].get('uiItems') is not None:
-                        item['values'] = e['elemType']['uiItems']
-                    elif e.get('range') is not None:
-                        item['range'] = e['range']
-                        item['valueType'] = 'float' if type(e['range']['hi']) is float else 'int'
-                    else:
-                        item['type'] = valueType
-                    if e.get('unit') is not None and len(e['unit']) > 0:
-                        item['unit'] = e['unit']
-                    if block:
-                        items.append(item)
-                    else:
-                        named_settings[e['name']] = item
-                if block:
-                    named_settings[p['name']] = {'key': p['key'], 'type': 'block', 'items': items}
-        for name in merge_settings.keys():
-            if named_settings.get(name) is None and merge_settings[name]['keys'].get(protocol) is not None:
-                named_settings[name] = {'keys': merge_settings[name]['keys'][protocol]}
-                for k in merge_settings[name].keys():
-                    if k != 'keys':
-                        named_settings[name][k] = merge_settings[name][k]
-    return remote_settings
-
-def get_remote_settings(key):
-    global token, device_id, debug_setting, messages
+def get_remote_settings(name):
+    global device_sn, debug_setting, messages, name_data
     if get_device() is None:
         return None
     output(f"getting remote settings", 2)
-    if key is None:
+    if name is None:
         return None
-    if type(key) is list:
+    if type(name) is list:
         values = {}
-        for k in key:
-            v = get_remote_settings(k)
+        for n in name:
+            v = get_remote_settings(n)
             if v is None:
-                return
+                continue
             for x in v.keys():
                 values[x] = v[x]
         return values
-    params = {'id': device_id, 'hasVersionHead': 1, 'key': key}
-    response = signed_get(path="/c/v0/device/setting/get", params=params)
+    body = {'sn': device_sn, 'key': name}
+    response = signed_post(path="/op/v0/device/setting/get", body=body)
     if response.status_code != 200:
         output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        output(f"** get_remote_settings(), no result data, {errno_message(errno)}")
+        output(f"** get_remote_settings(), no result data, {errno_message(response)}")
         return None
-    values = result.get('values')
-    if values is None:
-        output(f"** get_remote_settings(), no values data")
+    named_settings[name] = result
+    value = result.get('value')
+    if value is None:
+        output(f"** get_remote_settings(), no value for {name}")
         return None
-    return values
+    return value
 
 def get_named_settings(name):
-    global named_settings
+    return get_remote_settings(name)
+
+def set_named_setting(name, value):
+    global device_sn, debug_setting
+    if get_device() is None:
+        return None
     if type(name) is list:
-        result = []
-        for n in name:
-            result.append(get_named_settings(n))
-        return result
-    if named_settings is None or named_settings.get(name) is None:
-        output(f"** get_named_settings(): {name} was not recognised")
+        count = 0
+        for (n, v) in name:
+            result = set_named_settings(name=n, value=v)
+            if result is not None:
+                count += 1
+        return count
+    output(f"\nSetting {name} to {value}", 1)
+    body = {'sn': device_sn, 'key': name, 'value': f"{value}"}
+    setting_delay()
+    response = signed_post(path="/op/v0/device/setting/set", body=body)
+    if response.status_code != 200:
+        output(f"** set_named_settings(): ({name}, {value}) got response code {response.status_code}: {response.reason}")
         return None
-    keys = named_settings[name].get('keys')
-    if keys is None:
-        output(f"** get_named_settings(): no keys for name: {name}")
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 44096:
+            output(f"** cannot update settings when schedule is active")
+        else:
+            output(f"** set_named_settings(): ({name}, {value}) {errno_message(response)}")
         return None
-    output(f"getting named_settings for {name} using {keys}", 2)
-    result = get_remote_settings(keys)
-    if result is None:
-        output(f"** get_named_settings(): no result for {name} using key: {keys}")
-        return None
-    result_type = named_settings[name].get('type')
-    value_type = named_settings[name].get('valueType')
-    if result_type is None:
-        v = result.get([k for k in result.keys()][0])
-        return v if value_type is None else c_float(v) if value_type == 'float' else c_int(v)
-    if result_type == 'list':
-        values = []
-        for k in sorted(result.keys()):
-            values.append(result[k] if value_type is None else c_float(result[k]) if value_type == 'float' else c_int(result[k]))
-        return values
-    return result
+    return 1
 
 ##################################################################################################
 # wrappers for named settings
@@ -964,8 +875,6 @@ work_mode = None
 
 def get_work_mode():
     global work_mode
-#    print(f"** get_work_mode(): not available via Open API")
-    return None
     if get_device() is None:
         return None
     work_mode = get_named_settings('WorkMode')
@@ -983,6 +892,8 @@ temp_slots_per_battery = 8
 
 def get_cell_temps(nbat=8):
     global temp_slots_per_battery
+    print(f"** get_cell_temps(): not available via Open API")
+    return None
     values = get_named_settings('BatteryTemp')
     if values is None:
         return None
@@ -1008,9 +919,7 @@ work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
 settable_modes = work_modes[:3]
 
 def set_work_mode(mode, force = 0):
-    global token, device_sn, work_modes, work_mode, debug_setting
-    print(f"** set_work_mode(): not available via Open API")
-    return None
+    global device_sn, work_modes, work_mode, debug_setting
     if get_device() is None:
         return None
     if mode not in settable_modes:
@@ -1022,7 +931,7 @@ def set_work_mode(mode, force = 0):
             return None
         set_schedule(enable=0)
     output(f"\nSetting work mode: {mode}", 1)
-    body = {'sn': device_sn, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
+    body = {'sn': device_sn, 'key': 'WorkMode', 'value': mode}
     setting_delay()
     response = signed_post(path="/op/v0/device/setting/set", body=body)
     if response.status_code != 200:
@@ -1180,7 +1089,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
 
 # set a schedule from a period or list of time segment periods
 def set_schedule(periods=None, enable=True):
-    global token, device_sn, debug_setting, schedule
+    global device_sn, debug_setting, schedule
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1279,7 +1188,7 @@ def get_real(v = None):
 # d = day 'YYYY-MM-DD'. Can also include 'HH:MM' in 'hour' mode
 # v = list of variables to get
 # summary = 0: raw data, 1: add max, min, sum, 2: summarise and drop raw data, 3: calculate state
-# save = "xxxxx": save the raw results to xxxxx_raw_<time_span>_<d>.json
+# save = "xxxxx": save the raw results to xxxxx_history_<time_span>_<d>.json
 # load = "<file>": load the raw results from <file>
 # plot = 0: no plot, 1: plot variables separately, 2: combine variables 
 ##################################################################################################
@@ -1294,7 +1203,7 @@ sample_time = 5.0       # 5 minutes default
 sample_rounding = 2     # round to 30 seconds
 
 def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, debug_setting, var_list, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time, residual_scale, storage
+    global device_sn, debug_setting, var_list, invert_ct2, tariff, max_power_kw, sample_rounding, sample_time, residual_scale, storage
     if get_device() is None:
         return None
     time_span = time_span.lower()
@@ -1546,7 +1455,7 @@ def report_value_profile(result):
 # d = day 'YYYY-MM-DD'
 # v = list of report variables to get
 # summary = 0, 1, 2: do a quick total energy report for a day
-# save = "xxxxx": save the report results to xxxxx_raw_<time_span>_<d>.json
+# save = "xxxxx": save the report results to xxxxx_report_<time_span>_<d>.json
 # load = "<file>": load the report results from <file>
 # plot = 0: no plot, 1 = plot variables separately, 2 = combine variables
 ##################################################################################################
@@ -1560,7 +1469,7 @@ fix_value_threshold = 200000000.0
 fix_value_mask = 0x0000FFFF
 
 def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global token, device_sn, var_list, debug_setting, report_vars, storage
+    global device_sn, var_list, debug_setting, report_vars, storage
     if get_device() is None:
         return None
     # process list of days
@@ -2642,7 +2551,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
-    global timed_strategy, steps_per_hour, base_time, storage, battery, charge_rates
+    global timed_strategy, steps_per_hour, base_time, storage, battery, battery_params
     print(f"\n---------------- charge_needed ----------------")
     # validate parameters
     args = locals()
@@ -2749,8 +2658,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = 0.0
         temperature = 30
         bms_charge_current = 15
-        charge_loss = charge_rates[2]['charge_loss']
-        discharge_loss = charge_rates[2]['discharge_loss']
+        charge_loss = battery_params[2]['charge_loss']
+        discharge_loss = battery_params[2]['discharge_loss']
         bat_current = 0.0
         device_power = 6.0
         device_current = 35
@@ -2772,8 +2681,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
         bms_charge_current = battery.get('charge_rate')
-        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 1.0
-        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 1.0
+        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 0.974
+        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 0.974
         device_power = device.get('power')
         device_current = device.get('max_charge_current')
         model = device.get('deviceType')
