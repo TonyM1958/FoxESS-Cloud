@@ -783,6 +783,15 @@ This setting can be:
 
 # Version Info
 
+2.6.6<br>
+Add residual_handling=3 for Mira BMS with firmware 1.014 or later that returns residual capacity per battery.
+Calculate 'ratedCapacity' in get_battery() and 'soh' for HV2600 and Mira.
+Allow unlimited periods in strategy, including overlap with charge periods but warn and limit if the periods sent to inverter would be more than 8.
+Improve behaviour prediction for schedules when clocks change due to day light saving.
+Improve schedule generation and prediction when Min Soc changes.
+Cache Solcast RIDS to reduce API usage (run with reload=1 if arrays are edited and cached RIDs need to be updated).
+Remove spurious error message when (failing) to get inverter work mode.
+
 2.6.5<br>
 Add get_named_settings() and set_named_settings().
 Update get_work_mode() and set_work_mode() to use named settings (still doesn't work though as blocked by Fox)

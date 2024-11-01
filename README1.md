@@ -760,6 +760,16 @@ This setting can be:
 # Version Info
 
 1.7.7<br>
+Add residual_handling=3 for Mira BMS with firmware 1.014 or later that returns residual capacity per battery.
+Calculate 'ratedCapacity' and 'soh' for HV2600 and Mira in get_battery(), get_batteries().
+Add detection of Mira BMS to set residual_handling correctly.
+Add battery 'count' based on number of slaves found.
+Allow unlimited periods in strategy, including overlap with charge periods but warn and limit if the periods sent to inverter would be more than 8.
+Improve behaviour prediction for schedules when clocks change due to day light saving.
+Improve schedule generation and prediction when Min Soc changes.
+Cache Solcast RIDS to reduce API usage (run with reload=1 if arrays are edited and cached RIDs need to be updated).
+
+1.7.7<br>
 Updated get_history() and get_report() saved filenames to use _history_ and _report_ for consistency.
 Update calibration of 'charge_loss' and 'discharge_loss'.
 
