@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  01 November 2024
+Updated:  03 November 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.8"
+version = "1.7.9"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -715,9 +715,9 @@ def get_batteries(info=1):
         if b.get('info') is not None:
             if b['info'].get('slaveBatteries') is not None:
                 b['count'] = len(b['info']['slaveBatteries'])
-            if b['info']['masterVersion'] >= '1.014' and b['info']['masterSN'][:7] == '60BBHV2':
+            if b['info']['masterSN'][:7] == '60BBHV2' and b['info']['masterVersion'] >= '1.014':
                 b['residual_handling'] = 2
-            elif battery['info']['masterSN'][:7] == '60MBB01' and battery['info']['masterVersion'] >= '1.014':
+            elif b['info']['masterSN'][:7] == '60MBB01' and b['info']['masterVersion'] >= '1.014':
                 residual_handling = 3
         rated_capacity = b.get('ratedCapacity')
         b['ratedCapacity'] = rated_capacity if rated_capacity is not None and rated_capacity > 100 else None

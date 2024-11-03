@@ -759,7 +759,10 @@ This setting can be:
 
 # Version Info
 
-1.7.7<br>
+1.7.9<br>
+Fix type error when getting ECS battery details.
+
+1.7.8<br>
 Add residual_handling=3 for Mira BMS with firmware 1.014 or later that returns residual capacity per battery.
 Calculate 'ratedCapacity' and 'soh' for HV2600 and Mira in get_battery(), get_batteries().
 Add detection of Mira BMS to set residual_handling correctly.
