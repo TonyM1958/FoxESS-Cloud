@@ -85,8 +85,8 @@ Once an inverter is selected, you can make other calls to get information:
 
 ```
 f.get_firmware()
-f.get_battery(info=1)
-f.get_batteries(info=1)
+f.get_battery(info=1, rated, count)
+f.get_batteries(info=1, rated, count)
 f.get_settings()
 f.get_charge()
 f.get_min()
@@ -112,6 +112,19 @@ get_batteries() returns multiple batteries (if available) as a list. get_battery
 + 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
 + 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
 
+get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery / f.batteries.
+get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery. Parameters:
++ 'info': get BMS and battery serial number info, if available. Default 1.
++ 'rated': optional rated capacity for the battery in Wh to work out SoH. If not provided, it will try to work this out. When there is more than 1 battery, this parameter is a list.
++ 'count': optional battery count. If not provided, it will work this out from the serial number info. When there is more than 1 battery, this parameter is a list.
+
+Additional battery attributes provided include:
++ 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
++ 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
++ 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
++ 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
+
+
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
 
 get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
@@ -134,6 +147,7 @@ You can change inverter settings using:
 ```
 f.set_min(minGridSoc, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
+f.set_named_settings(name, value, force)
 f.set_work_mode(mode)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, segment)
 f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
@@ -153,7 +167,13 @@ set_charge() takes the charge times from the battery_settings and applies these 
 + en2: the end time for period 2
 + enable: set to 0 to show settings but stop inverter settings being updated. Default is 1.
 
-set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in work_modes. The new mode is stored in work_mode.
+set_named_settings() sets the 'name' setting to 'value'.
++ 'name' may also be a list of (name, value) pairs and returns a list of success / fail results.
++ 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
++ A return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
++ Example names: 'WorkMode', 'ExportLimit'
+
+set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in settable_modes. The new mode is stored in work_mode.
 
 set_period() returns a period structure that can be used to build a list of strategy periods for set_schedule()
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
@@ -758,6 +778,15 @@ This setting can be:
 
 
 # Version Info
+
+1.8.0<br>
+Add set_named_settings() for ExportLimit.
+Correct issues with get_ui() not setting f.named_settings correctly.
+Update set_work_mode() to use set_named_settings().
+Updates to get_battery() / get_batteries() to add optional rated and count parameters.
+Updates to charge_needed() to end prediction at start of next charge period.
+Correct charge time for Octopus Go tariff.
+Update charge_needed() to show contingency achieved rather than requested.
 
 1.7.9<br>
 Fix type error when getting ECS battery details.

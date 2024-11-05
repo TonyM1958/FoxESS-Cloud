@@ -90,8 +90,8 @@ Once an inverter is selected, you can make other calls to get information:
 
 ```
 f.get_generation()
-f.get_battery()
-f.get_batteries()
+f.get_battery(info, rated, count)
+f.get_batteries(info, rated, count)
 f.get_settings()
 f.get_charge()
 f.get_min()
@@ -105,7 +105,12 @@ Each of these calls will return a dictionary or list containing the relevant inf
 get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
 get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery / f.batteries.
-get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery. Additional battery attributes include:
+get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery. Parameters:
++ 'info': get battery serial number info, if available. Default 0 (not available via Open API)
++ 'rated': optional rated capacity for the battery in Wh to work out SoH. If not provided, it will try to work this out.
++ 'count': optional battery count. If not provided, it will try to work this out.
+
+Additional battery attributes provided include:
 + 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
 + 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
 + 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
@@ -131,7 +136,7 @@ f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
 f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
 f.set_schedule(periods, enable)
-f.set_named_settings(name, value)
+f.set_named_settings(name, value, force)
 ```
 
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
@@ -174,7 +179,9 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
-+ the only 'name' currently supported by Fox is 'ExportLimit' on H3 inverters
++ 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
++ A return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
++ the only 'name' currently supported is 'ExportLimit'
 
 
 ## Real Time Data
@@ -783,7 +790,15 @@ This setting can be:
 
 # Version Info
 
-2.6.7<br>
+2.6.9<br>
+Add get and set_named_settings() (for WorkMode and ExportLimit).
+If a list of named settings is provided, the return value is a list indicating which settings succeeded (1) or failed (0).
+Updates to get_battery() / get_batteries() to add optional rated and count parameters.
+Updates to charge_needed() to end prediction at start of next charge period.
+Correct charge time for Octopus Go tariff.
+Update charge_needed() to show contingency achieved rather than requested.
+
+2.6.8<br>
 Add residual_handling=3 for Mira BMS with firmware 1.014 or later that returns residual capacity per battery.
 Calculate 'ratedCapacity' in get_battery() and 'soh' for HV2600 and Mira.
 Allow unlimited periods in strategy, including overlap with charge periods but warn and limit if the periods sent to inverter would be more than 8.

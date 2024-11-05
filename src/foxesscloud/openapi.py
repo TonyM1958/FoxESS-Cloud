@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  03 November 2024
+Updated:  05 November 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.6.7"
+version = "2.6.9"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -574,7 +574,7 @@ battery_params = {
         'discharge_loss': 0.974},
 }
 
-def get_battery(info=0, v=None):
+def get_battery(info=0, v=None, rated=None, count=None):
     global device_sn, battery, debug_setting, residual_handling, battery_params
     if get_device() is None:
         return None
@@ -594,25 +594,29 @@ def get_battery(info=0, v=None):
         soc = battery.get('soc')
         residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
         if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49)
+            battery['count'] = int(battery['volt'] / 49) if count is None else count
         if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2560 * battery['count']
+            battery['ratedCapacity'] = 2560 * battery['count'] if rated is None else rated
     elif battery['residual_handling'] == 3:
         if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49)
+            battery['count'] = int(battery['volt'] / 49) if count is None else count
         capacity = (battery['residual'] * battery['count']) if battery.get('residual') is not None else None
         soc = battery.get('soc')
         residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
         if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2450 * battery['count']
+            battery['ratedCapacity'] = 2450 * battery['count'] if rated is None else rated
     else:
         residual = battery.get('residual')
         soc = battery.get('soc')
         capacity = residual / soc * 100 if residual is not None and soc is not None and soc > 0 else None 
+        if battery.get('count') is None or battery['count'] < 1:
+            battery['count'] = count
+        if battery.get('ratedCapacity') is None or battery['ratedCapacity'] < 100:
+            battery['ratedCapacity'] = rated
     battery['capacity'] = round(capacity, 3)
     battery['residual'] = round(residual, 3)
     battery['status'] = 1
-    battery['charge_rate'] = 50
+    battery['charge_rate'] = None
     params = battery_params[battery['residual_handling']]
     battery['charge_loss'] = params['charge_loss']
     battery['discharge_loss'] = params['discharge_loss']
@@ -622,9 +626,13 @@ def get_battery(info=0, v=None):
         battery['charge_rate'] = params['table'][int((battery['temperature'] - params['offset']) / params['step'])]
     return battery
 
-def get_batteries(info=0):
+def get_batteries(info=0, rated=None, count=None):
     global battery, batteries
-    get_battery(info=info)
+    if type(rated) is not list:
+        rated = [rated]
+    if type(count) is not list:
+        count = [count]
+    get_battery(info=info, rated=rated[0], count=count[0])
     if battery is None:
         return None
     batteries = [battery]
@@ -860,17 +868,17 @@ def get_remote_settings(name):
 def get_named_settings(name):
     return get_remote_settings(name)
 
-def set_named_setting(name, value):
+def set_named_settings(name, value, force=0):
     global device_sn, debug_setting
     if get_device() is None:
         return None
+    if force == 1 and get_schedule().get('enable'):
+        set_schedule(enable=0)
     if type(name) is list:
-        count = 0
+        result = []
         for (n, v) in name:
-            result = set_named_settings(name=n, value=v)
-            if result is not None:
-                count += 1
-        return count
+            result.append(set_named_settings(name=n, value=v))
+        return result
     output(f"\nSetting {name} to {value}", 1)
     body = {'sn': device_sn, 'key': name, 'value': f"{value}"}
     setting_delay()
@@ -881,10 +889,10 @@ def set_named_setting(name, value):
     errno = response.json().get('errno')
     if errno != 0:
         if errno == 44096:
-            output(f"** cannot update settings when schedule is active")
+            output(f"** cannot update {name} when schedule is active")
         else:
             output(f"** set_named_settings(): ({name}, {value}) {errno_message(response)}")
-        return None
+        return 0
     return 1
 
 ##################################################################################################
@@ -1964,7 +1972,7 @@ octopus_cosy = {
 # time periods for Octopus Go
 octopus_go = {
     'name': 'Octopus Go',
-    'off_peak1': {'start': 0.5, 'end': 4.5, 'hold': 1},
+    'off_peak1': {'start': 0.5, 'end': 5.5, 'hold': 1},
     'forecast_times': [21, 22]
     }
 
@@ -2632,7 +2640,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if len(times) == 0:
         times.append({'key': 'off_peak1', 'start': round_time(base_hour + 1), 'end': round_time(base_hour + 4), 'hold': force_charge})
         output(f"Charge time: {hours_time(base_hour + 1)}-{hours_time(base_hour + 4)}")
-    time_to_end1 = None
+    time_to_run = None
     for t in times:
         if hour_in(hour_now, t) and update_settings > 0:
             update_settings = 0
@@ -2644,7 +2652,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         t['time_to_start'] = time_to_start
         t['time_to_end'] = time_to_end
         t['charge_time'] = charge_time
-        time_to_end1 = time_to_end if time_to_end1 is None else time_to_end1
+        if time_to_run is None:
+            time_to_run = time_to_start
     # get next charge slot
     times = sorted(times, key=lambda t: t['time_to_start'])
     charge_key = times[0]['key']
@@ -2656,7 +2665,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # work out time window and times with clock changes
     charge_today = (base_hour + time_to_start / steps_per_hour) < 24
     forecast_day = today if charge_today else tomorrow
-    run_to = time_to_end1 if time_to_end < time_to_end1 else time_to_end1 + 24 * steps_per_hour
+    run_to = time_to_run if time_to_end < time_to_run else time_to_run + 24 * steps_per_hour
     run_time = int(run_to + 0.99) + 1 + hour_adjustment * steps_per_hour
     time_line = [round_time(base_hour + x / steps_per_hour - (hour_adjustment if x >= time_change else 0)) for x in range(0, run_time)]
     bat_hold = times[0]['hold']
@@ -2711,12 +2720,16 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         model = device.get('deviceType')
     min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
     max_soc = charge_config['max_soc'] if charge_config['max_soc'] is not None else 100
+    reserve = capacity * min_soc / 100
+    # charge current may be derated based on temperature
+    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
+    if bms_charge_current is not None and charge_current > bms_charge_current:
+        charge_current = bms_charge_current
     volt_curve = charge_config['volt_curve']
     nominal_soc = charge_config['nominal_soc']
     volt_nominal = interpolate(nominal_soc / 10, volt_curve)
     bat_resistance = charge_config['bat_resistance'] * bat_volt / volt_nominal
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
-    reserve = capacity * min_soc / 100
     output(f"\nBattery Info:")
     output(f"  Capacity:    {capacity:.2f}kWh")
     output(f"  Residual:    {residual:.2f}kWh")
@@ -2727,7 +2740,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Current SoC: {current_soc}%")
     output(f"  Max SoC:     {max_soc}% ({capacity * max_soc / 100:.2f}kWh)")
     output(f"  Temperature: {temperature:.1f}°C")
-    output(f"  Max Charge:  {bms_charge_current:.1f}A")
+    output(f"  Max Charge:  {charge_current:.1f}A")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
     # charge current may be derated based on temperature
@@ -2927,6 +2940,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"  SoC now:     {current_soc:.0f}% at {hours_time(hour_now)} on {today}")
         charge_message = "no charge needed"
         kwh_needed = 0.0
+        kwh_spare = kwh_min - reserve
         hours = 0.0
         start_timed = time_to_end
         end_timed = time_to_end
@@ -2934,6 +2948,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     else:
         # work out time to add kwh_needed to battery
         charge_rate = charge_power * charge_loss
+        discharge_rate = max([(start_residual - end_residual) / charge_time - bms_loss, 0.0])
         hours = kwh_needed / charge_rate
         if test_charge is None:
             output(f"\nCharge needed: {kwh_needed:.2f}kWh ({hours_time(hours)})")
@@ -2944,13 +2959,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if hours > charge_time:
             hours = charge_time
         elif hours > hours_to_full:
-            kwh_shortfall = (hours - hours_to_full) * charge_rate        # amount of energy that won't be added
-            required = hours_to_full + charge_time * kwh_shortfall / abs(start_residual - end_residual)  # hold time to recover energy not added
+            kwh_shortfall = kwh_needed - (capacity - start_residual)        # amount of energy that won't be added
+            required = (hours_to_full + kwh_shortfall / discharge_rate) if discharge_rate > 0.0 else charge_time
             hours = required if required > hours and required < charge_time else charge_time
         # round charge time and work out what will actually be added
         min_hours = charge_config['min_hours']
         hours = int(hours / min_hours + 0.99) * min_hours
         kwh_added = (hours * charge_rate) if hours < hours_to_full else (capacity - start_residual)
+        kwh_added += discharge_rate * hours         # discharge saved during charging
+        kwh_spare = kwh_min - reserve + kwh_added
         # rework charge and discharge
         charge_period = get_best_charge_period(start_at, hours)
         charge_offset = round_time(charge_period['start'] - start_at) if charge_period is not None else 0
@@ -2986,7 +3003,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
     # show the results
     output(f"  End SoC:     {end_residual / capacity * 100:.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
-    output(f"  Contingency: {kwh_contingency / capacity * 100:.0f}% SoC ({kwh_contingency:.2f}kWh)")
+    output(f"  Contingency: {kwh_spare / capacity * 100:.0f}% SoC ({kwh_spare:.2f}kWh)")
     if not charge_today:
         output(f"  PV cover:    {expected / consumption * 100:.0f}% ({expected:.1f}/{consumption:.1f})")
     # setup charging
@@ -3215,19 +3232,19 @@ def bat_count(cell_count):
 battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
-def battery_info(log=0, plot=1, count=None, info=1, bat=None):
+def battery_info(log=0, plot=1, rated=None, count=None, info=1, bat=None):
     global debug_setting, battery_info_app_key
     if bat is None:
-        bats = get_batteries(info=info)
+        bats = get_batteries(info=info, rated=rated, count=count)
         if bats is None:
             return None
         for i in range(0, len(bats)):
             output(f"\n----------------------- BMS {i+1} -----------------------")
-            battery_info(log=log, plot=plot, count=count, info=info, bat=bats[i])
+            battery_info(log=log, plot=plot, info=info, bat=bats[i])
         return None
     output_spool(battery_info_app_key)
     nbat = None
-    if info == 1 and bat.get('info') is not None:
+    if bat.get('info') is not None:
         b = bat['info']
         output(f"SN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
         nbat = 0
@@ -3250,7 +3267,7 @@ def battery_info(log=0, plot=1, count=None, info=1, bat=None):
         return None
     nv = len(cell_volts)
     if nbat is None:
-        nbat = bat_count(nv) if count is None else count
+        nbat = bat_count(nv) if bat.get('count') is None else bat['count']
     if nbat is None:
         output(f"** battery_info(): unable to match cells_per_battery for {nv}")
         output_close()

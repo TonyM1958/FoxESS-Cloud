@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  03 November 2024
+Updated:  05 November 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.7.9"
+version = "1.8.0"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -275,7 +275,7 @@ def get_token():
 info = None
 
 def get_info():
-    global token, debug_setting, info, messages
+    global debug_setting, info, messages
     if get_token() is None:
         return None
     output(f"getting access", 2)
@@ -307,7 +307,7 @@ def get_info():
 status = None
 
 def get_status(station=0):
-    global token, debug_setting, info, messages, status
+    global debug_setting, info, messages, status
     if get_token() is None:
         return None
     output(f"getting status", 2)
@@ -335,7 +335,7 @@ site = None
 station_id = None
 
 def get_site(name=None):
-    global token, site_list, site, debug_setting, messages, station_id
+    global site_list, site, debug_setting, messages, station_id
     if get_token() is None:
         return None
     if site is not None and name is None:
@@ -376,6 +376,7 @@ def get_site(name=None):
     station_id = site['stationID']
     return site
 
+
 ##################################################################################################
 # get list of data loggers
 ##################################################################################################
@@ -384,7 +385,7 @@ logger_list = None
 logger = None
 
 def get_logger(sn=None):
-    global token, logger_list, logger, debug_setting, messages
+    global logger_list, logger, debug_setting, messages
     if get_token() is None:
         return None
     if logger is not None and sn is None:
@@ -435,7 +436,7 @@ var_list = None
 raw_vars = var_list
 
 def get_device(sn=None):
-    global token, device_list, device, device_id, device_sn, firmware, battery, var_list, debug_setting, messages, flag, schedule, templates, remote_settings
+    global device_list, device, device_id, device_sn, firmware, battery, var_list, debug_setting, messages, flag, schedule, templates, remote_settings
     if get_token() is None:
         return None
     if device is not None:
@@ -527,7 +528,7 @@ def get_device(sn=None):
 ##################################################################################################
 
 def get_vars():
-    global token, device_id, debug_setting, messages
+    global device_id, debug_setting, messages
     if get_device() is None:
         return None
     output(f"getting variables", 2)
@@ -555,7 +556,7 @@ def get_vars():
 firmware = None
 
 def get_firmware():
-    global token, device_id, firmware, debug_setting, messages
+    global device_id, firmware, debug_setting, messages
     if get_device() is None:
         return None
     output(f"getting firmware", 2)
@@ -609,8 +610,8 @@ battery_params = {
         'discharge_loss': 0.974},
 }
 
-def get_battery(info=1):
-    global token, device_id, battery, debug_setting, messages, residual_handling, battery_params
+def get_battery(info=1, rated=None, count=None):
+    global device_id, battery, debug_setting, messages, residual_handling, battery_params
     if get_device() is None:
         return None
     output(f"getting battery", 2)
@@ -655,24 +656,26 @@ def get_battery(info=1):
         soc = battery.get('soc')
         residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
         if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49)
+            battery['count'] = int(battery['volt'] / 49) if count is None else count
         if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2560 * battery['count']
+            battery['ratedCapacity'] = 2560 * battery['count'] if rated is None else rated
     elif battery['residual_handling'] == 3:
         if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49)
+            battery['count'] = int(battery['volt'] / 49) if count is None else count
         capacity = (battery['residual'] * battery['count']) if battery.get('residual') is not None else None
         soc = battery.get('soc')
         residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
         if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2450 * battery['count']
+            battery['ratedCapacity'] = 2450 * battery['count'] if rated is None else rated
     else:
         residual = battery.get('residual')
         soc = battery.get('soc')
-        capacity = residual / soc * 100 if residual is not None and soc is not None and soc > 0 else None 
+        capacity = residual / soc * 100 if residual is not None and soc is not None and soc > 0 else None
+    if battery.get('ratedCapacity') is None and rated is not None:
+        battery['ratedCapacity'] = rated
     battery['capacity'] = round(capacity, 3)
     battery['residual'] = round(residual, 3)
-    battery['charge_rate'] = 50
+    battery['charge_rate'] = None
     params = battery_params[battery['residual_handling']]
     battery['charge_loss'] = params['charge_loss']
     battery['discharge_loss'] = params['discharge_loss']
@@ -682,8 +685,8 @@ def get_battery(info=1):
         battery['charge_rate'] = params['table'][int((battery['temperature'] - params['offset']) / params['step'])]
     return battery
 
-def get_batteries(info=1):
-    global token, device_id, battery, debug_setting, messages, batteries, battery_params, residual_handling
+def get_batteries(info=1, rated=None, count=None):
+    global device_id, battery, debug_setting, messages, batteries, battery_params, residual_handling
     if get_device() is None:
         return None
     output(f"getting batteries", 2)
@@ -710,7 +713,15 @@ def get_batteries(info=1):
             else:
                 for i in range(0, len(batteries)):
                     batteries[i]['info'] = result['batteries'][i]
-    for b in batteries:
+    if type(rated) is not list:
+        rated = [rated]
+    while len(rated) < len(batteries):
+        rated.append(None)
+    if type(count) is not list:
+        count = [count]
+    while len(count) < len(batteries):
+        count.append(None)
+    for i,b in enumerate(batteries):
         b['residual_handling'] = residual_handling
         if b.get('info') is not None:
             if b['info'].get('slaveBatteries') is not None:
@@ -718,9 +729,11 @@ def get_batteries(info=1):
             if b['info']['masterSN'][:7] == '60BBHV2' and b['info']['masterVersion'] >= '1.014':
                 b['residual_handling'] = 2
             elif b['info']['masterSN'][:7] == '60MBB01' and b['info']['masterVersion'] >= '1.014':
-                residual_handling = 3
+                b['residual_handling'] = 3
+        if b.get('count') is None:
+            b['count'] = count[i]
         rated_capacity = b.get('ratedCapacity')
-        b['ratedCapacity'] = rated_capacity if rated_capacity is not None and rated_capacity > 100 else None
+        b['ratedCapacity'] = rated_capacity if rated_capacity is not None and rated_capacity > 100 else rated[i]
         soh = b.get('soh')
         b['soh'] = int(soh) if soh.isnumeric() and int(soh) > 10 else None
         b['soh_supported'] = b['soh'] is not None
@@ -739,7 +752,7 @@ def get_batteries(info=1):
             b['residual'] = round(residual, 3)
         if b.get('ratedCapacity') is not None and b.get('capacity') is not None:
             b['soh'] = round(b['capacity'] * 1000 / b['ratedCapacity'] * 100, 1)
-        b['charge_rate'] = 50
+        b['charge_rate'] = None
         params = battery_params[b['residual_handling']]
         b['charge_loss'] = params['charge_loss']
         b['discharge_loss'] = params['discharge_loss']
@@ -752,7 +765,7 @@ def get_batteries(info=1):
 ##################################################################################################
 
 def get_charge():
-    global token, device_sn, battery_settings, debug_setting, messages
+    global device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -789,7 +802,7 @@ def time_period(t):
     return result
 
 def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force=0, enable=1):
-    global token, device_sn, battery_settings, debug_setting, messages, schedule
+    global device_sn, battery_settings, debug_setting, messages, schedule
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -863,7 +876,7 @@ def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force
 ##################################################################################################
 
 def get_min():
-    global token, device_sn, battery_settings, debug_setting, messages
+    global device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if battery_settings is None:
@@ -888,7 +901,7 @@ def get_min():
 ##################################################################################################
 
 def set_min(minGridSoc = None, minSoc = None, force = 0):
-    global token, device_sn, battery_settings, debug_setting, messages
+    global device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
     if get_schedule().get('enable'):
@@ -944,6 +957,13 @@ merge_settings = {                  # keys to add
 #        'k106__': 'operation_mode__work_mode',
         },
         'values': ['SelfUse', 'Feedin', 'Backup']},
+    'ExportLimit': {'keys': {
+        'h115__': 'basic2__05',
+        'h116__': 'basic2__05',
+        'h117__': 'basic2__05',
+#        'k106__': 'basic2__05',
+        },
+        'valueType': 'int'},
     'BatteryVolt': {'keys': {
         'h115__': ['h115__14', 'h115__15', 'h115__16'],
         'h116__': ['h116__15', 'h116__16', 'h116__17'],
@@ -1003,7 +1023,7 @@ def get_ui():
                 block = p['block'] and len(p['properties']) > 1
                 for e in p['properties']:
                     valueType = e['elemType']['valueType']
-                    item = {'name': e['key'].replace(protocol,'')} if block else {'key': e['key']} #, 'group': p['name']}
+                    item = {'name': e['key'].replace(protocol,'')} if block else {'keys': e['key']} #, 'group': p['name']}
                     if e['elemType'].get('uiItems') is not None:
                         item['values'] = e['elemType']['uiItems']
                     elif e.get('range') is not None:
@@ -1018,7 +1038,7 @@ def get_ui():
                     else:
                         named_settings[e['name']] = item
                 if block:
-                    named_settings[p['name']] = {'key': p['key'], 'type': 'block', 'items': items}
+                    named_settings[p['name']] = {'keys': p['key'], 'type': 'block', 'items': items}
         for name in merge_settings.keys():
             if named_settings.get(name) is None and merge_settings[name]['keys'].get(protocol) is not None:
                 named_settings[name] = {'keys': merge_settings[name]['keys'][protocol]}
@@ -1028,7 +1048,7 @@ def get_ui():
     return remote_settings
 
 def get_remote_settings(key):
-    global token, device_id, debug_setting, messages
+    global device_id, debug_setting, messages
     if get_device() is None:
         return None
     output(f"getting remote settings", 2)
@@ -1090,10 +1110,66 @@ def get_named_settings(name):
         return values
     return result
 
+def set_named_settings(name, value, force=0):
+    global named_settings
+    if get_device() is None:
+        return None
+    if force == 1 and get_schedule().get('enable'):
+        set_schedule(enable=0)
+    if type(name) is list:
+        result = []
+        for (n, v) in name:
+            result.append(set_named_settings(name=n, value=v))
+        return result
+    if named_settings is None or named_settings.get(name) is None:
+        output(f"** set_named_settings(): {name} was not recognised")
+        return None
+    keys = named_settings[name].get('keys')
+    if keys is None:
+        output(f"** set_named_settings(): no keys for name: {name}")
+        return None
+    item_type = named_settings[name].get('type')
+    if item_type is None:
+        values = {keys: str(value)}
+    elif item_type == 'block':
+        items = named_setting[name]['items']
+        n = len(items)
+        if type(value) is not list or n != len(value):
+            output(f"** set_named_settings(): {name} requires list of {n} values")
+            return None
+        values = {}
+        for i in range(0, n):
+            values[items[i]['name']] = str(value[i])
+    elif item_type == 'list':
+        if type(value) is not list:
+            output(f"** set_named_settings(): {name} requires a list of values")
+            return None
+        values = {keys: value}
+    else:
+        values = {keys: str(value)}
+    output(f"\nSetting {name} to {value}", 1)
+    values['raw'] = ''
+    data = {'id': device_id, 'key': keys, 'values': values}
+    setting_delay()
+    response = signed_post(path="/c/v0/device/setting/set", data=data)
+    if response.status_code != 200:
+        output(f"** set_named_settings() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 44096:
+            output(f"** cannot update {name} when schedule is active")
+        else:
+            output(f"** set_named_settings(): ({name}, {value}) {errno_message(errno)}")
+        return 0
+    return 1
+
 ##################################################################################################
 # wrappers for named settings
 ##################################################################################################
 
+work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
+settable_modes = work_modes[:3]
 work_mode = None
 
 def get_work_mode():
@@ -1102,6 +1178,18 @@ def get_work_mode():
         return None
     work_mode = get_named_settings('WorkMode')
     return work_mode
+
+def set_work_mode(mode, force=0):
+    global settable_modes, work_mode, debug_setting
+    if get_device() is None:
+        return None
+    if mode not in settable_modes:
+        output(f"** work mode: must be one of {settable_modes}")
+        return None
+    result = set_named_settings(name='WorkMode', value=mode, force=force)
+    if result is not None and result == 1:
+        work_mode = mode
+    return result
 
 def get_cell_volts():
     values = get_named_settings('BatteryVolt')
@@ -1130,46 +1218,6 @@ def get_cell_temps(nbat=8):
             break
     return bat_temps
 
-
-##################################################################################################
-# set work mode
-##################################################################################################
-
-work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
-settable_modes = work_modes[:3]
-
-def set_work_mode(mode, force = 0):
-    global token, device_id, work_modes, work_mode, debug_setting, messages, schedule
-    if get_device() is None:
-        return None
-    if mode not in settable_modes:
-        output(f"** work mode: must be one of {settable_modes}")
-        return None
-    if get_flag() is None:
-        return None
-    if schedule.get('enable') == True:
-        if force == 0:
-            output(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
-            return None
-        set_schedule(enable=0)
-    output(f"\nSetting work mode: {mode}", 1)
-    data = {'id': device_id, 'key': 'operation_mode__work_mode', 'values': {'operation_mode__work_mode': mode}, 'raw': ''}
-    setting_delay()
-    response = signed_post(path="/c/v0/device/setting/set", data=data)
-    if response.status_code != 200:
-        output(f"** set_work_mode() got response code {response.status_code}: {response.reason}")
-        return None
-    errno = response.json().get('errno')
-    if errno != 0:
-        if errno == 44096:
-            output(f"** cannot update settings when schedule is active")
-        else:
-            output(f"** set_work_mode(), {errno_message(errno)}")
-        return None
-    work_mode = mode
-    return work_mode
-
-
 ##################################################################################################
 # get schedule
 ##################################################################################################
@@ -1179,7 +1227,7 @@ templates = None
 
 # get the current enable flag
 def get_flag():
-    global token, device_id, device_sn, schedule, debug_setting, messages
+    global device_id, device_sn, schedule, debug_setting, messages
     if get_device() is None:
         return None
     output(f"getting flag", 2)
@@ -1216,7 +1264,7 @@ def get_flag():
 
 # get the current schedule
 def get_schedule():
-    global token, device_id, schedule, debug_setting, messages
+    global device_id, schedule, debug_setting, messages
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1258,7 +1306,7 @@ def build_strategy_from_schedule():
 
 # get the details for a specific template
 def get_template_detail(template):
-    global token, device_id, schedule, debug_setting, messages, templates
+    global device_id, schedule, debug_setting, messages, templates
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1280,7 +1328,7 @@ def get_template_detail(template):
 
 # get the preset templates that contains periods
 def get_templates(template_type=[1,2]):
-    global token, device_id, flag, schedule, debug_setting, messages, templates
+    global device_id, flag, schedule, debug_setting, messages, templates
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1393,7 +1441,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
 
 # set a schedule from a period or list of periods
 def set_schedule(periods=None, template=None, enable=True):
-    global token, device_sn, debug_setting, messages, schedule, templates
+    global device_sn, debug_setting, messages, schedule, templates
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1482,7 +1530,7 @@ sample_time = 5.0       # 5 minutes default
 sample_rounding = 2     # round to 30 seconds
 
 def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
-    global token, device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time, storage
+    global device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time, storage
     if station == 0 and get_device() is None:
         return None
     elif station == 1 and get_site() is None:
@@ -1754,7 +1802,7 @@ fix_value_threshold = 200000000.0
 fix_value_mask = 0x0000FFFF
 
 def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
-    global token, device_id, station_id, var_list, debug_setting, report_vars, messages, station_id
+    global device_id, station_id, var_list, debug_setting, report_vars, messages, station_id
     if station == 0 and get_device() is None:
         return None
     elif station == 1 and get_site() is None:
@@ -1990,7 +2038,7 @@ def plot_report(result, plot=1, station=0):
 ##################################################################################################
 
 def get_earnings():
-    global token, device_id, station_id, var_list, debug_setting, messages
+    global device_id, station_id, var_list, debug_setting, messages
     if get_device() is None:
         return None
     id_name = 'deviceID'
@@ -2259,7 +2307,7 @@ octopus_cosy = {
 # time periods for Octopus Go
 octopus_go = {
     'name': 'Octopus Go',
-    'off_peak1': {'start': 0.5, 'end': 4.5, 'hold': 1},
+    'off_peak1': {'start': 0.5, 'end': 5.5, 'hold': 1},
     'forecast_times': [21, 22]
     }
 
@@ -2928,7 +2976,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     if len(times) == 0:
         times.append({'key': 'off_peak1', 'start': round_time(base_hour + 1), 'end': round_time(base_hour + 4), 'hold': force_charge})
         output(f"Charge time: {hours_time(base_hour + 1)}-{hours_time(base_hour + 4)}")
-    time_to_end1 = None
+    time_to_run = None
     for t in times:
         if hour_in(hour_now, t) and update_settings > 0:
             update_settings = 0
@@ -2940,7 +2988,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         t['time_to_start'] = time_to_start
         t['time_to_end'] = time_to_end
         t['charge_time'] = charge_time
-        time_to_end1 = time_to_end if time_to_end1 is None else time_to_end1
+        if time_to_run is None:
+            time_to_run = time_to_start
     # get next charge slot
     times = sorted(times, key=lambda t: t['time_to_start'])
     charge_key = times[0]['key']
@@ -2952,7 +3001,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # work out time window and times with clock changes
     charge_today = (base_hour + time_to_start / steps_per_hour) < 24
     forecast_day = today if charge_today else tomorrow
-    run_to = time_to_end1 if time_to_end < time_to_end1 else time_to_end1 + 24 * steps_per_hour
+    run_to = time_to_run if time_to_end < time_to_run else time_to_run + 24 * steps_per_hour
     run_time = int(run_to + 0.99) + 1 + hour_adjustment * steps_per_hour
     time_line = [round_time(base_hour + x / steps_per_hour - (hour_adjustment if x >= time_change else 0)) for x in range(0, run_time)]
     bat_hold = times[0]['hold']
@@ -3007,12 +3056,16 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         model = device.get('deviceType')
     min_soc = charge_config['min_soc'] if charge_config['min_soc'] is not None else 10
     max_soc = charge_config['max_soc'] if charge_config['max_soc'] is not None else 100
+    reserve = capacity * min_soc / 100
+    # charge current may be derated based on temperature
+    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
+    if bms_charge_current is not None and charge_current > bms_charge_current:
+        charge_current = bms_charge_current
     volt_curve = charge_config['volt_curve']
     nominal_soc = charge_config['nominal_soc']
     volt_nominal = interpolate(nominal_soc / 10, volt_curve)
     bat_resistance = charge_config['bat_resistance'] * bat_volt / volt_nominal
     bat_ocv = (bat_volt + bat_current * bat_resistance) * volt_nominal / interpolate(current_soc / 10, volt_curve)
-    reserve = capacity * min_soc / 100
     output(f"\nBattery Info:")
     output(f"  Capacity:    {capacity:.2f}kWh")
     output(f"  Residual:    {residual:.2f}kWh")
@@ -3022,15 +3075,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Min SoC:     {min_soc}% ({reserve:.2f}kWh)")
     output(f"  Current SoC: {current_soc}%")
     output(f"  Max SoC:     {max_soc}% ({capacity * max_soc / 100:.2f}kWh)")
-    output(f"  Max Charge:  {bms_charge_current:.1f}A")
+    output(f"  Max Charge:  {charge_current:.1f}A")
     output(f"  Temperature: {temperature:.1f}°C")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
     output(f"  Losses:      {charge_loss * 100:.1f}% charge / {discharge_loss * 100:.1f}% discharge")
-    # charge current may be derated based on temperature
-    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
-    if charge_current > bms_charge_current:
-        charge_current = bms_charge_current
     # inverter losses
     inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     operating_loss = inverter_power / 1000
@@ -3225,6 +3274,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"  SoC now:     {current_soc:.0f}% at {hours_time(hour_now)} on {today}")
         charge_message = "no charge needed"
         kwh_needed = 0.0
+        kwh_spare = kwh_min - reserve
         hours = 0.0
         start_timed = time_to_end
         end_timed = time_to_end
@@ -3232,6 +3282,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     else:
         # work out time to add kwh_needed to battery
         charge_rate = charge_power * charge_loss
+        discharge_rate = max([(start_residual - end_residual) / charge_time - bms_loss, 0.0])
         hours = kwh_needed / charge_rate
         if test_charge is None:
             output(f"\nCharge needed: {kwh_needed:.2f}kWh ({hours_time(hours)})")
@@ -3242,13 +3293,15 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         if hours > charge_time:
             hours = charge_time
         elif hours > hours_to_full:
-            kwh_shortfall = (hours - hours_to_full) * charge_rate        # amount of energy that won't be added
-            required = hours_to_full + charge_time * kwh_shortfall / abs(start_residual - end_residual)  # time to recover energy not added
+            kwh_shortfall = kwh_needed - (capacity - start_residual)        # amount of energy that won't be added
+            required = (hours_to_full + kwh_shortfall / discharge_rate) if discharge_rate > 0.0 else charge_time
             hours = required if required > hours and required < charge_time else charge_time
         # round charge time and work out what will actually be added
         min_hours = charge_config['min_hours']
         hours = int(hours / min_hours + 0.99) * min_hours
         kwh_added = (hours * charge_rate) if hours < hours_to_full else (capacity - start_residual)
+        kwh_added += discharge_rate * hours         # discharge saved by charging
+        kwh_spare = kwh_min - reserve + kwh_added
         # rework charge and discharge
         charge_period = get_best_charge_period(start_at, hours)
         charge_offset = round_time(charge_period['start'] - start_at) if charge_period is not None else 0
@@ -3284,7 +3337,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     end_residual = interpolate(time_to_end, bat_timed)          # residual when charge time ends
     # show the results
     output(f"  End SoC:     {end_residual / capacity * 100:.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
-    output(f"  Contingency: {kwh_contingency / capacity * 100:.0f}% SoC ({kwh_contingency:.2f}kWh)")
+    output(f"  Contingency: {kwh_spare / capacity * 100:.0f}% SoC ({kwh_spare:.2f}kWh)")
     if not charge_today:
         output(f"  PV cover:    {expected / consumption * 100:.0f}% ({expected:.1f}/{consumption:.1f})")
     # setup charging
@@ -3516,19 +3569,19 @@ def bat_count(cell_count):
 battery_info_app_key = "aug938dqt5cbqhvq69ixc4v39q6wtw"
 
 # show information about the current state of the batteries
-def battery_info(log=0, plot=1, count=None, info=1, bat=None):
+def battery_info(log=0, plot=1, rated=None, count=None, info=1, bat=None):
     global debug_setting, battery_info_app_key
     if bat is None:
-        bats = get_batteries(info=info)
+        bats = get_batteries(info=info, rated=rated, count=count)
         if bats is None:
             return None
         for i in range(0, len(bats)):
             output(f"\n----------------------- BMS {i+1} -----------------------")
-            battery_info(log=log, plot=plot, count=count, info=info, bat=bats[i])
+            battery_info(log=log, plot=plot, info=info, bat=bats[i])
         return None
     output_spool(battery_info_app_key)
     nbat = None
-    if info == 1 and bat.get('info') is not None:
+    if bat.get('info') is not None:
         b = bat['info']
         output(f"SN {b['masterSN']}, {b['masterBatType']}, Version {b['masterVersion']} (BMS)")
         nbat = 0
@@ -3551,7 +3604,7 @@ def battery_info(log=0, plot=1, count=None, info=1, bat=None):
         return None
     nv = len(cell_volts)
     if nbat is None:
-        nbat = bat_count(nv) if count is None else count
+        nbat = bat_count(nv) if bat.get('count') is None else bat['count']
     if nbat is None:
         output(f"** battery_info(): unable to match cells_per_battery for {nv}")
         output_close()
