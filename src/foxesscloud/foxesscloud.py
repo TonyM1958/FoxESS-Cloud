@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 November 2024
+Updated:  06 November 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.0"
+version = "1.8.1"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -600,7 +600,7 @@ battery_params = {
     2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
-        'charge_loss': 1.08,
+        'charge_loss': 1.07,
         'discharge_loss': 0.95},
     # Mira BMS with firmware 1.014 or later
     3: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
@@ -798,7 +798,7 @@ def get_charge():
 def time_period(t):
     result = f"{t['startTime']['hour']:02d}:{t['startTime']['minute']:02d}-{t['endTime']['hour']:02d}:{t['endTime']['minute']:02d}"
     if t['startTime']['hour'] != t['endTime']['hour'] or t['startTime']['minute'] != t['endTime']['minute']:
-        result += f" Charge from grid" if t['enableGrid'] else f" Force Charge"
+        result += f" Charge from grid" if t['enableGrid'] else f" Battery Hold"
     return result
 
 def set_charge(ch1=None, st1=None, en1=None, ch2=None, st2=None, en2=None, force=0, enable=1):
@@ -1748,9 +1748,7 @@ def plot_raw(result, plot=1, station=0):
 def report_value_profile(result):
     if type(result) is not list or result[0]['type'] != 'day':
         return (None, None)
-    data = []
-    for h in range(0,24):
-        data.append((0.0, 0)) # value sum, count of values
+    data = [(0.0, 0) for h in range(0,24)]
     totals = 0
     n = 0
     for day in result:
@@ -1779,6 +1777,30 @@ def report_value_profile(result):
 
 # forwards compatibility
 get_history = get_raw
+
+# rescale history data based on time and steps
+def rescale_history(data, steps):
+    if data is None or len(data) < 1:
+        return None
+    result = [None for i in range(0, 24 * steps)]
+    bst = 1 if 'BST' in data[0]['time'] else 0
+    average = 0.0
+    n = 0
+    i = 0
+    for d in data:
+        h = round_time(time_hours(d['time'][11:]) + bst)
+        new_i = int(h * steps)
+        if new_i != i and i < len(result):
+            result[i] = average / n if n > 0 else None
+            average = 0.0
+            n = 0
+            i = new_i
+        if d['value'] is not None:
+            average += d['value']
+            n += 1
+    if n > 0 and i < len(result):
+        result[i] = average / n
+    return result
 
 ##################################################################################################
 # get energy report data in kWh
@@ -2780,8 +2802,8 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
     global charge_config, steps_per_hour
     allowed_drain = charge_config['allowed_drain'] if charge_config.get('allowed_drain') is not None else 4
     bms_loss = (charge_config['bms_power'] / 1000 if charge_config.get('bms_power') is not None else 0.05)
-    charge_loss = charge_config['charge_loss']
-    discharge_loss = charge_config['discharge_loss']
+    charge_loss = charge_config['_charge_loss']
+    discharge_loss = charge_config['_discharge_loss']
     charge_limit = charge_config['charge_limit']
     float_charge = charge_config['float_charge']
     run_time = len(work_mode_timed)
@@ -2874,6 +2896,8 @@ charge_config = {
     'dc_ac_loss': 0.970,              # loss converting battery DC power to AC grid power
     'pv_loss': 0.950,                 # loss converting PV power to DC battery charge power
     'ac_dc_loss': 0.963,              # loss converting AC grid power to DC battery charge power
+    'charge_loss': None,              # loss converting charge energy to stored energy
+    'discharge_loss': None,           # loss converting stored energy to discharge energy
     'inverter_power': 101,            # Inverter power consumption in W
     'bms_power': 50,                  # BMS power consumption in W
     'force_charge_power': 5.00,       # charge power in kW when using force charge
@@ -3026,8 +3050,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         bat_power = 0.0
         temperature = 30
         bms_charge_current = 15
-        charge_loss = battery_params[2]['charge_loss']
-        discharge_loss = battery_params[2]['discharge_loss']
+        charge_loss = charge_config['charge_loss'] if charge_config.get('charge_loss') is not None else battery_params[2]['charge_loss']
+        discharge_loss = charge_config['discharge_loss'] if charge_config.get('discharge_loss') is not None else battery_params[2]['discharge_loss']
         bat_current = 0.0
         device_power = 6.0
         device_current = 35
@@ -3049,8 +3073,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
         bms_charge_current = battery.get('charge_rate')
-        charge_loss = battery['charge_loss'] if battery.get('charge_loss') is not None else 0.974
-        discharge_loss = battery['discharge_loss'] if battery.get('discharge_loss') is not None else 0.974
+        charge_loss = charge_config['charge_loss'] if charge_config.get('charge_loss') is not None else battery['charge_loss'] if battery.get('charge_loss') is not None else 0.974
+        discharge_loss = charge_config['discharge_loss'] if charge_config.get('discharge_loss') is not None else battery['discharge_loss'] if battery.get('discharge_loss') is not None else 0.974
         device_power = device.get('power')
         device_current = device.get('max_charge_current')
         model = device.get('deviceType')
@@ -3079,7 +3103,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     output(f"  Temperature: {temperature:.1f}°C")
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
-    output(f"  Losses:      {charge_loss * 100:.1f}% charge / {discharge_loss * 100:.1f}% discharge")
+    output(f"  Losses:      {charge_loss * 100:.1f}% charge / {discharge_loss * 100:.1f}% discharge", 2)
     # inverter losses
     inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     operating_loss = inverter_power / 1000
@@ -3108,8 +3132,8 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     charge_config['charge_limit'] = charge_limit
     charge_config['charge_power'] = charge_power
     charge_config['float_charge'] = float_charge
-    charge_config['charge_loss'] = charge_loss
-    charge_config['discharge_loss'] = discharge_loss
+    charge_config['_charge_loss'] = charge_loss
+    charge_config['_discharge_loss'] = discharge_loss
     # display what we have
     output(f"\ncharge_config = {json.dumps(charge_config, indent=2)}", 3)
     output(f"\nDevice Info:")
@@ -4304,17 +4328,9 @@ class Solcast :
         total_actual = None
         self.actual = get_history('day', d=day, v=v)
         plots = {}
+        times = [i/2 for i in range(0, 48)]
         for v in self.actual:
-            times = []
-            actual_values = []
-            average = 0.0
-            for i in range(0, len(v.get('data'))):
-                average += v['data'][i]['value'] / 6
-                if i % 6 == 5:
-                    times.append(round_time((i - 5) / 12))
-                    actual_values.append(average)
-                    average = 0
-            plots[v['variable']] = actual_values
+            plots[v['variable']] = rescale_history(v.get('data'), 2)
             if v['variable'] == 'pvPower':
                 total_actual = v.get('kwh')
         if total_actual is None:
@@ -4346,10 +4362,10 @@ class Solcast :
             forecast_values = [self.daily[day]['pt30'][hours_time(t - time_offset)] for t in times]
             total_forecast = sum(forecast_values) / 2
             plots['forecast'] = forecast_values
-        if total_actual is not None:
-            print(f"  Total actual: {total_actual:.3f}kWh")
         if total_forecast is not None:
             print(f"  Total forecast: {total_forecast:.3f}kWh")
+        if total_actual is not None:
+            print(f"  Total actual: {total_actual:.3f}kWh")
         print()
         title = f"Forecast / Actual PV Power on {day}"
         plt.figure(figsize=(figure_width, figure_width/3))
@@ -4637,17 +4653,9 @@ class Solar :
         total_actual = None
         self.actual = get_history('day', d=day, v=v)
         plots = {}
+        times = [i/2 for i in range(0, 48)]
         for v in self.actual:
-            times = []
-            actual_values = []
-            average = 0.0
-            for i in range(0, len(v.get('data'))):
-                average += v['data'][i]['value'] / 6
-                if i % 6 == 5:
-                    times.append(round_time((i - 5) / 12))
-                    actual_values.append(average)
-                    average = 0
-            plots[v['variable']] = actual_values
+            plots[v['variable']] = rescale_history(v.get('data'), 2)
             if v['variable'] == 'pvPower':
                 total_actual = v.get('kwh')
         if total_actual is None:
@@ -4677,10 +4685,10 @@ class Solar :
             forecast_values = [self.daily[day]['pt30'][hours_time(t)] for t in times]
             total_forecast = sum(forecast_values) / 2
             plots['forecast'] = forecast_values
-        if total_actual is not None:
-            print(f"  Total actual: {total_actual:.3f}kWh")
         if total_forecast is not None:
             print(f"  Total forecast: {total_forecast:.3f}kWh")
+        if total_actual is not None:
+            print(f"  Total actual: {total_actual:.3f}kWh")
         print()
         title = f"Forecast / Actual PV Power on {day}"
         plt.figure(figsize=(figure_width, figure_width/3))

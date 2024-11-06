@@ -314,7 +314,7 @@ The previous section provides functions that can be used to access and control y
 Uses forecast PV yield for tomorrow to work out if charging from grid is needed tonight to deliver the expected consumption for tomorrow. If charging is needed, the charge times are configured. If charging is not needed, the charge times are cleared. The results are sent to the inverter.
 
 ```
-f.charge_needed(forecast, force_charge, forecast_selection, forecast_times, update_setings, show_data, show_plot)
+f.charge_needed(forecast, force_charge, forecast_selection, forecast_times, update_setings, show_data, show_plot, timed_mode)
 ```
 
 All the parameters are optional:
@@ -325,6 +325,7 @@ All the parameters are optional:
 + update_settings: 0 no changes, 1 update charge settings. The default is 0
 + show_data: 1 show battery SoC data, 2 show battery Residual data, 3 show timed data. The default is 1.
 + show_plot: 1 plot battery SoC data. 2 plot battery Residual, Generation and Consumption. 3 plot 2 + Charge and Discharge The default is 3
++ timed_mode: 0 use charge times, 1 use charge times and follow strategy, 2 use Mode Scheduler
 
 ### Modelling
 
@@ -367,6 +368,8 @@ export_limit: None             # maximum export power in kW. None uses the inver
 dc_ac_loss: 0.970              # loss converting battery DC power to AC grid power
 pv_loss: 0.950                 # loss converting PV power to DC battery charge power
 ac_dc_loss: 0.960              # loss converting AC grid power to DC battery charge power
+charge_loss: None              # loss converting charge energy to stored energy
+discharge_loss: None           # loss converting stored energy to discharge energy
 inverter_power: None           # inverter power consumption in W (dynamically set)
 bms_power: 50                  # BMS power consumption in W
 force_charge_power: 5.00       # power used when Force Charge is scheduled
@@ -778,6 +781,11 @@ This setting can be:
 
 
 # Version Info
+
+1.8.1<br>
+Allow charge_loss / discharge_loss to be configured for charge_needed().
+Change 'Force Charge' to 'Battery Hold' in charge times to avoid confusion with Force Charge work mode.
+Correct problem with missing periods of actual data in forecast.compare()
 
 1.8.0<br>
 Add set_named_settings() for ExportLimit.
