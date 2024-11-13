@@ -144,12 +144,12 @@ set_min() applies new SoC settings to the inverter. The parameters update batter
 + minSoc: min Soc setting e.g. 10 = 10%
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
-+ ch1: enable charge from grid for period 1 (True or False)
-+ st1: the start time for period 1
-+ en1: the end time for period 1
-+ ch2: enable charge from grid for period 2 (True or False)
-+ st2: the start time for period 2
-+ en2: the end time for period 2
++ ch1: enable charge from grid for period 1 (default True)
++ st1: the start time for period 1 (default 0)
++ en1: the end time for period 1 (default 0)
++ ch2: enable charge from grid for period 2 (default True)
++ st2: the start time for period 2 (default 0)
++ en2: the end time for period 2 (default 0)
 + enable: set to 0 to show settings but stop inverter settings being updated. Default is 1.
 
 set_period() returns a period structure that can be used to build a list for set_schedule()
@@ -792,6 +792,16 @@ This setting can be:
 
 
 # Version Info
+
+2.7.1<br>
+Update charge_needed() so it only gets generation history if there is no forecast to reduce API calls and save time.
+Update default parameter values for set_charge() so the other time period is cleared if you only set 1 time.
+Fix problem where a full charge was being set when charge_needed() is called with force_charge=1.
+Move charging to the end of the charge time when force_charge=1 so the charge time completes with the required charge.
+Update battery predictions to more accurately reflect what happens when SoC gets to min_soc or fd_soc.
+Correct model to use inverter operating losses instead of BMS losses when the battery is above min_soc.
+Correct exception in Solcast and Solar when a forecast is not available.
+
 
 2.7.0<br>
 Allow charge_loss / discharge_loss to be configured for charge_needed().
