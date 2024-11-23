@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  07 November 2024
+Updated:  23 November 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.2"
+version = "1.8.3"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -615,6 +615,7 @@ def get_battery(info=1, rated=None, count=None):
     if get_device() is None:
         return None
     output(f"getting battery", 2)
+    battery = None
     params = {'id': device_id}
     response = signed_get(path="/c/v0/device/battery/info", params=params)
     if response.status_code != 200:
@@ -625,11 +626,8 @@ def get_battery(info=1, rated=None, count=None):
         errno = response.json().get('errno')
         output(f"** get_battery(), no result data, {errno_message(errno)}")
         return None
-    saved_info = battery['info'] if battery is not None and battery.get('info') is not None else None
     battery = result
-    if saved_info is not None:
-        battery['info'] = saved_info
-    elif info == 1:
+    if info == 1:
         response = signed_get(path="/generic/v0/device/battery/list", params=params)
         if response.status_code != 200:
             output(f"** get_battery().info got response code {response.status_code}: {response.reason}")
@@ -649,6 +647,9 @@ def get_battery(info=1, rated=None, count=None):
     battery['residual_handling'] = residual_handling
     battery['soh'] = None
     battery['soh_supported'] = False
+    if battery.get('status') is None or battery['status'] != 1:
+        output(f"** get_battery(): battery status not available")
+        return None
     if battery.get('residual') is not None:
         battery['residual'] /= 1000
     if battery['residual_handling'] == 2:
@@ -680,9 +681,9 @@ def get_battery(info=1, rated=None, count=None):
     battery['charge_loss'] = params['charge_loss']
     battery['discharge_loss'] = params['discharge_loss']
     if battery.get('ratedCapacity') is not None and battery.get('capacity') is not None:
-        battery['soh'] = round(battery['capacity'] * 1000 / battery['ratedCapacity'] * 100, 1)
+        battery['soh'] = round(battery['capacity'] * 1000 / battery['ratedCapacity'] * 100, 1) if battery['ratedCapacity'] > 0.0 else None
     if battery.get('temperature') is not None:
-        battery['charge_rate'] = params['table'][int((battery['temperature'] - params['offset']) / params['step'])]
+        battery['charge_rate'] = interpolate((battery['temperature'] - params['offset']) / params['step'], params['table'])
     return battery
 
 def get_batteries(info=1, rated=None, count=None):
@@ -690,6 +691,7 @@ def get_batteries(info=1, rated=None, count=None):
     if get_device() is None:
         return None
     output(f"getting batteries", 2)
+    batteries = None
     params = {'id': device_id}
     response = signed_get(path="/generic/v0/device/battery/info", params=params)
     if response.status_code != 200:
@@ -722,6 +724,9 @@ def get_batteries(info=1, rated=None, count=None):
     while len(count) < len(batteries):
         count.append(None)
     for i,b in enumerate(batteries):
+        if b.get('status') is None or b['status'] != 1:
+            output(f"** get_batteries(): battery {i+1} status not available")
+            continue
         b['residual_handling'] = residual_handling
         if b.get('info') is not None:
             if b['info'].get('slaveBatteries') is not None:
@@ -738,6 +743,8 @@ def get_batteries(info=1, rated=None, count=None):
         b['soh'] = int(soh) if soh.isnumeric() and int(soh) > 10 else None
         b['soh_supported'] = b['soh'] is not None
     for i, b in enumerate(batteries):
+        if b.get('status') is None or b['status'] != 1:
+            continue
         if i == 0:
             residual_handling = b['residual_handling']
             get_battery(info=0)
@@ -751,13 +758,13 @@ def get_batteries(info=1, rated=None, count=None):
             residual = b['capacity'] * b['soc'] / 100
             b['residual'] = round(residual, 3)
         if b.get('ratedCapacity') is not None and b.get('capacity') is not None:
-            b['soh'] = round(b['capacity'] * 1000 / b['ratedCapacity'] * 100, 1)
+            b['soh'] = round(b['capacity'] * 1000 / b['ratedCapacity'] * 100, 1) if b['ratedCapacity'] > 0.0 else None
         b['charge_rate'] = None
         params = battery_params[b['residual_handling']]
         b['charge_loss'] = params['charge_loss']
         b['discharge_loss'] = params['discharge_loss']
         if b.get('temperature') is not None:
-            b['charge_rate'] = params['table'][int((b['temperature'] - params['offset']) / params['step'])]
+            b['charge_rate'] = interpolate((b['temperature'] - params['offset']) / params['step'], params['table'])
     return batteries
 
 ##################################################################################################
@@ -801,7 +808,7 @@ def time_period(t):
         result += f" Charge from grid" if t['enableGrid'] else f" Battery Hold"
     return result
 
-def set_charge(ch1=0, st1=0, en1=True, ch2=0, st2=0, en2=True, force=0, enable=1):
+def set_charge(ch1=True, st1=0, en1=0, ch2=True, st2=0, en2=0, force=0, enable=1):
     global device_sn, battery_settings, debug_setting, messages, schedule
     if get_device() is None:
         return None
@@ -3060,7 +3067,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"full_charge = {full_charge}")
     if test_soc is not None:
         current_soc = test_soc
-        capacity = 14.46
+        capacity = 14.43
         residual = test_soc * capacity / 100
         bat_volt = 317.4
         bat_power = 0.0
@@ -3076,7 +3083,6 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     # get device and battery info from inverter
         get_battery()
         if battery is None or battery['status'] != 1:
-            output(f"\nBattery status is not available")
             return None
         current_soc = battery['soc']
         bat_volt = battery['volt']
@@ -3192,26 +3198,19 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     consumption_timed = timed_list([consumption * x / daily_sum for x in consumption_by_hour], base_hour, run_time)
     # get Solcast data and produce time line
     solcast_value = None
-    solcast_profile = None
     if forecast is None and solcast_api_key is not None and solcast_api_key != 'my.solcast_api_key' and (system_time.hour in forecast_times or run_after == 0):
         fsolcast = Solcast(quiet=True, reload=reload, shading=charge_config.get('shading'), d=base_time)
         if fsolcast is not None and hasattr(fsolcast, 'daily') and fsolcast.daily.get(forecast_day) is not None:
             solcast_value = fsolcast.daily[forecast_day]['kwh']
             solcast_timed = forecast_value_timed(fsolcast, today, tomorrow, base_hour, run_time, time_offset)
-            solcast_from = time_hours(fsolcast.daily[today]['from']) if fsolcast.daily[today].get('from') is not None else 0
-            output(f"\nSolcast: {tomorrow} {fsolcast.daily[tomorrow]['kwh']:.1f}kWh")
     # get forecast.solar data and produce time line
     solar_value = None
-    solar_profile = None
     if forecast is None and solar_arrays is not None and (system_time.hour in forecast_times or run_after == 0):
         fsolar = Solar(quiet=True, shading=charge_config.get('shading'), d=base_time)
         if fsolar is not None and hasattr(fsolar, 'daily') and fsolar.daily.get(forecast_day) is not None:
             solar_value = fsolar.daily[forecast_day]['kwh']
             solar_timed = forecast_value_timed(fsolar, today, tomorrow, base_hour, run_time, 0)
-            output(f"\nSolar: {tomorrow} {fsolar.daily[tomorrow]['kwh']:.1f}kWh")
-    if solcast_value is None and solar_value is None and debug_setting > 1:
-        output(f"\nNo forecasts available at this time")
-    # choose expected value and produce generation time line
+    # choose expected value
     quarter = int(today[5:7] if charge_today else tomorrow[5:7]) // 3 % 4
     sun_name = seasonal_sun[quarter]['name']
     sun_profile = seasonal_sun[quarter]['sun']
@@ -3225,9 +3224,11 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
     elif solcast_value is not None:
         expected = solcast_value
         generation_timed = solcast_timed
+        output(f"\nSolcast: {tomorrow} {fsolcast.daily[tomorrow]['kwh']:.1f}kWh")
     elif solar_value is not None:
         expected = solar_value
         generation_timed = solar_timed
+        output(f"\nSolar: {tomorrow} {fsolar.daily[tomorrow]['kwh']:.1f}kWh")
     else:
         # no forecast, use generation history
         generation = None

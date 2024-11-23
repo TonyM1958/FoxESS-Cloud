@@ -782,6 +782,14 @@ This setting can be:
 
 # Version Info
 
+1.8.3<br>
+Fix to get_battery() to return error and flag status=0 in f.battery when the cloud is not returning valid data.
+Fix get_batteries() to flag and skip over any battery where status=0.
+Fix exception calculating SoH if ratedCapacity is returned as 0 when cloud is not returning valid data.
+Update charge_rate in charge_needed() to use a blended charge rate based on battery warming up during charging.
+Fix exception in set_charge() caused by incorrect default parameter values.
+Update charge_needed() to only show forecast that is in use.
+
 1.8.2<br>
 Update charge_needed() so it only gets generation history if there is no forecast to reduce API calls and save time.
 Update default parameter values for set_charge() so the other time period is cleared if you only set 1 time.

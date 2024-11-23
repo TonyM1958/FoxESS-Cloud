@@ -793,6 +793,13 @@ This setting can be:
 
 # Version Info
 
+2.7.2<br>
+Fix to get_battery() to return error and flag status=0 in f.battery when the cloud is not returning valid data.
+Fix exception calculating SoH if ratedCapacity is returned as 0 when cloud is not returning valid data.
+Update charge_rate in charge_needed() to use a blended charge rate based on battery warming up during charging.
+Fix exception in set_charge() caused by incorrect default parameter values.
+Update charge_needed() to only show forecast that is in use.
+
 2.7.1<br>
 Update charge_needed() so it only gets generation history if there is no forecast to reduce API calls and save time.
 Update default parameter values for set_charge() so the other time period is cleared if you only set 1 time.
@@ -801,7 +808,6 @@ Move charging to the end of the charge time when force_charge=1 so the charge ti
 Update battery predictions to more accurately reflect what happens when SoC gets to min_soc or fd_soc.
 Correct model to use inverter operating losses instead of BMS losses when the battery is above min_soc.
 Correct exception in Solcast and Solar when a forecast is not available.
-
 
 2.7.0<br>
 Allow charge_loss / discharge_loss to be configured for charge_needed().
