@@ -793,6 +793,9 @@ This setting can be:
 
 # Version Info
 
+2.7.4<br>
+Update to support T series inverters.
+
 2.7.3<br>
 Fix divide by zero error if get_report() returns no data.
 

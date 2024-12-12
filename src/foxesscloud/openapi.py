@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 December 2024
+Updated:  13 December 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.7.3"
+version = "2.7.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -481,7 +481,8 @@ def get_device(sn=None):
 #    remote_settings = get_ui()
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper()
-    # first 2 letters / numbers e.g. H1, H3, KH
+    if model_code[:1] == 'T':
+        model_code = 'T3-' + model_code[1:]
     if model_code[:2] == 'KH':
         model_code = 'KH-' + model_code[2:]
     elif model_code[:4] == 'AIO-':
@@ -489,7 +490,7 @@ def get_device(sn=None):
     device['eps'] = 'E' in model_code
     parts = model_code.split('-')
     model = parts[0]
-    if model not in ['KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
+    if model not in ['T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
         output(f"** device model not recognised for deviceType: {device['deviceType']}")
         return device
     device['model'] = model
@@ -497,13 +498,15 @@ def get_device(sn=None):
     for p in parts[1:]:
         if p.replace('.','').isnumeric():
             power = float(p)
-            if power >= 1.0 and power < 20.0:
+            if power >= 1.0 and power < 50.0:
                 device['power'] = float(p)
             break
     if device.get('power') is None:
         output(f"** device power not found for deviceType: {device['deviceType']}")
     # set max charge current
-    if model in ['KH']:
+    if model in ['T3']:
+        device['max_charge_current'] = None
+    elif model in ['KH']:
         device['max_charge_current'] = 50
     elif model in ['H1', 'AC1']:
         device['max_charge_current'] = 35
@@ -693,7 +696,8 @@ def set_charge(ch1=True, st1=0, en1=0, ch2=True, st2=0, en2=0, force = 0, enable
         battery_settings['times']['enable2']    = False
         battery_settings['times']['startTime2'] = {'hour': 0, 'minute': 0}
         battery_settings['times']['endTime2']   = {'hour': 0, 'minute': 0}
-    if get_flag().get('enable') == 1:
+    flag = get_flag()
+    if flag is not None and flag.get('enable') == 1:
         if force == 0:
             output(f"** set_charge(): cannot set charge when a schedule is enabled")
             return None
@@ -1002,7 +1006,8 @@ def get_flag():
         return None
     result = response.json().get('result')
     if result is None:
-        output(f"** get_flag(), no result data, {errno_message(response)}")
+        if errno == 40256:
+            output(f"** get_flag(), not suported on this device")
         return None
     if schedule is None:
         schedule = {'enable': None, 'support': None, 'periods': None}

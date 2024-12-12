@@ -782,6 +782,9 @@ This setting can be:
 
 # Version Info
 
+1.8.5<br>
+Update to support T series inverters.
+
 1.8.4<br>
 Update to get_report() after Fox moved the end-point.
 Fix to divide by zero error if get_report() returns no data.
