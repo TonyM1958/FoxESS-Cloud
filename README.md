@@ -793,6 +793,9 @@ This setting can be:
 
 # Version Info
 
+2.7.3<br>
+Fix divide by zero error if get_report() returns no data.
+
 2.7.2<br>
 Fix to get_battery() to return error and flag status=0 in f.battery when the cloud is not returning valid data.
 Fix exception calculating SoH if ratedCapacity is returned as 0 when cloud is not returning valid data.

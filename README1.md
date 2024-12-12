@@ -782,6 +782,10 @@ This setting can be:
 
 # Version Info
 
+1.8.4<br>
+Update to get_report() after Fox moved the end-point.
+Fix to divide by zero error if get_report() returns no data.
+
 1.8.3<br>
 Fix to get_battery() to return error and flag status=0 in f.battery when the cloud is not returning valid data.
 Fix get_batteries() to flag and skip over any battery where status=0.

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  23 November 2024
+Updated:  12 December 2024
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.3"
+version = "1.8.4"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1781,7 +1781,7 @@ def report_value_profile(result):
     current_total = sum(by_hour)
     result = []
     for t in range(0, 24):
-        result.append(by_hour[t] * daily_average / current_total)
+        result.append(by_hour[t] * daily_average / current_total if current_total != 0.0 else 0.0)
     return (daily_average, result)
 
 # forwards compatibility
@@ -1840,7 +1840,7 @@ def get_report(report_type='day', d=None, v=None, summary=1, save=None, load=Non
         return None
     id_name = 'deviceID' if station == 0 else 'stationID'
     id_code = device_id if station == 0 else station_id
-    query_path = '/c/v0/device/history/report' if station == 0 else '/c/v0/plant/history/report'
+    query_path = '/generic/w/v0/device/history/report' if station == 0 else '/generic/w/v0/plant/history/report'
     # process list of days
     if d is not None and type(d) is list:
         result_list = []
@@ -3067,7 +3067,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"full_charge = {full_charge}")
     if test_soc is not None:
         current_soc = test_soc
-        capacity = 14.43
+        capacity = 14.40
         residual = test_soc * capacity / 100
         bat_volt = 317.4
         bat_power = 0.0
