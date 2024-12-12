@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.5"
+version = "1.8.6"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1249,9 +1249,6 @@ def get_flag():
         return None
     result = response.json().get('result')
     if result is None:
-        errno = response.json().get('errno')
-        if errno == 40256:
-            output(f"** get_flag(), not suported on this device")
         return None
     if schedule is None:
         schedule = {'enable': None, 'support': None, 'pollcy': None}

@@ -793,7 +793,7 @@ This setting can be:
 
 # Version Info
 
-2.7.4<br>
+2.7.5<br>
 Update to support T series inverters.
 
 2.7.3<br>

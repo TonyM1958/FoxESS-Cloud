@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.7.4"
+version = "2.7.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1006,8 +1006,6 @@ def get_flag():
         return None
     result = response.json().get('result')
     if result is None:
-        if errno == 40256:
-            output(f"** get_flag(), not suported on this device")
         return None
     if schedule is None:
         schedule = {'enable': None, 'support': None, 'periods': None}
