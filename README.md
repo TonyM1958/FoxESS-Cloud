@@ -793,6 +793,11 @@ This setting can be:
 
 # Version Info
 
+2.7.6<br>
+Updates to support F, G, R and S series inverters.
+Updates to set_named_settings() to load metadata if not already done and save new value.
+Fix divide by zero error when using pvoutput with solar only inverters.
+
 2.7.5<br>
 Update to support T series inverters.
 

@@ -782,6 +782,10 @@ This setting can be:
 
 # Version Info
 
+1.8.7<br>
+Updates to support F, G, R and S series inverters.
+Fix divide by zero error when using pvoutput with solar only inverters.
+
 1.8.6<br>
 Update to support T series inverters.
 

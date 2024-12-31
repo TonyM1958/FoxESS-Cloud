@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.7.5"
+version = "2.7.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -419,7 +419,7 @@ device_list = None
 device = None
 device_sn = None
 
-def get_device(sn=None):
+def get_device(sn=None, device_type=None):
     global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings
     if get_vars() is None:
         return None
@@ -480,31 +480,32 @@ def get_device(sn=None):
     get_generation()
 #    remote_settings = get_ui()
     # parse the model code to work out attributes
-    model_code = device['deviceType'].upper()
-    if model_code[:1] == 'T':
-        model_code = 'T3-' + model_code[1:]
-    if model_code[:2] == 'KH':
+    model_code = device['deviceType'].upper() if device_type is None else device_type
+    if model_code[0] in 'FGRST':
+        phase = '1' if model_code[0] in 'FGS' else '3'
+        model_code = model_code[0] + phase + '-' + model_code[1:]
+    elif model_code[:2] == 'KH':
         model_code = 'KH-' + model_code[2:]
     elif model_code[:4] == 'AIO-':
         model_code = 'AIO' + model_code[4:]
-    device['eps'] = 'E' in model_code
+    device['eps'] = 'E' in model_code[2:]
     parts = model_code.split('-')
     model = parts[0]
-    if model not in ['T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
+    if model not in ['F1', 'G1', 'R3', 'S1', 'T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
         output(f"** device model not recognised for deviceType: {device['deviceType']}")
         return device
     device['model'] = model
     device['phase'] = 3 if model[-1:] == '3' else 1
     for p in parts[1:]:
         if p.replace('.','').isnumeric():
-            power = float(p)
-            if power >= 1.0 and power < 50.0:
-                device['power'] = float(p)
+            power = float(p)  / (1000 if model in ['F1', 'S1'] else 1.0)
+            if power >= 0.5 and power < 100.0:
+                device['power'] = power
             break
     if device.get('power') is None:
         output(f"** device power not found for deviceType: {device['deviceType']}")
     # set max charge current
-    if model in ['T3']:
+    if model in ['F1', 'G1', 'R3', 'S1', 'T3']:
         device['max_charge_current'] = None
     elif model in ['KH']:
         device['max_charge_current'] = 50
@@ -842,7 +843,7 @@ def get_settings():
 named_settings = {}
 
 def get_remote_settings(name):
-    global device_sn, debug_setting, messages, name_data
+    global device_sn, debug_setting, messages, name_data, named_settings
     if get_device() is None:
         return None
     output(f"getting remote settings", 2)
@@ -878,7 +879,7 @@ def get_named_settings(name):
     return get_remote_settings(name)
 
 def set_named_settings(name, value, force=0):
-    global device_sn, debug_setting
+    global device_sn, debug_setting, named_settings
     if get_device() is None:
         return None
     if force == 1 and get_schedule().get('enable'):
@@ -888,6 +889,10 @@ def set_named_settings(name, value, force=0):
         for (n, v) in name:
             result.append(set_named_settings(name=n, value=v))
         return result
+    if named_settings.get(name) is None:
+        result = get_named_settings(name)
+        if result is None:
+            return None
     output(f"\nSetting {name} to {value}", 1)
     body = {'sn': device_sn, 'key': name, 'value': f"{value}"}
     setting_delay()
@@ -901,8 +906,9 @@ def set_named_settings(name, value, force=0):
             output(f"** cannot update {name} when schedule is active")
         else:
             output(f"** set_named_settings(): ({name}, {value}) {errno_message(response)}")
-        return 0
-    return 1
+        return None
+    named_settings[name]['value'] = f"{value}"
+    return value
 
 ##################################################################################################
 # wrappers for named settings
@@ -2730,7 +2736,7 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         output(f"full_charge = {full_charge}")
     if test_soc is not None:
         current_soc = test_soc
-        capacity = 14.40
+        capacity = 14.36
         residual = test_soc * capacity / 100
         bat_volt = 317.4
         bat_power = 0.0
@@ -3583,7 +3589,7 @@ def get_pvoutput(d = None, tou = 0):
     export_tou = ',,,'
     # process list of report_data values (no TOU)
     for var in report_data:
-        wh = int(var['total'] * 1000)
+        wh = int(var['total'] * 1000) if var['total'] is not None else 0
         if var['variable'] == 'feedin':
             export_wh = wh 
             export = f"{wh},"
