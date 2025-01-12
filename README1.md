@@ -602,7 +602,7 @@ f.get_pvoutput(d, tou)
 ```
 
 + d is the date or a list of dates, to get data for. The default is yesterday.
-+ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate.
++ tou: the default, tou=0, does not split data and is more accurate. Setting tou=1 uploads data with time of use. Setting tou=2 integrates all values and allows set_pvoutput() to work with pv inverters that do not provide energy stats.
 + setting integrate_load_power to 1 will calculate load energy by integrating the load power instead of using data from Fox. This tries to overcome the limitation where the inverter does not track load power / energy correctly when there is secondary generation. When set to 0 (default), the  Fox load energy is used.
 
 You can copy and paste the output data to the pvoutput data CSV Loader, using the following settings:
@@ -625,7 +625,7 @@ f.set_pvoutput(d, system_id, tou, push, run_after)
 
 + d is optional and is the date, or a list of dates, to upload
 + system_id is optional and allow you to select where data is uploaded to (where you have more than 1 registered system)
-+ tou: optional, setting tou=1 uploads data with time of use. The default, tou=0 does not split data and is more accurate
++ tou: the default, tou=0, does not split data and is more accurate. Setting tou=1 uploads data with time of use. Setting tou=2 integrates all values and allows set_pvoutput() to work with pv inverters that do not provide energy stats.
 + push: optional. 0 = do not sent to pushover, 1 = send summary to pushover, 2 = send first day summary only
 + run_after: optional. Only generate data on or after this hour. Default 0.
 
@@ -781,6 +781,10 @@ This setting can be:
 
 
 # Version Info
+
+1.8.8<br>
+Updates to get_pvoutput() to support solar inverters that don't provide grid energy by setting tou=2.
+Default tariff changed to None.
 
 1.8.7<br>
 Updates to support F, G, R and S series inverters.

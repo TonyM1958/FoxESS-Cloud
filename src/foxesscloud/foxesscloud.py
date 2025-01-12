@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  13 December 2024
+Updated:  11 January 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.7"
+version = "1.8.8"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2380,7 +2380,7 @@ custom_periods = {'name': 'Custom',
     }
 
 tariff_list = [octopus_flux, intelligent_octopus, octopus_cosy, octopus_go, agile_octopus, bg_driver, eon_drive, economy_7, custom_periods]
-tariff = octopus_flux
+tariff = None
 
 ##################################################################################################
 # Strategy - schedule templates
@@ -3857,18 +3857,19 @@ integrate_load_power = 0
 ##################################################################################################
 
 # get pvoutput data for upload to pvoutput api or via Bulk Loader
-# tou: 0 = no time of use, 1 = use time of use periods if available
+# tou: 0 = no time of use, 1 = use time of use periods if available, 2 = integrate all values
 
 def get_pvoutput(d = None, tou = 0):
     global tariff, pv_calibration, ct2_calibration, integrate_load_power
     if d is None:
         d = date_list()[0]
-    tou = 0 if tariff is None else 1 if tou == 1 or tou == True else 0
     if type(d) is list:
         print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
         if tou == 1:
             print(f"Time of use: {tariff['name']}")
+        elif tou == 2:
+            print(f"All values integrated from power")
         if integrate_load_power == 1:
             print(f"Consumption integrated from Load Power")
         print(f"------------------------------------------------")
@@ -3882,12 +3883,15 @@ def get_pvoutput(d = None, tou = 0):
     v = ['feedin', 'gridConsumption']
     if integrate_load_power == 0:
         v.append('loads')
-    report_data = get_report('day', d=d, v=v, summary=2)
-    if report_data is None:
-        return None
+    if tou == 2:
+        report_data = []
+    else:
+        report_data = get_report('day', d=d, v=v, summary=2)
+        if report_data is None:
+            return None
     # get raw power data for the day
-    v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou == 1 else ['pvPower', 'meterPower2']
-    if integrate_load_power == 1:
+    v = ['pvPower', 'meterPower2', 'feedinPower', 'gridConsumptionPower'] if tou > 0 else ['pvPower', 'meterPower2']
+    if integrate_load_power == 1 or tou == 2:
         v.append('loadsPower')
     raw_data = get_raw('day', d=d + ' 00:00:00', v=v , summary=1)
     if raw_data is None or len(raw_data) == 0 or raw_data[0].get('kwh') is None or raw_data[0].get('max') is None:
@@ -3937,10 +3941,12 @@ def get_pvoutput(d = None, tou = 0):
             generate = f"{wh},"
             power = f"{int(var['max'] * 1000)},{var['max_time']},"
         elif var['variable'] == 'feedinPower':
+            export_wh = wh if tou == 2 else export_wh
             calibrate = export_wh / wh if wh > 0.0 else 1.0
             export = f","
             export_tou = f"{int(peak * calibrate)},{int(off_peak * calibrate)},{int((wh - peak - off_peak) * calibrate)},0"
         elif var['variable'] == 'gridConsumptionPower':
+            grid_wh = wh if tou == 2 else grid_wh
             calibrate = grid_wh / wh if wh > 0.0 else 1.0
             grid = f"{int(peak * calibrate)},{int(off_peak * calibrate)},{int((wh - peak - off_peak) * calibrate)},0,"
         elif var['variable'] == 'loadsPower':
