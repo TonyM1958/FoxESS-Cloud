@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  11 January 2025
+Updated:  28 January 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.8.8"
+version = "1.9.0"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -591,25 +591,29 @@ battery_settings = None
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 1
 
-# charge rates based on residual_handling
+# charge rates based on residual_handling. Index is bms temperature
 battery_params = {
-#    cell temp    -5  0   5  10  15  20  25  30  35  40  45  50 55
 #    bms temp      5 10  15  20  25  30  35  40  45  50  55  60 65 
+#    cell temp    -5  0   5  10  15  20  25  30  35  40  45  50 55
     1: {'table': [ 0, 2, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 0],
         'step': 5,
         'offset': 5,
         'charge_loss': 0.974,
         'discharge_loss': 0.974},
-    # HV BMS v2 with firmware 1.014 or later
-    2: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
+# HV BMS v2 with firmware 1.014 or later
+#    bms temp     10 15  20  25  30  35  40  45  50  55  60  65  70 
+#    cell temp     0  5  10  15  20  25  30  35  40  45  50  55  60
+    2: {'table': [ 0, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  0],
         'step': 5,
-        'offset': 5,
+        'offset': 11,
         'charge_loss': 1.08,
         'discharge_loss': 0.95},
-    # Mira BMS with firmware 1.014 or later
-    3: {'table': [ 0, 2, 10, 10, 15, 15, 25, 50, 50, 50, 30, 20, 0],
+# Mira BMS with firmware 1.014 or later
+#    bms temp     10 15  20  25  30  35  40  45  50  55  60  65  70 
+#    cell temp     0  5  10  15  20  25  30  35  40  45  50  55  60
+    3: {'table': [ 0, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  0],
         'step': 5,
-        'offset': 5,
+        'offset': 11,
         'charge_loss': 0.974,
         'discharge_loss': 0.974},
 }
@@ -2953,6 +2957,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 
 # work out the charge times to set using the parameters:
 #  forecast: the kWh expected tomorrow. If none, forecast data is loaded from solcast etc
+#  consumption: the kWh consumed. If none, consumption is loaded from history
 #  update_settings: 0 no updates, 1 update charge settings. The default is 0
 #  show_data: 1 shows battery SoC, 2 shows battery residual. Default = 0
 #  show_plot: 1 plots battery SoC, 2 plots battery residual. Default = 1
@@ -2960,7 +2965,7 @@ charge_needed_app_key = "awcr5gro2v13oher3v1qu6hwnovp28"
 #  forecast_times: list of hours when forecast can be fetched (UTC)
 #  force_charge: 1 = hold battery, 2 = charge for whole period
 
-def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
+def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode=None, show_data=None, show_plot=None, run_after=None, reload=2,
         forecast_times=None, force_charge=0, test_time=None, test_soc=None, test_charge=None, **settings):
     global device, seasonality, solcast_api_key, debug_setting, tariff, solar_arrays, legend_location, time_shift, charge_needed_app_key
     global timed_strategy, steps_per_hour, base_time, storage, battery, battery_params
@@ -3172,6 +3177,9 @@ def charge_needed(forecast=None, update_settings=0, timed_mode=None, show_data=N
         consumption = annual_consumption / 365 * seasonality[now.month - 1] / sum(seasonality) * 12
         consumption_by_hour = daily_consumption
         output(f"\nEstimated consumption: {consumption:.1f}kWh")
+    elif consumption is not None:
+        consumption_by_hour = daily_consumption
+        output(f"\nConsumption: {consumption:.1f}kWh")
     else:
         consumption_days = charge_config['consumption_days']
         consumption_days = 3 if consumption_days > 7 or consumption_days < 1 else consumption_days
@@ -3633,7 +3641,7 @@ def battery_info(log=0, plot=1, rated=None, count=None, info=1, bat=None):
     bat_current = bat['current']
     bat_power = bat['power']
     bms_temperature = bat['temperature']
-    capacity = bat['capacity']
+    capacity = bat.get('capacity')
     cell_volts = get_cell_volts()
     if cell_volts is None:
         output_close()
@@ -3678,7 +3686,8 @@ def battery_info(log=0, plot=1, rated=None, count=None, info=1, bat=None):
                     s +=f",{v:.0f}"
         return s
     output(f"Current SoC:         {current_soc}%")
-    output(f"Capacity:            {capacity:.2f}kWh" + (" (calculated)" if bat['residual_handling'] in [1,3] else ""))
+    if capacity is not None:
+        output(f"Capacity:            {capacity:.2f}kWh" + (" (calculated)" if bat['residual_handling'] in [1,3] else ""))
     output(f"Residual:            {residual:.2f}kWh" + (" (calculated)" if bat['residual_handling'] in [2,3] else ""))
     if rated_capacity is not None and bat_soh is not None:
         output(f"Rated Capacity:      {rated_capacity / 1000:.2f}kWh")
