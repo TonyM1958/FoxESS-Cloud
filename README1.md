@@ -784,6 +784,11 @@ This setting can be:
 
 # Version Info
 
+1.9.1<br>
+Add residual_scale for get_battery().
+Fix residual if capacity is specified for charge_needed().
+PVEnergyTotal added to report variables.
+
 1.9.0<br>
 Add 'consumption' input for charge_needed().
 Avoid throwing exception in battery_info() if there is no capacity info.

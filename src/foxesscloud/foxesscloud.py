@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  28 January 2025
+Updated:  12 March 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.0"
+version = "1.9.2"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -590,6 +590,7 @@ battery_settings = None
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 1
+residual_scale = 0.01
 
 # charge rates based on residual_handling. Index is bms temperature
 battery_params = {
@@ -619,7 +620,7 @@ battery_params = {
 }
 
 def get_battery(info=1, rated=None, count=None):
-    global device_id, battery, debug_setting, messages, residual_handling, battery_params
+    global device_id, battery, debug_setting, messages, residual_handling, battery_params, residual_scale
     if get_device() is None:
         return None
     output(f"getting battery", 2)
@@ -659,7 +660,7 @@ def get_battery(info=1, rated=None, count=None):
         output(f"** get_battery(): battery status not available")
         return None
     if battery.get('residual') is not None:
-        battery['residual'] /= 1000
+        battery['residual'] *= residual_scale / 10
     if battery['residual_handling'] == 2:
         capacity = battery.get('residual')
         soc = battery.get('soc')
@@ -1826,7 +1827,7 @@ def rescale_history(data, steps):
 # station = 0: use device_id, 1 = use station_id
 ##################################################################################################
 
-report_vars = ['yield', 'input','generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
+report_vars = ['PVEnergyTotal', 'input','generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
 report_names = ['PV Yield', 'Input', 'Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
 
 # fix power values after fox corrupts high word of 32-bit energy total
@@ -3093,7 +3094,10 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
         bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']
-        capacity = charge_config['capacity'] if charge_config.get('capacity') is not None else battery.get('capacity')
+        capacity = battery.get('capacity')
+        if charge_config.get('capacity') is not None:
+            capacity = charge_config['capacity']
+            residual = (capacity * current_soc / 100) if capacity is not None and current_soc is not None else None
         if capacity is None:
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None

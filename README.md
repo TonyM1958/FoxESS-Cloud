@@ -795,6 +795,11 @@ This setting can be:
 
 # Version Info
 
+2.8.0<br>
+Update from v0 to v1 for scheduler API.
+PVEnergyTotal added to report variables.
+Fix residual if capacity is specified for charge_needed().
+
 2.7.9<br>
 Add 'consumption' input for charge_needed().
 Avoid throwing exception in battery_info() if there is no capacity info.

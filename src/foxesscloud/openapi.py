@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  27 January 2025
+Updated:  12 March 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.7.9"
+version = "2.8.0"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1010,7 +1010,7 @@ def get_flag():
         return None
     output(f"getting flag", 2)
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v0/device/scheduler/get/flag", body=body)
+    response = signed_post(path="/op/v1/device/scheduler/get/flag", body=body)
     if response.status_code != 200:
         output(f"** get_flag() got response code {response.status_code}: {response.reason}")
         return None
@@ -1040,7 +1040,7 @@ def get_schedule():
         return None
     output(f"getting schedule", 2)
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v0/device/scheduler/get", body=body)
+    response = signed_post(path="/op/v1/device/scheduler/get", body=body)
     if response.status_code != 200:
         output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
@@ -1133,7 +1133,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode,
         'minSocOnGrid': int(min_soc), 'fdSoc': int(fdsoc), 'fdPwr': int(fdpwr)}
     if max_soc is not None:
-        period['maxsoc'] = int(max_soc)
+        period['maxSoc'] = int(max_soc)
     return period
 
 # set a schedule from a period or list of time segment periods
@@ -1160,7 +1160,7 @@ def set_schedule(periods=None, enable=True):
             output(f"** set_schedule(): maximum of 8 periods allowed, {len(periods)} provided")
         body = {'deviceSN': device_sn, 'groups': periods[-8:]}
         setting_delay()
-        response = signed_post(path="/op/v0/device/scheduler/enable", body=body)
+        response = signed_post(path="/op/v1/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() periods response code {response.status_code}: {response.reason}")
             return None
@@ -1171,7 +1171,7 @@ def set_schedule(periods=None, enable=True):
         schedule['periods'] = periods
     body = {'deviceSN': device_sn, 'enable': 1 if enable else 0}
     setting_delay()
-    response = signed_post(path="/op/v0/device/scheduler/set/flag", body=body)
+    response = signed_post(path="/op/v1/device/scheduler/set/flag", body=body)
     if response.status_code != 200:
         output(f"** set_schedule() flag response code {response.status_code}: {response.reason}")
         return None
@@ -1530,8 +1530,8 @@ def rescale_history(data, steps):
 # plot = 0: no plot, 1 = plot variables separately, 2 = combine variables
 ##################################################################################################
 
-report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
-report_names = ['Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
+report_vars = ['generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal', 'PVEnergyTotal']
+report_names = ['Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge', 'PV Yield']
 
 # fix power values after corruption of high word of 32-bit energy total
 fix_values = 1
@@ -2764,7 +2764,10 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
         bat_current = battery['current']
         temperature = battery['temperature']
         residual = battery['residual']
-        capacity = charge_config['capacity'] if charge_config.get('capacity') is not None else battery.get('capacity')
+        capacity = battery.get('capacity')
+        if charge_config.get('capacity') is not None:
+            capacity = charge_config['capacity']
+            residual = (capacity * current_soc / 100) if capacity is not None and current_soc is not None else None
         if capacity is None:
             output(f"Battery capacity could not be estimated. Please add the parameter 'capacity=xx' in kWh")
             return None
