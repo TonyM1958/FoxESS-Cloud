@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.0"
+version = "2.8.1"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1

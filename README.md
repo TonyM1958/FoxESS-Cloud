@@ -795,7 +795,7 @@ This setting can be:
 
 # Version Info
 
-2.8.0<br>
+2.8.1<br>
 Update from v0 to v1 for scheduler API.
 PVEnergyTotal added to report variables.
 Fix residual if capacity is specified for charge_needed().

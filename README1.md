@@ -784,6 +784,9 @@ This setting can be:
 
 # Version Info
 
+1.9.2<br>
+Update 'status' in get_battery() by checking 'volt' (mirrors fix in Open API code).
+
 1.9.1<br>
 Add residual_scale for get_battery().
 Fix residual if capacity is specified for charge_needed().

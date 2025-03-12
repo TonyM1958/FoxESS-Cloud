@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.2"
+version = "1.9.3"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -656,9 +656,12 @@ def get_battery(info=1, rated=None, count=None):
     battery['residual_handling'] = residual_handling
     battery['soh'] = None
     battery['soh_supported'] = False
+    if battery.get('status') is None:
+        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 0 else 1
     if battery.get('status') is None or battery['status'] != 1:
         output(f"** get_battery(): battery status not available")
         return None
+    battery['status'] = 1
     if battery.get('residual') is not None:
         battery['residual'] *= residual_scale / 10
     if battery['residual_handling'] == 2:
