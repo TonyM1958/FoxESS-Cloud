@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 March 2025
+Updated:  09 April 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.1"
+version = "2.8.2"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -597,11 +597,10 @@ def get_battery(info=0, v=None, rated=None, count=None):
     battery['soh'] = None
     battery['soh_supported'] = False
     if battery.get('status') is None:
-        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 0 else 1
-    if battery['status'] != 1:
+        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 10 else 1
+    if battery['status'] == 0:
         output(f"** get_battery(): battery status not available")
         return None
-    battery['status'] = 1
     if battery['residual_handling'] == 2:
         capacity = battery.get('residual')
         soc = battery.get('soc')
@@ -628,7 +627,6 @@ def get_battery(info=0, v=None, rated=None, count=None):
             battery['ratedCapacity'] = rated
     battery['capacity'] = round(capacity, 3)
     battery['residual'] = round(residual, 3)
-    battery['status'] = 1
     battery['charge_rate'] = None
     params = battery_params[battery['residual_handling']]
     battery['charge_loss'] = params['charge_loss']
@@ -2756,7 +2754,7 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
     else:
     # get device and battery info from inverter
         get_battery()
-        if battery is None or battery['status'] != 1:
+        if battery is None or battery['status'] == 0:
             return None
         current_soc = battery['soc']
         bat_volt = battery['volt']
@@ -4153,7 +4151,7 @@ class Solar :
                 if debug_setting > 0 and not quiet:
                     print(f"Getting data for {name} array")
                 path = f"{a['lat']}/{a['lon']}/{a['dec']}/{a['az']}/{a['kwp']}"
-                params = {'start': '00:00', 'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
+                params = {'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
                 response = requests.get(solar_url + self.api_key + 'estimate/' + path, params = params)
                 if response.status_code != 200:
                     if response.status_code == 429:

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  12 March 2025
+Updated:  09 April 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.3"
+version = "1.9.4"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -657,11 +657,10 @@ def get_battery(info=1, rated=None, count=None):
     battery['soh'] = None
     battery['soh_supported'] = False
     if battery.get('status') is None:
-        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 0 else 1
-    if battery.get('status') is None or battery['status'] != 1:
+        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 10 else 1
+    if battery.get('status') is None or battery['status'] == 0:
         output(f"** get_battery(): battery status not available")
         return None
-    battery['status'] = 1
     if battery.get('residual') is not None:
         battery['residual'] *= residual_scale / 10
     if battery['residual_handling'] == 2:
@@ -736,7 +735,7 @@ def get_batteries(info=1, rated=None, count=None):
     while len(count) < len(batteries):
         count.append(None)
     for i,b in enumerate(batteries):
-        if b.get('status') is None or b['status'] != 1:
+        if b.get('status') is None or b['status'] == 0:
             output(f"** get_batteries(): battery {i+1} status not available")
             continue
         b['residual_handling'] = residual_handling
@@ -755,7 +754,7 @@ def get_batteries(info=1, rated=None, count=None):
         b['soh'] = int(soh) if soh.isnumeric() and int(soh) > 10 else None
         b['soh_supported'] = b['soh'] is not None
     for i, b in enumerate(batteries):
-        if b.get('status') is None or b['status'] != 1:
+        if b.get('status') is None or b['status'] == 0:
             continue
         if i == 0:
             residual_handling = b['residual_handling']
@@ -3089,7 +3088,7 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
     else:
     # get device and battery info from inverter
         get_battery()
-        if battery is None or battery['status'] != 1:
+        if battery is None or battery['status'] == 0:
             return None
         current_soc = battery['soc']
         bat_volt = battery['volt']
@@ -4485,7 +4484,7 @@ class Solar :
                 if debug_setting > 0 and not quiet:
                     print(f"Getting data for {name} array")
                 path = f"{a['lat']}/{a['lon']}/{a['dec']}/{a['az']}/{a['kwp']}"
-                params = {'start': '00:00', 'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
+                params = {'no_sun': 1, 'damping': a['dam'], 'inverter': a['inv'], 'horizon': a['hor']}
                 response = requests.get(solar_url + self.api_key + 'estimate/' + path, params = params)
                 if response.status_code != 200:
                     if response.status_code == 429:

@@ -795,6 +795,10 @@ This setting can be:
 
 # Version Info
 
+2.8.2<br>
+Fix forecast.solar (after change to start parameter processing).
+Change logic around battery status so 0 is offline and others values are online.
+
 2.8.1<br>
 Update from v0 to v1 for scheduler API.
 PVEnergyTotal added to report variables.

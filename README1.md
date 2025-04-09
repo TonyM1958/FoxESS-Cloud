@@ -784,7 +784,11 @@ This setting can be:
 
 # Version Info
 
-1.9.2<br>
+1.9.4<br>
+Fix forecast.solar (after change to start parameter processing).
+Change logic around battery status so 0 is offline and others values are online.
+
+1.9.3<br>
 Update 'status' in get_battery() by checking 'volt' (mirrors fix in Open API code).
 
 1.9.1<br>
