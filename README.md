@@ -606,6 +606,17 @@ Plunge pricing allows for the automatic configuration of charging periods when A
 # PV Output
 These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
+## Calibration
+PV generation data is created using the Riemann sum of the PV power and CT2 power as the history of the stats provided by the Fox cloud can be unreliable. You can change the calibration factors used:
+
+```
+f.pv_calibration = 0.98
+f.ct2_calibration = 0.92
+```
+* pv_calibration is a DC calibration factor and is multiplied by the Riemann sum. The default calibration factor of 0.98 was derrived by comparing the total solar production calculated against the inverter generation data provided via Modbus over 12 months
+
+* ct2_calibration is an AC calibration factor and is the divisor for the Riemann sum. CT2 measures the AC power output by the inverter and this factor converts this back to the DC power coming from the solar panels into the inverter, assuming an MPPT efficiency of 95% and DC-AC conversion efficiency of 97%. This aligns the solar panel generation with PV power, allowing the total solar generation from both primary (connected to the hybrid inverter) and secondary (connected via a separate solar inverter) panels to be combined correctly.
+
 
 ## Get PV Output Data
 
