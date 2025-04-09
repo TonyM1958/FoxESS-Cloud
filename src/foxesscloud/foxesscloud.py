@@ -972,6 +972,7 @@ merge_settings = {                  # keys to add
         'h116__': 'operation_mode__work_mode',
         'h117__': 'operation_mode__work_mode',
 #        'k106__': 'operation_mode__work_mode',
+#        'k110__': 'operation_mode__work_mode',
         },
         'values': ['SelfUse', 'Feedin', 'Backup']},
     'ExportLimit': {'keys': {
@@ -979,6 +980,7 @@ merge_settings = {                  # keys to add
         'h116__': 'basic2__05',
         'h117__': 'basic2__05',
 #        'k106__': 'basic2__05',
+#        'k1110__': 'basic2__05',
         },
         'valueType': 'int'},
     'BatteryVolt': {'keys': {
@@ -986,6 +988,7 @@ merge_settings = {                  # keys to add
         'h116__': ['h116__15', 'h116__16', 'h116__17'],
         'h117__': ['h117__15', 'h117__16', 'h117__17'],
 #        'k106__': ['k106__xx', 'k106__xx', 'k106__xx'],
+#        'k110__': ['k110__xx', 'k110__xx', 'k110__xx'],
         },
         'type': 'list',
         'valueType': 'float',
@@ -995,6 +998,7 @@ merge_settings = {                  # keys to add
         'h116__': 'h116__18',
         'h117__': 'h117__18',
 #        'k106__': 'k106__xx',
+#        'k110__': 'k110__xx',
         },
         'type': 'list',
         'valueType': 'int',
