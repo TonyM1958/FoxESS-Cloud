@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  09 April 2025
+Updated:  16 April 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.4"
+version = "1.9.5"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1005,6 +1005,13 @@ merge_settings = {                  # keys to add
         'unit': '℃'},
 }
 
+# change named settings, if required, so names match between Fox API and Open API
+translate_names = {
+    'MaxSoc': 'MaximumSoC',
+    'MinSoc': 'MinimumSoC',
+    'MinSocOnGrid': 'MinimumSoC-OnGrid'
+}
+
 def get_ui():
     global device_id, debug_setting, messages, remote_settings, named_settings, merge_settings
     if get_device() is None:
@@ -1069,7 +1076,7 @@ def get_ui():
     return remote_settings
 
 def get_remote_settings(key):
-    global device_id, debug_setting, messages
+    global device_id, debug_setting, messages, translate_settings
     if get_device() is None:
         return None
     output(f"getting remote settings", 2)
@@ -1101,7 +1108,7 @@ def get_remote_settings(key):
     return values
 
 def get_named_settings(name):
-    global named_settings
+    global named_settings, translate_names
     if get_device() is None:
         return None
     if type(name) is list:
@@ -1109,10 +1116,11 @@ def get_named_settings(name):
         for n in name:
             result.append(get_named_settings(n))
         return result
-    if named_settings is None or named_settings.get(name) is None:
+    key_name = translate_names[name] if translate_names.get(name) is not None else name
+    if named_settings is None or named_settings.get(key_name) is None:
         output(f"** get_named_settings(): {name} was not recognised")
         return None
-    keys = named_settings[name].get('keys')
+    keys = named_settings[key_name].get('keys')
     if keys is None:
         output(f"** get_named_settings(): no keys for name: {name}")
         return None
@@ -1121,8 +1129,8 @@ def get_named_settings(name):
     if result is None:
         output(f"** get_named_settings(): no result for {name} using key: {keys}")
         return None
-    result_type = named_settings[name].get('type')
-    value_type = named_settings[name].get('valueType')
+    result_type = named_settings[key_name].get('type')
+    value_type = named_settings[key_name].get('valueType')
     if result_type is None:
         v = result.get([k for k in result.keys()][0])
         return v if value_type is None else c_float(v) if value_type == 'float' else c_int(v)
@@ -1134,7 +1142,7 @@ def get_named_settings(name):
     return result
 
 def set_named_settings(name, value, force=0):
-    global named_settings
+    global named_settings, translate_names
     if get_device() is None:
         return None
     if force == 1 and get_schedule().get('enable'):
@@ -1144,18 +1152,19 @@ def set_named_settings(name, value, force=0):
         for (n, v) in name:
             result.append(set_named_settings(name=n, value=v))
         return result
-    if named_settings is None or named_settings.get(name) is None:
+    key_name = translate_names[name] if translate_names.get(name) is not None else name
+    if named_settings is None or named_settings.get(key_name) is None:
         output(f"** set_named_settings(): {name} was not recognised")
         return None
-    keys = named_settings[name].get('keys')
+    keys = named_settings[key_name].get('keys')
     if keys is None:
         output(f"** set_named_settings(): no keys for name: {name}")
         return None
-    item_type = named_settings[name].get('type')
+    item_type = named_settings[key_name].get('type')
     if item_type is None:
         values = {keys: str(value)}
     elif item_type == 'block':
-        items = named_setting[name]['items']
+        items = named_setting[key_name]['items']
         n = len(items)
         if type(value) is not list or n != len(value):
             output(f"** set_named_settings(): {name} requires list of {n} values")

@@ -172,6 +172,7 @@ set_named_settings() sets the 'name' setting to 'value'.
 + 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + A return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
 + Example names: 'WorkMode', 'ExportLimit'
++ Open API names are translated to their corresponding names e.g. MinSoc, MinSocOnGrid, MaxSoc
 
 set_work_mode(mode) takes a work mode as a parameter and sets the inverter to this work mode. Valid work modes are held in settable_modes. The new mode is stored in work_mode.
 
@@ -783,6 +784,9 @@ This setting can be:
 
 
 # Version Info
+
+1.9.5<br>
+Allow consistent naming with Open API by translating MinSoc, MinSocOnGrid and MaxSoc to the corresponding names used in the Fox API.
 
 1.9.4<br>
 Fix forecast.solar (after change to start parameter processing).

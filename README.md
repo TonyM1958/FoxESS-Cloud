@@ -118,13 +118,14 @@ Additional battery attributes provided include:
 
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge times.
 
-get_flag() returns the current scheduler enable / support / maxsoc flags
+get_flag() returns the current scheduler enable / support / maxsoc flags. By default support for Max Soc is set to False.
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
++ if the schedule returned contains any values for 'maxSoc', the f.schedule['maxsoc'] is set to True to indicate that the current inverter supports setting Max Soc in schedules and Max Soc values are set by set_schedule().
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
-+ f.named_settings is updated. This is dictionary of information and current value, indexed by 'name.
-+ the only name currently supported by Fox is 'ExportLimit' and this is only available for H3 inverters.
++ f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
++ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode
 
 
 ## Inverter Settings
@@ -180,8 +181,8 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
 + 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
-+ A return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
-+ the only 'name' currently supported is 'ExportLimit'
++ a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
++ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode
 
 
 ## Real Time Data
@@ -805,6 +806,9 @@ This setting can be:
 
 
 # Version Info
+
+2.8.3<br>
+Update to support setting Max Soc in schedules now this is supported by Fox using Open API.
 
 2.8.2<br>
 Fix forecast.solar (after change to start parameter processing).

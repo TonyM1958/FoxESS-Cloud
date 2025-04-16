@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  09 April 2025
+Updated:  16 April 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.2"
+version = "2.8.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -861,6 +861,7 @@ def get_remote_settings(name):
                 values[x] = v[x]
         return values
     body = {'sn': device_sn, 'key': name}
+    setting_delay()
     response = signed_post(path="/op/v0/device/setting/get", body=body)
     if response.status_code != 200:
         output(f"** get_remote_settings() got response code {response.status_code}: {response.reason}")
@@ -1016,10 +1017,9 @@ def get_flag():
     if result is None:
         return None
     if schedule is None:
-        schedule = {'enable': None, 'support': None, 'periods': None}
+        schedule = {'enable': None, 'support': None, 'periods': None, 'maxsoc': False}
     schedule['enable'] = result.get('enable')
     schedule['support'] = result.get('support')
-    schedule['maxsoc'] = False
     if device.get('function') is not None and device['function'].get('scheduler') is not None:
         device['function']['scheduler'] = schedule['support']
     return schedule
@@ -1055,6 +1055,8 @@ def get_schedule():
     for g in result['groups']:
         if g['enable'] == 1 and g['workMode'] in work_modes:
             schedule['periods'].append(g)
+            if g.get('maxSoc') is not None:
+                schedule['maxsoc'] = True
     return schedule
 
 # build strategy using current schedule
