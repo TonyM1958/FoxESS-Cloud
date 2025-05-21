@@ -807,6 +807,9 @@ This setting can be:
 
 # Version Info
 
+2.8.4<br>
+Fix exception when calling pvoutput with tou=1 but no tariff set.
+
 2.8.3<br>
 Update to support setting Max Soc in schedules now this is supported by Fox using Open API.
 

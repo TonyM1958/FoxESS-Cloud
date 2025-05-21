@@ -785,6 +785,10 @@ This setting can be:
 
 # Version Info
 
+1.9.6<br>
+Fix exception when calling pvoutput with tou=1 but no tariff set.
+Add protocol H118 to support battery information for Manager 1.76 with H1 inverter.
+
 1.9.5<br>
 Allow consistent naming with Open API by translating MinSoc, MinSocOnGrid and MaxSoc to the corresponding names used in the Fox API.
 

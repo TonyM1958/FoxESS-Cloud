@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  16 April 2025
+Updated:  20 May 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.3"
+version = "2.8.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -3550,7 +3550,7 @@ def get_pvoutput(d = None, tou = 0):
     if type(d) is list:
         print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
-        if tou == 1:
+        if tou == 1 and tariff is not None:
             print(f"Time of use: {tariff['name']}")
         elif tou == 2:
             print(f"All values integrated from power")

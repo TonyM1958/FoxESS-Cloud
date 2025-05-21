@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  16 April 2025
+Updated:  21 May 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.5"
+version = "1.9.6"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -971,6 +971,7 @@ merge_settings = {                  # keys to add
         'h115__': 'operation_mode__work_mode',
         'h116__': 'operation_mode__work_mode',
         'h117__': 'operation_mode__work_mode',
+        'h118__': 'operation_mode__work_mode',
 #        'k106__': 'operation_mode__work_mode',
 #        'k110__': 'operation_mode__work_mode',
         },
@@ -979,6 +980,7 @@ merge_settings = {                  # keys to add
         'h115__': 'basic2__05',
         'h116__': 'basic2__05',
         'h117__': 'basic2__05',
+        'h118__': 'basic2__05',
 #        'k106__': 'basic2__05',
 #        'k1110__': 'basic2__05',
         },
@@ -987,6 +989,7 @@ merge_settings = {                  # keys to add
         'h115__': ['h115__14', 'h115__15', 'h115__16'],
         'h116__': ['h116__15', 'h116__16', 'h116__17'],
         'h117__': ['h117__15', 'h117__16', 'h117__17'],
+        'h118__': ['h118__15', 'h118__16', 'h118__17'],
 #        'k106__': ['k106__xx', 'k106__xx', 'k106__xx'],
 #        'k110__': ['k110__xx', 'k110__xx', 'k110__xx'],
         },
@@ -997,6 +1000,7 @@ merge_settings = {                  # keys to add
         'h115__': 'h115__17',
         'h116__': 'h116__18',
         'h117__': 'h117__18',
+        'h118__': 'h118__18',
 #        'k106__': 'k106__xx',
 #        'k110__': 'k110__xx',
         },
@@ -3894,7 +3898,7 @@ def get_pvoutput(d = None, tou = 0):
     if type(d) is list:
         print(f"---------------- get_pvoutput ------------------")
         print(f"Date range {d[0]} to {d[-1]} has {len(d)} days")
-        if tou == 1:
+        if tou == 1 and tariff is not None:
             print(f"Time of use: {tariff['name']}")
         elif tou == 2:
             print(f"All values integrated from power")
