@@ -95,6 +95,7 @@ f.get_batteries(info, rated, count)
 f.get_settings()
 f.get_charge()
 f.get_min()
+f.get_peakshaving()
 f.get_flag()
 f.get_schedule()
 f.get_named_settings(name)
@@ -117,6 +118,8 @@ Additional battery attributes provided include:
 + 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
 
 get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the charge times.
+
+get_peakshaving() will return the current peak shaving settings for inverters that support this work mode.
 
 get_flag() returns the current scheduler enable / support / maxsoc flags. By default support for Max Soc is set to False.
 
@@ -191,7 +194,7 @@ Real time data reports the latest values for inverter variables, collected every
 ```
 f.invert_ct2 = 1
 f.get_vars()
-f.get_real(v)
+f.get_real(v, sns, version)
 ```
 
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
@@ -206,6 +209,8 @@ There are also pre-defined lists:
 
 f.get_real returns the latest values for a list of variables.
 + v is a variable, or list of variables. The default is to return the latest value for all available variables
++ sns is an optional inverter serial number or a list of inverter serial numbers to get data for. The default is the current device
++ version determines the format of the output. By default, get_real() returns a list of variables for a single inverter (legacy mode). Setting version=1 returns a list of inverter results using the v1 Open API format.
 
 
 ## History Data
@@ -806,6 +811,11 @@ This setting can be:
 
 
 # Version Info
+
+2.8.5<br>
+Update battery variables to include SOH.
+Add get_peakshaving().
+Update get_real() to support a list of inverters using Open API v1.
 
 2.8.4<br>
 Fix exception when calling pvoutput with tou=1 but no tariff set.

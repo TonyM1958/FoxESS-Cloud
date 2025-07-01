@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  20 May 2025
+Updated:  28 May 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.4"
+version = "2.8.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -549,8 +549,8 @@ def get_generation(update=1):
 battery = None
 batteries = None
 battery_settings = None
-battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy' ]
-battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual']
+battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH' ]
+battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh']
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 1
@@ -836,6 +836,33 @@ def get_settings():
     get_charge()
     get_min()
     return battery_settings
+
+##################################################################################################
+# get peak shaving settings
+##################################################################################################
+
+def get_peakshaving():
+    global device_sn, debug_setting
+    if get_device() is None:
+        return None
+    output(f"getting peak shaving", 2)
+    body = {'sn': device_sn}
+    response = signed_post(path="/op/v0/device/peakShaving/get", body=body)
+    if response.status_code != 200:
+        output(f"** get_peakshaving() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 40257:
+            output(f"** Peak Shaving is not available")
+        else:
+            output(f"** get_peakshaving(), {errno_message(response)}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        output(f"** get_peakshaving(), no result data, {errno_message(response)}")
+        return None
+    return result
 
 ##################################################################################################
 # get remote settings
@@ -1191,20 +1218,21 @@ def set_schedule(periods=None, enable=True):
 residual_scale = 0.01
 
 # get real time data
-def get_real(v = None):
+def get_real(v = None, sns = None, version = 0):
     global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale
-    if get_device() is None:
-        return None
-    if device['status'] > 1:
-        status_code = device['status']
-        state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
-        output(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
-        return None
+    if sns is None:
+        if get_device() is None:
+            return None
+        if device['status'] > 1:
+            status_code = device['status']
+            state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
+            output(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
+            return None
     output(f"getting real-time data", 2)
-    body = {'deviceSN': device_sn}
+    body = {'sns': sns if sns is not None and type(sns) is list else [sns] if sns is not None else [device_sn]}
     if v is not None:
         body['variables'] = v if type(v) is list else [v]
-    response = signed_post(path="/op/v0/device/real/query", body=body)
+    response = signed_post(path="/op/v1/device/real/query", body=body)
     if response.status_code != 200:
         output(f"** get_real() got response code {response.status_code}: {response.reason}")
         return None
@@ -1214,17 +1242,18 @@ def get_real(v = None):
         return None
     if len(result) < 1:
         return None
-    elif len(result) > 1:
-        output(f"** get_real(), more than 1 value returned: {result}")
-    result = result[0]['datas']
-    for var in result:
-        if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
-            var['value'] *= -1
-        elif var.get('variable') == 'ResidualEnergy':
-            var['unit'] = 'kWh'
-            var['value'] = var['value'] * residual_scale
-        elif var.get('unit') is None:
-            var['unit'] = ''
+    for r in result:
+        datas = r['datas']
+        for var in datas:
+            if var.get('variable') == 'meterPower2' and invert_ct2 == 1:
+                var['value'] *= -1
+            elif var.get('variable') == 'ResidualEnergy':
+                var['unit'] = 'kWh'
+                var['value'] = var['value'] * residual_scale
+            elif var.get('unit') is None:
+                var['unit'] = ''
+    if version == 0 and type(sns) is not list:
+        result = result[0]['datas'] 
     return result
 
 
