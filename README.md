@@ -812,6 +812,9 @@ This setting can be:
 
 # Version Info
 
+2.8.6<br>#
+Update to charge_needed() to get current work mode.
+
 2.8.5<br>
 Update battery variables to include SOH.
 Add get_peakshaving().

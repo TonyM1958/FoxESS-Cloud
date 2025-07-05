@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  28 May 2025
+Updated:  5 July 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.5"
+version = "2.8.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -950,8 +950,6 @@ def get_work_mode():
     global work_mode
     if get_device() is None:
         return None
-    # not implemented by Open API, skip to avoid error
-    return None
     work_mode = get_named_settings('WorkMode')
     return work_mode
 
