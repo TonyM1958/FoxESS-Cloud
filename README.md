@@ -181,11 +181,13 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 + periods: a time segment or list of time segments created using f.set_period().
 + enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
 
+Before using set_period() or set_schedule(), call get_schedule(). This will inspect the schedule result to check if setting max_soc is supported and enable / disable this functionality as appropriate and set the flag f.schedule['maxsoc'].
+
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
 + 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
-+ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode
++ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
 
 
 ## Real Time Data
