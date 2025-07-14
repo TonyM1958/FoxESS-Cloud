@@ -5,7 +5,7 @@ This site contains sample python code for accessing the Fox cloud data via the R
 There is also a Jupyter Lab notebook with examples of how to run the sample code.
 
 **This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.**
-Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
+Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE){:target="_blank"} for information on copyright, permissions and warranty.
 
 
 # Cloud API
@@ -37,18 +37,19 @@ Advanced users: use the same sequence in bash/python scripts to install modules 
 
 You don't have to configure all of the settings. Your Fox ESS Cloud username, password and device serial number are the minimum required to access data about your inverter.
 
-For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login) and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
+For example, replace _my.fox_username_ with the login name and _my.fox_password_ with the password you use for [foxesscloud.com](https://www.foxesscloud.com/login){:target="_blank"} and _my.device_sn_ with the serial number of your inverter. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
 Residual handling configures how battery residual energy reported by Fox is handled:
 + 1: Fox returns the current battery residual energy and battery capacity is calculated using soc
 + 2: Fox returns the current battery capacity and battery residual is calculated using soc
++ 3: Fox returns the residual capacity per battery (Mira)
 
 If a value is set for f.plot_file, any charts created will also be saved to an image file:
 + f.plot_file: the file name to use. The file extension determines the format - .png, .pdf or .svg. If you provide just a filename, each chart will over-write the file. The default is None and disables saving.
 + f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
 + f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
 
-If you set f.pushover_user_key to your user_key for pushover.net, a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
+If you set f.pushover_user_key to your user_key for [pushover.net](https://pushover.net){:target="_blank"}, a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
 
 You can set 'f.storage' to a path to save files to a different location such as cloud storage. The default is to use the current working directory.
 
@@ -582,12 +583,12 @@ Plunge pricing allows for the automatic configuration of charging periods when A
 
 
 # PV Output
-These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
+These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org){:target="_blank"} including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
 
 ## Get PV Output Data
 
-Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
+Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter){:target="_blank"}:
 
 ```
 f.integrate_load_power=0
@@ -680,7 +681,7 @@ You need to configure your solar arrays by calling f.solar_array(). This takes t
 
 Add one array for each string attached to your inverter. If your solar production is limited by clipping, set the inverter power so the forecast better matches your generation.
 
-See the [API documentation](https://doc.forecast.solar/api) for more information on parameter values.
+See the [API documentation](https://doc.forecast.solar/api){:target="_blank"} for more information on parameter values.
 
 ```
 fcast = f.Solar()
