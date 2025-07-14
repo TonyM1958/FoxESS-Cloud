@@ -129,7 +129,7 @@ get_schedule() returns the current work mode / soc schedule settings. The result
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
-+ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
++ named_settings currently supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
 
 
 ## Inverter Settings
@@ -176,7 +176,7 @@ set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
 + 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
-+ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
++ named_settings currently supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
 
 
 ## Real Time Data
