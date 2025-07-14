@@ -128,7 +128,7 @@ get_schedule() returns the current work mode / soc schedule settings. The result
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
-+ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode
++ named_settings current supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
 
 
 ## Inverter Settings
@@ -138,7 +138,6 @@ You can change inverter settings using:
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
-f.charge_periods(st0, en0, st1, en1, st2, en2, min_soc, target_soc, start_soc)
 f.set_schedule(periods, enable)
 f.set_named_settings(name, value, force)
 ```
@@ -166,22 +165,11 @@ set_period() returns a period structure that can be used to build a list for set
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
-charge_periods(): returns a list of periods that describe the strategy for the current tariff and adds the periods required for charging:
-+ st0: the start time for period 0 when you don't want the battery to discharge before charging
-+ en0: the end time for period 0
-+ st1: the start time for the period when the battery charges from the grid
-+ en1: the end time for period 1
-+ st2: the start time for period 2 when you don't want the batteru to discharge after charging
-+ en2: the end time for period 2
-+ min_soc: the min_soc to use when building the strategy
-+ start_soc: the min_soc to use for period 0
-+ target_soc: the max_soc to set during period 1 and min_soc to use for period 2
+Before calling set_period(), do at least one call to get_schedule(). This will inspect the schedule result to check if max_soc is supported and set the flag f.schedule['maxsoc'] to enable or disable this field as appropriate.
 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
 + periods: a time segment or list of time segments created using f.set_period().
 + enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
-
-Before using set_period() or set_schedule(), call get_schedule(). This will inspect the schedule result to check if setting max_soc is supported and enable / disable this functionality as appropriate and set the flag f.schedule['maxsoc'].
 
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
