@@ -7,15 +7,15 @@ There is also a number of Jupyter Lab notebooks with examples of how to run the 
 
 This project is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Fox ESS.
 
-Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE){:target="_blank"} for information on copyright, permissions and warranty.
+Please refer to the [LICENCE](https://github.com/TonyM1958/FoxESS-Cloud/blob/main/LICENCE) for information on copyright, permissions and warranty.
 
 
 # Open API
 
 This module builds on the Fox Open API to provide a sample code and utilities that can be used with your inverter and batteries.
 
-+ Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html){:target="_blank"}
-+ A list of the error codes used by the API is available here: [Wiki/Error-Codes](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes){:target="_blank"}.
++ Information on the API can be found here: [Open API Documentation](https://www.foxesscloud.com/public/i18n/en/OpenApiDocument.html)
++ A list of the error codes used by the API is available here: [Wiki/Error-Codes](https://github.com/TonyM1958/FoxESS-Cloud/wiki/Error-Codes).
 
 
 ## Setup
@@ -42,7 +42,7 @@ f.pushover_user_key = "my.pushover_user_key"
 
 Advanced users: use the same sequence in bash/python scripts to install modules and initialise variables in a run time enviromment.
 
-You don't have to configure all of the settings. Your Fox ESS Cloud api key is the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login){:target="_blank"}. Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
+You don't have to configure all of the settings. Your Fox ESS Cloud api key is the minimum required to access data about your inverter. Your Fox API key is obtained from [foxesscloud.com](https://www.foxesscloud.com/login). Login, go to User Profile, API Management, click Generate API key. Take a copy of the key and save it so you add it to your scripts and notebooks.
 
 For example, replace _my.fox_api_key_ with the API key. Add you inverter serial number if you have more than 1 inverter linked to your account. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
@@ -56,7 +56,7 @@ If a value is set for f.plot_file, any charts created will also be saved to an i
 + f.plot_no: if the file name contains ###, this will be replaced by 3 digit plot number that increases for each chart created. The default is 0.
 + f.plot_dpi: sets the image resolution. The default is 150. Reducing this value produces smaller, lower resolution images. Increasing this value produces larger, highe resolution images
 
-If you set f.pushover_user_key to your user_key for [pushover.net](https://pushover.net){:target="_blank"}, a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
+If you set f.pushover_user_key to your user_key for [pushover.net](https://pushover.net), a summary from set_tariff(), charge_needed(), set_pvoutput() and battery_info() will be sent to your pushover app.
 
 You can set 'f.storage' to a path to save files to a different location such as cloud storage. The default is to use the current working directory.
 
@@ -601,7 +601,7 @@ Plunge pricing allows for the automatic configuration of charging periods when A
 + 'plunge_slots' sets the maximum number of 30 minute plunge charging slots to use. The default is 6.
 
 # PV Output
-These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org){:target="_blank"} including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
+These functions produce CSV data for upload to [pvoutput.org](https://pvoutput.org) including PV generation, Export, Load and Grid consumption by day in Wh. The functions use the energy estimates created from the raw power data (see above). The estimates include PV energy generation that are not otherwise available from the Fox Cloud. Typically, the energy results are within 3% of the values reported by the meters built into the inverter.
 
 ## Calibration
 PV generation data is created using the Riemann sum of the PV power and CT2 power as the history of the stats provided by the Fox cloud can be unreliable. You can change the calibration factors used:
@@ -617,7 +617,7 @@ f.ct2_calibration = 0.92
 
 ## Get PV Output Data
 
-Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter){:target="_blank"}:
+Returns CSV upload data using the [API format](https://pvoutput.org/help/api_specification.html#csv-data-parameter):
 
 ```
 f.integrate_load_power=0
@@ -709,7 +709,7 @@ You need to configure your solar arrays by calling f.solar_array(). This takes t
 
 Add one array for each string attached to your inverter. If your solar production is limited by clipping, set the inverter power so the forecast better matches your generation.
 
-See the [API documentation](https://doc.forecast.solar/api){:target="_blank"} for more information on parameter values.
+See the [API documentation](https://doc.forecast.solar/api) for more information on parameter values.
 
 ```
 fcast = f.Solar()
