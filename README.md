@@ -77,6 +77,7 @@ Load information about a site, data logger or inverter (device):
 ```
 f.get_site()
 f.get_logger()
+f.get_signal()
 f.get_device()
 ```
 
@@ -85,7 +86,9 @@ By default, this will load the first item in the list provided by the cloud. If 
 + Logger: full or partial serial number
 + Inverter: full or partial serial number
 
-When an item is selected, the functions returns a dictionary containing item details and saves these to a global variable (f.site, f.logger, f.device respectively)
+When an item is selected, the functions returns a dictionary containing item details and saves these to a global variable (f.site, f.logger, f.device respectively).
+
+get_signal() is ancillary to get_logger() and returns the current data logger signal strength and time stamp.
 
 Once an inverter is selected, you can make other calls to get information:
 
@@ -803,7 +806,13 @@ This setting can be:
 
 # Version Info
 
-2.8.6<br>#
+2.8.7<br>
+Added f.get_signal().
+Updated set_period so you don't have to call get_schedule before.
+Update set_period() to pass fdpwr and fdsoc for ForceCharge and display value.
+Increase max value of fdpwr from 6000 to 30000.
+
+2.8.6<br>
 Update to charge_needed() to get current work mode.
 
 2.8.5<br>

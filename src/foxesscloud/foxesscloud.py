@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  21 May 2025
+Updated:  15 September 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.6"
+version = "1.9.7"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -653,6 +653,8 @@ def get_battery(info=1, rated=None, count=None):
                     residual_handling = 2
                 elif battery['info']['masterSN'][:7] == '60MBB01' and battery['info']['masterVersion'] >= '1.014':
                     residual_handling = 3
+    if debug_setting > 1:
+        print(f"raw battery = {battery}")
     battery['residual_handling'] = residual_handling
     battery['soh'] = None
     battery['soh_supported'] = False
@@ -1417,7 +1419,7 @@ def find_template(name):
 
 # create a period structure. Note: end time is exclusive.
 def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, price=None, segment=None, quiet=1):
-    global schedule
+    global schedule, device
     if schedule is None and get_flag() is None:
         return None
     if segment is not None and type(segment) is dict:
@@ -1442,7 +1444,11 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         return None
     min_soc = 10 if min_soc is None else min_soc
     max_soc = None if schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
+    if mode == 'ForceCharge' and fdsoc is None:
+        fdsoc = max_soc if max_soc is not None else 100
     fdsoc = min_soc if fdsoc is None else fdsoc
+    power = (device['power'] * 1000) if device.get('power') is not None else None
+    fdpwr = power if fdpwr is None and power is not None and mode in ['ForceCharge', 'ForceDischarge'] else fdpwr
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 10 and 100")
@@ -1450,8 +1456,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if max_soc is not None and (max_soc < 10 or max_soc > 100):
         output(f"set_period(): ** max_soc must be between 10 and 100")
         return None
-    if fdpwr < 0 or fdpwr > 6000:
-        output(f"set_period(): ** fdpwr must be between 0 and 6000")
+    if fdpwr < 0 or fdpwr > 30000:
+        output(f"set_period(): ** fdpwr must be between 0 and 30000")
         return None
     if fdsoc < min_soc or fdsoc > 100:
         output(f"set_period(): ** fdsoc must between {min_soc} and 100")
@@ -1459,7 +1465,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and mode == 'ForceCharge' else ""
-        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
+        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode in ['ForceCharge', 'ForceDischarge'] else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_h, start_m = split_hours(start)

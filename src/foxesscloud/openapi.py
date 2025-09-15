@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  5 July 2025
+Updated:  15 September 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.6"
+version = "2.8.7"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -371,9 +371,10 @@ def get_site(name=None):
 
 logger_list = None
 logger = None
+logger_sn = None
 
 def get_logger(sn=None):
-    global logger_list, logger, debug_setting
+    global logger_list, logger, logger_sn, debug_setting
     if get_vars() is None:
         return None
     if logger is not None and sn is None:
@@ -408,8 +409,30 @@ def get_logger(sn=None):
     else:
         n = 0
     logger = logger_list[n]
+    logger_sn = logger.get('moduleSN')
     return logger
 
+def get_signal(sn=None):
+    global logger_list, logger, logger_sn, debug_setting
+    if get_vars() is None:
+        return None
+    if sn is None:
+        if logger_sn is None:
+            get_logger()
+        sn = logger_sn
+        if sn is None:
+            return None
+    output(f"getting signal", 2)
+    body = {'sn': sn}
+    response = signed_post(path="/op/v0/module/getSignal", body=body)
+    if response.status_code != 200:
+        output(f"** get_signal() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        output(f"** get_signal(), no result data, {errno_message(response)}")
+        return None
+    return result
 
 ##################################################################################################
 # get list of devices and select one, using the serial number if there is more than 1
@@ -593,6 +616,8 @@ def get_battery(info=0, v=None, rated=None, count=None):
     battery = {}
     for i in range(0, len(battery_vars)):
         battery[battery_data[i]] = result[i].get('value')
+    if debug_setting > 1:
+        print(f"raw battery = {battery}")
     battery['residual_handling'] = residual_handling
     battery['soh'] = None
     battery['soh_supported'] = False
@@ -1108,9 +1133,9 @@ def build_strategy_from_schedule():
 
 # create time segment structure. Note: end time is exclusive.
 def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, price=None, segment=None, enable=1, quiet=1):
-    global schedule
-    if schedule is None and get_flag() is None:
-        return None
+    global schedule, device
+    if schedule is None:
+        get_schedule()
     if segment is not None and type(segment) is dict:
         start = segment.get('start')
         end = segment.get('end')
@@ -1132,8 +1157,12 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"** mode must be one of {work_modes}")
         return None
     min_soc = 10 if min_soc is None else min_soc
-    max_soc = None if schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
+    max_soc = None if schedule is None or schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
+    if mode == 'ForceCharge' and fdsoc is None:
+        fdsoc = max_soc if max_soc is not None else 100
     fdsoc = min_soc if fdsoc is None else fdsoc
+    power = (device['power'] * 1000) if device.get('power') is not None else None
+    fdpwr = power if fdpwr is None and device.get('power') is not None and mode in ['ForceCharge', 'ForceDischarge'] else fdpwr
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 10 and 100")
@@ -1141,8 +1170,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if max_soc is not None and (max_soc < 10 or max_soc > 100):
         output(f"set_period(): ** max_soc must be between 10 and 100")
         return None
-    if fdpwr < 0 or fdpwr > 6000:
-        output(f"set_period(): ** fdpwr must be between 0 and 6000")
+    if fdpwr < 0 or fdpwr > 30000:
+        output(f"set_period(): ** fdpwr must be between 0 and 30000")
         return None
     if fdsoc < min_soc or fdsoc > 100:
         output(f"set_period(): ** fdsoc must between {min_soc} and 100")
@@ -1150,7 +1179,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and mode == 'ForceCharge' else ""
-        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
+        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode in ['ForceCharge', 'ForceDischarge'] else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_hour, start_minute = split_hours(start)

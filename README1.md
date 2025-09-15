@@ -776,6 +776,10 @@ This setting can be:
 
 # Version Info
 
+1.9.7<br>
+Update set_period() to pass fdpwr and fdsoc for ForceCharge and display value.
+Increase max fdpwr from 6000 to 30000.
+
 1.9.6<br>
 Fix exception when calling pvoutput with tou=1 but no tariff set.
 Add protocol H118 to support battery information for Manager 1.76 with H1 inverter.
