@@ -126,7 +126,7 @@ Additional battery attributes provided include:
 + 'discharge_loss': the ratio of the kWh available for each kWh removed from the battery during during discharging
 
 
-get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minGridSoc, enable charge from grid and the time periods.
+get_settings() will return the battery settings and is equivalent to get_charge() and get_min(). The results are stored in f.battery_settings. The settings include minSoc, minSocOnGrid, enable charge from grid and the time periods.
 
 get_cell_temps(), get_cell_volts() will return a list of the current cell temperatures and voltages using get_remote_settings().
 
@@ -146,7 +146,7 @@ get_earnings() returns the power generated and earning data that is displayed on
 You can change inverter settings using:
 
 ```
-f.set_min(minGridSoc, minSoc)
+f.set_min(minSocOnGrid, minSoc, force)
 f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_named_settings(name, value, force)
 f.set_work_mode(mode)
@@ -155,8 +155,9 @@ f.set_schedule(periods, template, enable)
 ```
 
 set_min() takes the min_soc settings from battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings:
-+ minGridSoc: min Soc on Grid setting e.g. 15 = 15%
++ minSocOnGrid: min Soc on Grid setting e.g. 15 = 15%
 + minSoc: min Soc setting e.g. 10 = 10%
++ force: setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
 + ch1: enable charge from grid for period 1 (default True)
@@ -169,7 +170,7 @@ set_charge() takes the charge times from the battery_settings and applies these 
 
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs and returns a list of success / fail results.
-+ 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
++ force: setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + A return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
 + Example names: 'WorkMode', 'ExportLimit'
 + Open API names are translated to their corresponding names e.g. MinSoc, MinSocOnGrid, MaxSoc
@@ -775,6 +776,8 @@ This setting can be:
 
 
 # Version Info
+1.9.8<br>
+Update set_min() to accept 0 instead of 10 and align with Open API.
 
 1.9.7<br>
 Update set_period() to pass fdpwr and fdsoc for ForceCharge and display value.

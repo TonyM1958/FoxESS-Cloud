@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  15 September 2025
+Updated:  2 October 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.7"
+version = "1.9.8"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -912,14 +912,14 @@ def get_min():
         output(f"** get_min(), no result data, {errno_message(errno)}")
         return None
     battery_settings['minSoc'] = result.get('minSoc')
-    battery_settings['minGridSoc'] = result.get('minGridSoc')
+    battery_settings['minSocOnGrid'] = result.get('minGridSoc')
     return battery_settings
 
 ##################################################################################################
 # set min soc from battery_settings or parameters
 ##################################################################################################
 
-def set_min(minGridSoc = None, minSoc = None, force = 0):
+def set_min(minSocOnGrid = None, minSoc = None, force = 0):
     global device_sn, battery_settings, debug_setting, messages
     if get_device() is None:
         return None
@@ -928,16 +928,24 @@ def set_min(minGridSoc = None, minSoc = None, force = 0):
             output(f"** set_min(): cannot set min SoC mode when a schedule is enabled")
             return None
         set_schedule(enable=0)
-    data = {'sn': device_sn}
     if battery_settings is None:
         battery_settings = {}
-    if minGridSoc is not None:
-        data['minGridSoc'] = minGridSoc
-        battery_settings['minGridSoc'] = minGridSoc
+    if minSocOnGrid is not None:
+        if minSocOnGrid < 0 or minSocOnGrid > 100:
+            output(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 0 and 100")
+            return None
+        battery_settings['minSocOnGrid'] = minSocOnGrid
     if minSoc is not None:
-        data['minSoc'] = minSoc
+        if minSoc < 0 or minSoc > 100:
+            output(f"** set_min(): invalid minSoc = {minSoc}. Must be between 0 and 100")
+            return None
         battery_settings['minSoc'] = minSoc
-    output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minGridSoc = {battery_settings.get('minGridSoc')}", 1)
+    data = {'sn': device_sn}
+    if battery_settings.get('minSocOnGrid') is not None:
+        data['minGridSoc'] = battery_settings['minSocOnGrid']
+    if battery_settings.get('minSoc') is not None:
+        data['minSoc'] = battery_settings['minSoc']
+    output(f"\nSetting minSocOnGrid = {battery_settings.get('minSocOnGrid')}, minSoc = {battery_settings.get('minSoc')}", 1)
     setting_delay()
     response = signed_post(path="/c/v0/device/battery/soc/set", data=data)
     if response.status_code != 200:

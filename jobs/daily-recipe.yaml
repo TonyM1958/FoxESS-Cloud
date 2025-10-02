@@ -1,16 +1,18 @@
-schema_version: 2023.09.01
+schema_version: 2024.04.01
 type: job
 spec:
   name: daily
+  owner: community/TonyM1958
   description: >-
-    Fox ESS Open API daily management job - works out battery charge and uploads data to PV
-    Output
+    Fox ESS Open API daily management job - works out battery charge and uploads
+    data to PV Output
   image: community/saturncloud/saturn-python:2023.05.01
   instance_type: medium
   environment_variables:
-    TARIFF_PARAMS: '''flux'',region=''H'''
-    CHARGE_PARAMS: update_settings=1,charge_current=25,timed_mode=0,force_charge=0
+    CHARGE_PARAMS: update_settings=1,charge_current=15,timed_mode=0,force_charge=0
+    TARIFF_PARAMS: '''go'',region=''H'''
     PVOUTPUT_PARAMS: tou=1,push=2
+    RESIDUAL_HANDLING: '1'
   working_directory: /home/jovyan/workspace
   extra_packages:
     pip:
@@ -20,22 +22,34 @@ spec:
     cat > script.py <<EOF
     import foxesscloud.openapi as f
 
-    f.api_key = $FOX_API_KEY
+    f.api_key = ${FOX_API_KEY:-None}
+    f.username = ${FOX_USERNAME:-None}
+    f.password = ${FOX_PASSWORD:-None}
     f.device_sn = ${FOX_DEVICE_SN:-None}
     f.pv_api_key = ${PV_API_KEY:-None}
     f.pv_system_id = ${PV_SYSTEM_ID:-None}
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
     f.pushover_user_key = ${PUSHOVER_USER_KEY:-None}
     f.plot_file = "plot###.png"
-    f.residual_handling = 1
-
+    f.residual_handling = ${RESIDUAL_HANDLING:-1}
     f.set_tariff($TARIFF_PARAMS)
     f.charge_needed($CHARGE_PARAMS)
     f.set_pvoutput($PVOUTPUT_PARAMS)
 
     EOF
+  token_scope: job:{self}:dask:write
   git_repositories: []
   secrets:
+    - location: FOX_USERNAME
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_USERNAME
+    - location: FOX_PASSWORD
+      type: environment_variable
+      description: ''
+      owner: community/TonyM1958
+      name: FOX_PASSWORD
     - location: PUSHOVER_USER_KEY
       type: environment_variable
       description: ''
@@ -66,9 +80,16 @@ spec:
       description: ''
       owner: community/TonyM1958
       name: SOLCAST_API_KEY
-  shared_folders: []
+  shared_folders:
+    - owner: community/TonyM1958
+      path: /home/jovyan/shared/TonyM1958/Shared
+      name: Shared
   command: python script.py
   scale: 1
-  schedule: 1 22 * * *
+  use_spot_instance: true
+  schedule: 1 21 * * *
   concurrency_policy: Allow
   retries: 0
+state:
+  id: f46478a40f9c43c1ac07be031a066f15
+  status: error

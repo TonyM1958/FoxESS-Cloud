@@ -149,6 +149,7 @@ f.set_named_settings(name, value, force)
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
 + minSocOnGrid: min Soc on Grid setting e.g. 15 = 15%
 + minSoc: min Soc setting e.g. 10 = 10%
++ force: setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 
 set_charge() takes the charge times from the battery_settings and applies these to the inverter. The parameters are optional and will update battery_settings. You should specify all 3 parameter for a time period:
 + ch1: enable charge from grid for period 1 (default True)
@@ -177,7 +178,7 @@ set_schedule() configures a list of scheduled work mode / soc changes with enabl
 
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
-+ 'force': setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
++ force: setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
 + named_settings currently supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
 
@@ -805,6 +806,11 @@ This setting can be:
 
 
 # Version Info
+
+2.8.8<br>
+Fix problem where Open API returns conflicting variable names when reporting stats by year.
+Update daily template for Saturn Cloud to new YAML format.
+Update set_min() to accept 0 instead of 10.
 
 2.8.7<br>
 Added f.get_signal().

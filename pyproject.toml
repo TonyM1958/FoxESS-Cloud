@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foxesscloud"
-version = "2.8.7"
+version = "2.8.8"
 authors = [
   {name="Tony Matthews", email="tony@quasair.co.uk"},
 ]

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  15 September 2025
+Updated:  2 October 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.7"
+version = "2.8.8"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -823,13 +823,13 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
     if battery_settings is None:
         battery_settings = {}
     if minSocOnGrid is not None:
-        if minSocOnGrid < 10 or minSocOnGrid > 100:
-            output(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 10 and 100")
+        if minSocOnGrid < 0 or minSocOnGrid > 100:
+            output(f"** set_min(): invalid minSocOnGrid = {minSocOnGrid}. Must be between 0 and 100")
             return None
         battery_settings['minSocOnGrid'] = minSocOnGrid
     if minSoc is not None:
-        if minSoc < 10 or minSoc > 100:
-            output(f"** set_min(): invalid minSoc = {minSoc}. Must be between 10 and 100")
+        if minSoc < 0 or minSoc > 100:
+            output(f"** set_min(): invalid minSoc = {minSoc}. Must be between 0 and 100")
             return None
         battery_settings['minSoc'] = minSoc
     body = {'sn': device_sn}
@@ -837,7 +837,7 @@ def set_min(minSocOnGrid = None, minSoc = None, force = 0):
         body['minSocOnGrid'] = battery_settings['minSocOnGrid']
     if battery_settings.get('minSoc') is not None:
         body['minSoc'] = battery_settings['minSoc']
-    output(f"\nSetting minSoc = {battery_settings.get('minSoc')}, minSocOnGrid = {battery_settings.get('minSocOnGrid')}", 1)
+    output(f"\nSetting minSocOnGrid = {battery_settings.get('minSocOnGrid')}, minSoc = {battery_settings.get('minSoc')}", 1)
     setting_delay()
     response = signed_post(path="/op/v0/device/battery/soc/set", body=body)
     if response.status_code != 200:
@@ -1665,6 +1665,10 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
         if errno > 0 or result is None or len(result) == 0:
             output(f"** get_report(), no report data available, {errno_message(response)}")
             return None
+        # correct variables in year report (AP 19/09/2025):
+        if dimension == 'year':
+            for i, var in enumerate(result):
+                var['variable'] = v[i]
         # correct errors in report values:
         if fix_values == 1:
             for var in result:
