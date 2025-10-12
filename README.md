@@ -376,7 +376,7 @@ Given the data available, the modelling works as follows:
 
 The following parameters and default values are used to configure charge_needed and may be updated if required using name=value:
 ```
-contingency: [20,10,5,10]      # % of consumption. Single or [winter, spring, summer, autumn] values
+contingency: [25,15,10,20]     # % of consumption. Single or [winter, spring, summer, autumn] values
 capacity: None                 # Battery capacity in kWh (over-rides generated value if set)
 charge_current: None           # max battery charge current setting in A. None uses a value derrived from the inverter model
 discharge_current: None        # max battery discharge current setting in A. None uses a value derrived from the inverter model
@@ -405,7 +405,7 @@ solar_adjust:  100             # % adjustment to make to Solar forecast
 forecast_selection: 1          # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
 annual_consumption: None       # optional annual consumption in kWh. If set, this replaces consumption history
 timed_mode: 0                  # 0 = None, 1 = use timed work mode, 2 = strategy mode
-special_contingency: 30        # contingency for special days when consumption might be higher
+special_contingency: 35        # contingency for special days when consumption might be higher
 special_days: ['12-25', '12-26', '01-01']
 full_charge: None              # day of month (1-28) to do full charge or 'daily' or day of week: 'Mon', 'Tue' etc
 force: 1                       # 1 = disable strategy periods when setting charge. 0 = fail if strategy period has been set.
@@ -806,6 +806,8 @@ This setting can be:
 
 
 # Version Info
+2.8.9 - 2025/10/12<br>
+Change default contingency for charge_needed() to [25,15,10,20] and special contingency to 35.
 
 2.8.8<br>
 Fix problem where Open API returns conflicting variable names when reporting stats by year.

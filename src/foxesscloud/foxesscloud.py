@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  2 October 2025
+Updated:  12 October 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.9.8"
+version = "1.9.9"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -2945,7 +2945,7 @@ base_time = None
 
 # charge_needed settings
 charge_config = {
-    'contingency': [15,10,5,10],      # % of consumption. Single value or [winter, spring, summer, autumn]
+    'contingency': [25,15,10,20],     # % of consumption. Single value or [winter, spring, summer, autumn]
     'capacity': None,                 # Battery capacity (over-ride)
     'min_soc': None,                  # Minimum Soc. Default 10%
     'max_soc': None,                  # Maximum Soc. Default 100%
@@ -2974,7 +2974,7 @@ charge_config = {
     'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
-    'special_contingency': 33,        # contingency for special days when consumption might be higher
+    'special_contingency': 35,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'data_wrap': 6,                   # data items to show per line
