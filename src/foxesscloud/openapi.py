@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 October 2025
+Updated:  25 October 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.8.9"
+version = "2.9.0"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -511,10 +511,12 @@ def get_device(sn=None, device_type=None):
         model_code = 'KH-' + model_code[2:]
     elif model_code[:4] == 'AIO-':
         model_code = 'AIO' + model_code[4:]
-    device['eps'] = 'E' in model_code[2:]
+    elif model_code[:3] == 'EVO':
+        model_code = 'EVO-' + model_code[4:]
     parts = model_code.split('-')
     model = parts[0]
-    if model not in ['F1', 'G1', 'R3', 'S1', 'T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3']:
+    device['eps'] = ('E' in parts[-1]) or (model == 'EVO' and 'H' in parts[-1])
+    if model not in ['F1', 'G1', 'R3', 'S1', 'T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3', 'EVO']:
         output(f"** device model not recognised for deviceType: {device['deviceType']}")
         return device
     device['model'] = model
@@ -530,7 +532,7 @@ def get_device(sn=None, device_type=None):
     # set max charge current
     if model in ['F1', 'G1', 'R3', 'S1', 'T3']:
         device['max_charge_current'] = None
-    elif model in ['KH']:
+    elif model in ['KH', 'EVO']:
         device['max_charge_current'] = 50
     elif model in ['H1', 'AC1']:
         device['max_charge_current'] = 35
@@ -1020,9 +1022,9 @@ def set_work_mode(mode, force = 0):
     global device_sn, work_modes, work_mode, debug_setting
     if get_device() is None:
         return None
-    if mode not in settable_modes:
-        output(f"** work mode: must be one of {settable_modes}")
-        return None
+#    if mode not in settable_modes:
+#        output(f"** work mode: must be one of {settable_modes}")
+#        return None
     if get_schedule().get('enable'):
         if force == 0:
             output(f"** set_work_mode(): cannot set work mode when a schedule is enabled")
@@ -1158,11 +1160,11 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         return None
     min_soc = 10 if min_soc is None else min_soc
     max_soc = None if schedule is None or schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
-    if mode == 'ForceCharge' and fdsoc is None:
+    if 'ForceCharge' in mode and fdsoc is None:
         fdsoc = max_soc if max_soc is not None else 100
     fdsoc = min_soc if fdsoc is None else fdsoc
     power = (device['power'] * 1000) if device.get('power') is not None else None
-    fdpwr = power if fdpwr is None and device.get('power') is not None and mode in ['ForceCharge', 'ForceDischarge'] else fdpwr
+    fdpwr = power if fdpwr is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else fdpwr
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 10 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 10 and 100")
@@ -1178,8 +1180,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         return None
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
-        s += f", maxsoc {max_soc}%" if max_soc is not None and mode == 'ForceCharge' else ""
-        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode in ['ForceCharge', 'ForceDischarge'] else ""
+        s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
+        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_hour, start_minute = split_hours(start)
@@ -2172,7 +2174,7 @@ def get_strategy(use=None, strategy=None, quiet=1, remove=None, reserve=0, limit
         if quiet == 0:
             s = f"   {hours_time(start)}-{hours_time(end)} {mode}, min_soc {min_soc_now}%"
             s += f", max_soc {max_soc}%" if max_soc is not None else ""
-            s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if mode == 'ForceDischarge' else ""
+            s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if 'ForceDischarge' in mode else ""
             s += f", {price:.1f}p/kWh" if price is not None else ""
             output(s, 1)
         updated.append(segment)
@@ -2529,7 +2531,7 @@ def strategy_timed(timed_mode, time_line, run_time, min_soc=10, max_soc=100, cur
                     period['min_soc'] = min_soc_now
                     max_soc_now = d['max_soc'] if d.get('max_soc') is not None else max_soc
                     period['max_soc'] = max_soc_now
-                    if mode == 'ForceDischarge':
+                    if 'ForceDischarge' in mode:
                         if d.get('fdsoc') is not None:
                             period['fdsoc'] = d['fdsoc'] if d['fdsoc'] > min_soc_now else min_soc_now
                         if d.get('fdpwr') is not None:
@@ -2557,7 +2559,7 @@ def battery_timed(work_mode_timed, kwh_current, capacity, time_to_next, kwh_min=
         min_soc_now = w['min_soc']
         reserve_now = capacity * min_soc_now / 100
         reserve_limit = capacity * (min_soc_now - allowed_drain) / 100
-        fdsoc_limit = (capacity * w['fdsoc'] / 100) if w['mode'] =='ForceDischarge' else capacity
+        fdsoc_limit = (capacity * w['fdsoc'] / 100) if 'ForceDischarge' in w['mode'] else capacity
         if kwh_next < max_now and w['charge'] > 0.0:
             # charge from grid or force charge
             kwh_next += min([w['charge'], charge_limit - w['pv']]) * charge_loss / steps_per_hour
@@ -2606,10 +2608,10 @@ def charge_periods(work_mode_timed, base_hour, min_soc, capacity):
         h = base_hour + t / steps_per_hour
         if h == 24 or period['mode'] != next_period['mode'] or period['hold'] != next_period['hold'] or period['min_soc'] != next_period['min_soc']:
             s = {'start': start % 24, 'end': h % 24, 'mode': period['mode'], 'min_soc': period['min_soc']}
-            if period['mode'] == 'ForceDischarge':
+            if 'ForceDischarge' in period['mode']:
                 s['fdsoc'] = period.get('fdsoc')
                 s['fdpwr'] = period.get('fdpwr')
-            elif period['mode'] == 'ForceCharge':
+            elif 'ForceCharge' in period['mode']:
                 s['max_soc'] = period.get('max_soc')
             elif period['mode'] == 'SelfUse' and period['hold'] == 1:
                 s['min_soc'] = min([int(period['kwh'] / capacity * 100 + 0.5), 100])
@@ -3016,7 +3018,7 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
         if timed_mode > 0 and work_mode == 'ForceCharge':
             discharge_timed[i] = discharge_timed[i] * (1.0 - duration)
             work_mode_timed[i]['charge'] = charge_power * duration
-        elif timed_mode > 0 and work_mode == 'ForceDischarge':
+        elif timed_mode > 0 and 'ForceDischarge' in work_mode:
             fdpwr = work_mode_timed[i]['fdpwr'] / dc_ac_loss / 1000
             work_mode_timed[i]['fd_kwh'] = min([discharge_limit, export_limit + discharge_timed[i], fdpwr]) * duration
         elif bat_hold > 0 and i >= int(time_to_start) and i < int(time_to_end):
@@ -3119,7 +3121,7 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
     end_soc = end_residual / capacity * 100
     # show the results
     output(f"  End SoC:     {end_soc:.0f}% at {hours_time(adjusted_hour(time_to_end, time_line))} ({end_residual:.2f}kWh)")
-    output(f"  Contingency: {kwh_spare / capacity * 100:.0f}% SoC ({kwh_spare:.2f}kWh)")
+    output(f"  Contingency: {kwh_spare / consumption * 100:.0f}%, {kwh_spare:.2f}kWh (using {contingency:.0f}%)")
     if not charge_today:
         output(f"  PV cover:    {expected / consumption * 100:.0f}% ({expected:.1f}/{consumption:.1f})")
     # setup charging

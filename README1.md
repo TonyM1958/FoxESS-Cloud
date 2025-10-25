@@ -777,8 +777,11 @@ This setting can be:
 
 # Version Info
 
-1.9.9 - 2025/10/12<br>
+1.10.0 - 2025/10/25<br>
 Change default contingency for charge_needed() to [25,15,10,20] and special contingency to 35.
+Update info shown around contingency.
+Remove validation of work modes so AC/BAT options for ForceCharge and ForceDischarge are accepted.
+Update get_device() to recognise EVO series.
 
 1.9.8<br>
 Update set_min() to accept 0 instead of 10 and align with Open API.
