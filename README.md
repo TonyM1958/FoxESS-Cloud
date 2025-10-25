@@ -806,11 +806,13 @@ This setting can be:
 
 
 # Version Info
-2.9.0 - 2025/10/13<br>
+
+2.9.1 - 2025/10/25<br>
 Change default contingency for charge_needed() to [25,15,10,20] and special contingency to 35.
 Update info shown around contingency.
 Remove validation of work modes so AC/BAT options for ForceCharge and ForceDischarge are accepted.
 Update get_device() to recognise EVO series.
+Fix bug in get_report when plotting results and 'station' is undefined.
 
 2.8.8<br>
 Fix problem where Open API returns conflicting variable names when reporting stats by year.

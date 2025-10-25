@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.0"
+version = "2.9.1"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1747,7 +1747,7 @@ def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None,
             var['min'] = min if min is not None else None
             var['min_index'] = [y for y in var['values']].index(min) if min is not None else None
     if plot > 0 and summary < 2:
-        plot_report(result, plot, station)
+        plot_report(result, plot)
     return result
 
 # plot get_report result
