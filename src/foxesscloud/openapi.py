@@ -1206,7 +1206,7 @@ def set_schedule(periods=None, enable=True):
         return None
     output(f"set_schedule(): enable = {enable}, periods = {periods}", 2)
     if debug_setting > 2:
-        print(f"** schedule not set (debug_level={debug_level})")
+        print(f"** schedule not set (debug_setting={debug_setting})")
         return None
     if type(enable) is int:
         enable = True if enable == 1 else False
