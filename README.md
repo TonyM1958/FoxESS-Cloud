@@ -166,11 +166,15 @@ set_period() returns a period structure that can be used to build a list for set
 + max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
++ import_limit: optional, default is None (not set). Used when setting a period with ForceCharge mode
++ export_limit: optional, default is None (not set). Used when setting a period with ForceDischarge mode
 + price: optional, default None. Used to display plunge pricing for time period.
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
 Before calling set_period(), do at least one call to get_schedule(). This will inspect the schedule result to check if max_soc is supported and set the flag f.schedule['maxsoc'] to enable or disable this field as appropriate.
+
+The variable f.max_periods is used to check the number of time periods allowed. The default is 8.
 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
 + periods: a time segment or list of time segments created using f.set_period().
@@ -806,6 +810,10 @@ This setting can be:
 
 
 # Version Info
+
+2.9.2 - 2025/11/30<br>
+Update get_schedule(), set_period() and set_schedule() to use v2 interface and add setting import_limit and export_limit.
+Added f.max_periods to allow for more time periods in schedules (default is 8).
 
 2.9.1 - 2025/10/25<br>
 Change default contingency for charge_needed() to [25,15,10,20] and special contingency to 35.

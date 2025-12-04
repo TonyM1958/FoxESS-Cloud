@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  25 October 2025
+Updated:  30 November 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.1"
+version = "2.9.2"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1053,6 +1053,7 @@ def set_work_mode(mode, force = 0):
 ##################################################################################################
 
 schedule = None
+max_periods = 8
 
 # get the current switch status
 def get_flag():
@@ -1090,7 +1091,7 @@ def get_schedule():
         return None
     output(f"getting schedule", 2)
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v1/device/scheduler/get", body=body)
+    response = signed_post(path="/op/v2/device/scheduler/get", body=body)
     if response.status_code != 200:
         output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
@@ -1107,7 +1108,7 @@ def get_schedule():
     for g in result['groups']:
         if g['enable'] == 1 and g['workMode'] in work_modes:
             schedule['periods'].append(g)
-            if g.get('maxSoc') is not None:
+            if g.get('extraParam') is not None and g['extraParam'].get('maxSoc') is not None:
                 schedule['maxsoc'] = True
     return schedule
 
@@ -1126,6 +1127,8 @@ def build_strategy_from_schedule():
         period['max_soc'] = p.get('maxSoc')
         period['fdsoc'] = p.get('fdsoc')
         period['fdpwr'] = p.get('fdpwr')
+        period['import_limit'] = p.get('importLimit')
+        period['export_limit'] = p.get('exportLimit')
         strategy.append(period)
     return strategy
 
@@ -1134,7 +1137,7 @@ def build_strategy_from_schedule():
 ##################################################################################################
 
 # create time segment structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, price=None, segment=None, enable=1, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, price=None, segment=None, enable=1, quiet=1):
     global schedule, device
     if schedule is None:
         get_schedule()
@@ -1146,6 +1149,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         max_soc = segment.get('max_soc')
         fdsoc = segment.get('fdSoc')
         fdpwr = segment.get('fdPwr')
+        import_limit = segment.get('import_limit')
+        export_limit = segment.get('export_limit')
         price = segment.get('price')
     start = time_hours(start)
     # adjust exclusive time to inclusive
@@ -1166,8 +1171,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     power = (device['power'] * 1000) if device.get('power') is not None else None
     fdpwr = power if fdpwr is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else fdpwr
     fdpwr = 0 if fdpwr is None else fdpwr
-    if min_soc < 10 or min_soc > 100:
-        output(f"set_period(): ** min_soc must be between 10 and 100")
+    if min_soc < 0 or min_soc > 100:
+        output(f"set_period(): ** min_soc must be between 0 and 100")
         return None
     if max_soc is not None and (max_soc < 10 or max_soc > 100):
         output(f"set_period(): ** max_soc must be between 10 and 100")
@@ -1187,14 +1192,13 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
     period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode,
-        'minSocOnGrid': int(min_soc), 'fdSoc': int(fdsoc), 'fdPwr': int(fdpwr)}
-    if max_soc is not None:
-        period['maxSoc'] = int(max_soc)
+        'extraParam': {'minSocOnGrid': int(min_soc), 'fdSoc': int(fdsoc), 'fdPwr': int(fdpwr), 'maxSoc': max_soc, 'importLimit': import_limit,
+        'exportLimit': export_limit }}
     return period
 
 # set a schedule from a period or list of time segment periods
 def set_schedule(periods=None, enable=True):
-    global device_sn, debug_setting, schedule
+    global device_sn, debug_setting, schedule, max_periods
     if get_flag() is None:
         return None
     if schedule.get('support') == False:
@@ -1202,6 +1206,7 @@ def set_schedule(periods=None, enable=True):
         return None
     output(f"set_schedule(): enable = {enable}, periods = {periods}", 2)
     if debug_setting > 2:
+        print(f"** schedule not set (debug_level={debug_level})")
         return None
     if type(enable) is int:
         enable = True if enable == 1 else False
@@ -1212,11 +1217,11 @@ def set_schedule(periods=None, enable=True):
     if periods is not None:
         if type(periods) is not list:
             periods = [periods]
-        if len(periods) > 8:
-            output(f"** set_schedule(): maximum of 8 periods allowed, {len(periods)} provided")
-        body = {'deviceSN': device_sn, 'groups': periods[-8:]}
+        if len(periods) > max_periods:
+            output(f"** set_schedule(): maximum of {max_periods} periods allowed, {len(periods)} provided")
+        body = {'deviceSN': device_sn, 'groups': periods[-max_periods:]}
         setting_delay()
-        response = signed_post(path="/op/v1/device/scheduler/enable", body=body)
+        response = signed_post(path="/op/v2/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() periods response code {response.status_code}: {response.reason}")
             return None
