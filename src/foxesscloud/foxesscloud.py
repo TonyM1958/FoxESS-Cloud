@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  25 October 2025
+Updated:  18 January 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.10.0"
+version = "1.11.0"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1862,8 +1862,8 @@ def rescale_history(data, steps):
 # station = 0: use device_id, 1 = use station_id
 ##################################################################################################
 
-report_vars = ['PVEnergyTotal', 'input','generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
-report_names = ['PV Yield', 'Input', 'Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
+report_vars = ['PVEnergyTotal', 'generation', 'feedin', 'loads', 'gridConsumption', 'chargeEnergyToTal', 'dischargeEnergyToTal']
+report_names = ['PV Yield', 'Generation', 'Grid Export', 'Consumption', 'Grid Import', 'Battery Charge', 'Battery Discharge']
 
 # fix power values after fox corrupts high word of 32-bit energy total
 fix_values = 1

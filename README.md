@@ -47,6 +47,7 @@ You don't have to configure all of the settings. Your Fox ESS Cloud api key is t
 For example, replace _my.fox_api_key_ with the API key. Add you inverter serial number if you have more than 1 inverter linked to your account. Be sure to keep the double quotes around the values you enter or you will get a syntax error.
 
 Residual handling configures how battery residual energy reported by Fox is handled:
++ 0: Use rated capacity, SoH and SoC to calculate residual energy (default)
 + 1: Fox returns the current battery residual energy and battery capacity is calculated using soc
 + 2: Fox returns the current battery capacity and battery residual is calculated using soc
 + 3: Fox returns the residual capacity per battery (Mira)
@@ -94,8 +95,8 @@ Once an inverter is selected, you can make other calls to get information:
 
 ```
 f.get_generation()
-f.get_battery(info, rated, count)
-f.get_batteries(info, rated, count)
+f.get_battery()
+f.get_batteries(info)
 f.get_settings()
 f.get_charge()
 f.get_min()
@@ -103,17 +104,15 @@ f.get_peakshaving()
 f.get_flag()
 f.get_schedule()
 f.get_named_settings(name)
+f.get_battery_heating()
 
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
 
 get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
-get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature' and 'residual'. The result also updates f.battery / f.batteries.
-get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery. Parameters:
-+ 'info': get battery serial number info, if available. Default 0 (not available via Open API)
-+ 'rated': optional rated capacity for the battery in Wh to work out SoH. If not provided, it will try to work this out.
-+ 'count': optional battery count. If not provided, it will try to work this out.
+get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature', 'residual' and 'throughput'. The result also updates f.battery / f.batteries.
+get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery.
 
 Additional battery attributes provided include:
 + 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
@@ -132,8 +131,9 @@ get_schedule() returns the current work mode / soc schedule settings. The result
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
-+ named_settings currently supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
++ named_settings currently available are stored in f.name_list. The settings supported depends on the inverter model and firmware version. An error will be returned if an unsupported variable is used.
 
+get_battery_heating returns the current battery heating parameters and store these in f.battery_heating
 
 ## Inverter Settings
 You can change inverter settings using:
@@ -144,6 +144,7 @@ f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
 f.set_schedule(periods, enable)
 f.set_named_settings(name, value, force)
+f.set_battery_heating(enable, start, end, time1, time2, time3)
 ```
 
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
@@ -184,8 +185,12 @@ set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
 + force: setting to 1 will disable Mode Scheduler, if enabled. Default is 0.
 + a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
-+ named_settings currently supported include: ExportLimit, MinSoc, MinSocOnGrid, MaxSoc, GridCode, WorkMode
++ named_settings currently available are stored in f.name_list. The settings supported depend on the inverter model and firmware version. An error will be returned if an unsupported varaible is used.
 
+set_battery_heating() set the heating parameters as follows:
++ enable: optional, 0 or 1, default is 1
++ start, end: optional start and end temperatures. The defaults are start at 9C and end at 12C.
++ time1, time2, time3: optional times when the battery can heat from the grid time. The structure is {'enable': 1, 'start': '00:30', 'end': '05:30'}. The time slot is disabled by default.
 
 ## Real Time Data
 Real time data reports the latest values for inverter variables, collected every 5 minutes:
@@ -810,6 +815,15 @@ This setting can be:
 
 
 # Version Info
+
+2.9.3 - 2026/01/18<br>
+Update get_device() to use v1 API call.
+Update get_battery() to work out battery count and rated capacity from device battery list.
+Update default residual_handling to option 0 (residual is calculated from rated capacity, SoH and SoC).
+Added get_battery_real() for testing (Fox does not currently populate most of the data).
+Added 'throughput' to battery variables returned.
+Add f.name_list to hold the list of setting variables and update the list.
+Added get_battery_heating() and set_battery_heating().
 
 2.9.2 - 2025/11/30<br>
 Update get_schedule(), set_period() and set_schedule() to use v2 interface and add setting import_limit and export_limit.

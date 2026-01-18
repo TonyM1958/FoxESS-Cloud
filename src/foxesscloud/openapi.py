@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  30 November 2025
+Updated:  18 January 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.2"
+version = "2.9.3"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -486,7 +486,7 @@ def get_device(sn=None, device_type=None):
     # load information for the device
     device_sn = device_list[n].get('deviceSN')
     params = {'sn': device_sn }
-    response = signed_get(path="/op/v0/device/detail", params=params)
+    response = signed_get(path="/op/v1/device/detail", params=params)
     if response.status_code != 200:
         output(f"** get_device() got detail response code {response.status_code}: {response.reason}")
         return None
@@ -574,11 +574,11 @@ def get_generation(update=1):
 battery = None
 batteries = None
 battery_settings = None
-battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH' ]
-battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh']
+battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH','energyThroughput' ]
+battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh', 'throughput']
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
-residual_handling = 1
+residual_handling = 0
 
 # charge rates based on residual_handling. Index is bms temperature
 battery_params = {
@@ -611,57 +611,53 @@ def get_battery(info=0, v=None, rated=None, count=None):
     global device_sn, battery, debug_setting, residual_handling, battery_params
     if get_device() is None:
         return None
+    battery = {}
+    rated = 0
+    count = 0
+    for b in device['batteryList']:
+        if b.get('type') == 'bmu' and b.get('capacity') is not None:
+            rated += b['capacity']
+            count += 1
+    if count > 0:
+        battery['count'] = count
+        battery['ratedCapacity'] = rated
+    else:
+        output(f"** get_battery(): battery capacity not available")
+        return None
     output(f"getting battery", 2)
     if v is None:
         v = battery_vars
     result = get_real(v)
-    battery = {}
     for i in range(0, len(battery_vars)):
         battery[battery_data[i]] = result[i].get('value')
     if debug_setting > 1:
         print(f"raw battery = {battery}")
-    battery['residual_handling'] = residual_handling
-    battery['soh'] = None
-    battery['soh_supported'] = False
     if battery.get('status') is None:
         battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 10 else 1
     if battery['status'] == 0:
         output(f"** get_battery(): battery status not available")
         return None
-    if battery['residual_handling'] == 2:
+    capacity = battery['ratedCapacity'] / 1000 * (battery['soh'] if battery.get('soh') is not None else 100) / 100
+    soc = battery.get('soc')
+    battery['residual_handling'] = residual_handling
+    if battery['residual_handling'] == 1:
+        capacity = battery['residual'] / soc * 100
+        battery['soh'] = round(capacity * 1000 / battery['ratedCapacity'] * 100, 1)
+    elif battery['residual_handling'] == 2:
         capacity = battery.get('residual')
-        soc = battery.get('soc')
-        residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
-        if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49) if count is None else count
-        if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2560 * battery['count'] if rated is None else rated
+        battery['soh'] = round(capacity * 1000 / battery['ratedCapacity'] * 100, 1)
     elif battery['residual_handling'] == 3:
-        if battery.get('count') is None:
-            battery['count'] = int(battery['volt'] / 49) if count is None else count
         capacity = (battery['residual'] * battery['count']) if battery.get('residual') is not None else None
-        soc = battery.get('soc')
-        residual = capacity * soc / 100 if capacity is not None and soc is not None else capacity
-        if battery.get('ratedCapacity') is None:
-            battery['ratedCapacity'] = 2450 * battery['count'] if rated is None else rated
-    else:
-        residual = battery.get('residual')
-        soc = battery.get('soc')
-        capacity = residual / soc * 100 if residual is not None and soc is not None and soc > 0 else None 
-        if battery.get('count') is None or battery['count'] < 1:
-            battery['count'] = count
-        if battery.get('ratedCapacity') is None or battery['ratedCapacity'] < 100:
-            battery['ratedCapacity'] = rated
+        battery['soh'] = round(capacity / battery['ratedCapacity'] * 100, 1)
+    residual = capacity * soc / 100
     battery['capacity'] = round(capacity, 3)
     battery['residual'] = round(residual, 3)
-    battery['charge_rate'] = None
-    params = battery_params[battery['residual_handling']]
-    battery['charge_loss'] = params['charge_loss']
-    battery['discharge_loss'] = params['discharge_loss']
-    if battery.get('ratedCapacity') is not None and battery.get('capacity') is not None:
-        battery['soh'] = round(battery['capacity'] * 1000 / battery['ratedCapacity'] * 100, 1) if battery['ratedCapacity'] > 0.0 else None
-    if battery.get('temperature') is not None:
-        battery['charge_rate'] = interpolate((battery['temperature'] - params['offset']) / params['step'], params['table'])
+    if battery['residual_handling'] > 0:
+        params = battery_params[battery['residual_handling']]
+        battery['charge_loss'] = params['charge_loss']
+        battery['discharge_loss'] = params['discharge_loss']
+        if battery.get('temperature') is not None:
+            battery['charge_rate'] = interpolate((battery['temperature'] - params['offset']) / params['step'], params['table'])
     return battery
 
 def get_batteries(info=0, rated=None, count=None):
@@ -675,6 +671,91 @@ def get_batteries(info=0, rated=None, count=None):
         return None
     batteries = [battery]
     return batteries
+
+def get_battery_real():
+    global device_sn, device
+    if get_device() is None:
+        return None
+    output(f"getting battery real", 2)
+    params = {'sn': device_sn}
+    response = signed_get(path="/op/v0/device/battery/real/query", params=params)
+    if response.status_code != 200:
+        output(f"** get_battery_real() got response code {response.status_code}: {response.reason}")
+        return None
+    result = response.json().get('result')
+    if result is None:
+        output(f"** get_battery_real(), no result data, {errno_message(response)}")
+        return None
+    return result
+
+##################################################################################################
+# battery heating settings
+##################################################################################################
+
+battery_heating = None
+
+def get_battery_heating():
+    global device_sn, device, battery_heating
+    if get_device() is None:
+        return None
+    output(f"getting battery heating", 2)
+    body = {'sn': device_sn}
+    response = signed_post(path="/op/v0/device/batteryHeating/get", body=body)
+    if response.status_code != 200:
+        output(f"** get_battery_heating() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 41200:
+            output(f"** get_battery_heating(): not supported")
+        else:
+            output(f"** get_battery_heating(): {errno_message(response)}")
+        return None
+    result = response.json().get('result')
+    battery_heating = result
+    return result
+
+def set_time(body, s, time):
+    if time is None:
+        body[s + 'Enable'] = 0
+        body[s + 'StartHour'] = 0
+        body[s + 'StartMinute'] = 0
+        body[s + 'EndHour'] = 0
+        body[s + 'EndMinute'] = 0
+    else:
+        body[s + 'Enable'] = time['enable']
+        t = time_hours(time['start'])
+        body[s + 'StartHour'] = int(t)
+        body[s + 'StartMinute'] = int(60 * (t - int(t)) + 0.5)
+        t = time_hours(time['end'])
+        body[s + 'EndHour'] = int(t)
+        body[s + 'EndMinute'] = int(60 * (t - int(t)) + 0.5)
+    return
+
+def set_battery_heating(enable=None, start=None, end=None, time1=None, time2=None, time3=None):
+    global device_sn, device
+    if get_device() is None:
+        return None
+    output(f"setting battery heating", 2)
+    body = {'sn': device_sn}
+    body['batteryWarmUpEnable'] = enable if enable is not None else 1
+    body['startTemperature'] = start if start is not None else 9
+    body['endTemperature'] = end if end is not None else 12
+    set_time(body, 'time1', time1)
+    set_time(body, 'time2', time2)
+    set_time(body, 'time3', time3)
+    response = signed_post(path="/op/v0/device/batteryHeating/set", body=body)
+    if response.status_code != 200:
+        output(f"** set_battery_heating() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        if errno == 41200:
+            output(f"** set_battery_heating(): not supported")
+        else:
+            output(f"** set_battery_heating(): {errno_message(response)}")
+        return None
+    return 1
 
 ##################################################################################################
 # get charge times and save to battery_settings
@@ -896,6 +977,8 @@ def get_peakshaving():
 ##################################################################################################
 
 # store for named settings info
+name_list = ['ExportLimit','MinSoc','MinSocOnGrid','MaxSoc','GridCode','WorkMode','ExportLimitPower',
+    'EpsOutPut','MaxSetChargeCurrent','MaxSetDischargeCurrent','ECOMode','Meter1Enable','Meter2Enable','SysSwitch','GroundProtection']
 named_settings = {}
 
 def get_remote_settings(name):
@@ -911,8 +994,7 @@ def get_remote_settings(name):
             v = get_remote_settings(n)
             if v is None:
                 continue
-            for x in v.keys():
-                values[x] = v[x]
+            values[n] = v
         return values
     body = {'sn': device_sn, 'key': name}
     setting_delay()
@@ -923,7 +1005,7 @@ def get_remote_settings(name):
     result = response.json().get('result')
     if result is None:
         errno = response.json().get('errno')
-        output(f"** get_remote_settings(), no result data, {errno_message(response)}")
+        output(f"** get_remote_settings(), no result data for {name}, {errno_message(response)}")
         return None
     named_settings[name] = result
     value = result.get('value')
@@ -1070,7 +1152,7 @@ def get_flag():
     if result is None:
         return None
     if schedule is None:
-        schedule = {'enable': None, 'support': None, 'periods': None, 'maxsoc': False}
+        schedule = {'enable': None, 'support': None, 'periods': None, 'maxsoc': None}
     schedule['enable'] = result.get('enable')
     schedule['support'] = result.get('support')
     if device.get('function') is not None and device['function'].get('scheduler') is not None:
@@ -1104,6 +1186,7 @@ def get_schedule():
         enable = True if enable == 1 else False
     schedule['enable'] = enable
     schedule['periods'] = []
+    schedule['maxsoc'] = False
     # remove invalid work mode from periods
     for g in result['groups']:
         if g['enable'] == 1 and g['workMode'] in work_modes:
@@ -1139,7 +1222,7 @@ def build_strategy_from_schedule():
 # create time segment structure. Note: end time is exclusive.
 def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, price=None, segment=None, enable=1, quiet=1):
     global schedule, device
-    if schedule is None:
+    if schedule is None or schedule.get('maxsoc') is None:
         get_schedule()
     if segment is not None and type(segment) is dict:
         start = segment.get('start')
@@ -3442,7 +3525,8 @@ def battery_info(log=0, plot=1, rated=None, count=None, info=1, bat=None):
     output(f"Cell Volts:          {avg(cell_volts):.3f}V average, {max(cell_volts):.3f}V maximum, {min(cell_volts):.3f}V minimum")
     output(f"Cell Imbalance:      {imbalance(cell_volts):.2f}%:")
     output(f"BMS Temperature:     {bms_temperature:.1f}°C")
-    output(f"BMS Charge Rate:     {bat.get('charge_rate'):.1f}A (estimated)")
+    if bat.get('charge_rate') is not None:
+        output(f"BMS Charge Rate:     {bat['charge_rate']:.1f}A (estimated)")
     output(f"Battery Temperature: {avg(cell_temps):.1f}°C average, {max(cell_temps):.1f}°C maximum, {min(cell_temps):.1f}°C minimum")
     output(f"\nInfo by battery:")
     for i in range(0, nbat):

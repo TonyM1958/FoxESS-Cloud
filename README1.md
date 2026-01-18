@@ -777,6 +777,9 @@ This setting can be:
 
 # Version Info
 
+1.11.0 - 2026/01/18<br>
+Remove Input from the f.report_vars to stop get_report() returning incorrect results with this.
+
 1.10.0 - 2025/10/25<br>
 Change default contingency for charge_needed() to [25,15,10,20] and special contingency to 35.
 Update info shown around contingency.

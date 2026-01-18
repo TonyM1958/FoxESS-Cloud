@@ -1,4 +1,4 @@
-schema_version: 2024.04.01
+schema_version: 2025.06.01
 type: job
 spec:
   name: daily
@@ -8,33 +8,45 @@ spec:
     data to PV Output
   image: community/saturncloud/saturn-python:2023.05.01
   instance_type: medium
-  environment_variables:
-    CHARGE_PARAMS: update_settings=1,charge_current=15,timed_mode=0,force_charge=0
-    TARIFF_PARAMS: '''go'',region=''H'''
-    PVOUTPUT_PARAMS: tou=1,push=2
-    RESIDUAL_HANDLING: '1'
+  environment_variables: {}
   working_directory: /home/jovyan/workspace
   extra_packages:
     pip:
       install: foxesscloud
-  start_script: |
+  start_script: >
     #! /usr/bin/bash
+
     cat > script.py <<EOF
+
     import foxesscloud.openapi as f
 
+
     f.api_key = ${FOX_API_KEY:-None}
+
     f.username = ${FOX_USERNAME:-None}
+
     f.password = ${FOX_PASSWORD:-None}
+
     f.device_sn = ${FOX_DEVICE_SN:-None}
+
     f.pv_api_key = ${PV_API_KEY:-None}
+
     f.pv_system_id = ${PV_SYSTEM_ID:-None}
+
     f.solcast_api_key = ${SOLCAST_API_KEY:-None}
+
     f.pushover_user_key = ${PUSHOVER_USER_KEY:-None}
+
     f.plot_file = "plot###.png"
-    f.residual_handling = ${RESIDUAL_HANDLING:-1}
-    f.set_tariff($TARIFF_PARAMS)
-    f.charge_needed($CHARGE_PARAMS)
-    f.set_pvoutput($PVOUTPUT_PARAMS)
+
+    f.residual_handling = 2
+
+    f.set_tariff('go',region='H')
+
+    f.charge_needed(update_settings=1,charge_current=15,timed_mode=0,force_charge=0)
+
+    f.set_pvoutput(tou=1,push=2)
+
 
     EOF
   token_scope: job:{self}:dask:write
@@ -91,5 +103,5 @@ spec:
   concurrency_policy: Allow
   retries: 0
 state:
-  id: f46478a40f9c43c1ac07be031a066f15
-  status: error
+  id: df823d9985bc4fd68a0d9b242bbfe960
+  status: completed
