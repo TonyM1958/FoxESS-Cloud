@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  18 January 2025
+Updated:  19 January 2025
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.3"
+version = "2.9.4"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -692,10 +692,8 @@ def get_battery_real():
 # battery heating settings
 ##################################################################################################
 
-battery_heating = None
-
-def get_battery_heating():
-    global device_sn, device, battery_heating
+def get_heating():
+    global device_sn, device
     if get_device() is None:
         return None
     output(f"getting battery heating", 2)
@@ -705,42 +703,59 @@ def get_battery_heating():
         output(f"** get_battery_heating() got response code {response.status_code}: {response.reason}")
         return None
     errno = response.json().get('errno')
-    if errno != 0:
-        if errno == 41200:
-            output(f"** get_battery_heating(): not supported")
-        else:
-            output(f"** get_battery_heating(): {errno_message(response)}")
-        return None
     result = response.json().get('result')
-    battery_heating = result
-    return result
+    if errno != 0 and errno != 41200:
+        output(f"** get_battery_heating(): {errno_message(response)}")
+        return None
+    if result is None:
+        items = None
+    else:
+        items = {'result': result}
+        for i in result['dataList']:
+            n = i['name']
+            if 'time' in n:
+                j = n[:5]
+                if items.get(j) is None:
+                    items[j] = {'enable': 0, 'start': 0.0, 'end': 0.0}
+                k = 'end' if 'End' in n else 'start' if 'Start' in n else 'enable'
+                if k == 'enable':
+                    items[j]['enable'] = 0 if i['value'] == 'disable' else 1
+                else:
+                    t = (int(i['value']) / 60) if 'Minute' in n else int(i['value'])
+                    items[j][k] += t
+            else:
+                items[i['name']] = i['value']
+    device['heating'] = items
+    return items
 
 def set_time(body, s, time):
     if time is None:
-        body[s + 'Enable'] = 0
-        body[s + 'StartHour'] = 0
-        body[s + 'StartMinute'] = 0
-        body[s + 'EndHour'] = 0
-        body[s + 'EndMinute'] = 0
+        body[s + 'Enable'] = 'disable'
+        body[s + 'StartHour'] = '0'
+        body[s + 'StartMinute'] = '0'
+        body[s + 'EndHour'] = '0'
+        body[s + 'EndMinute'] = '0'
     else:
-        body[s + 'Enable'] = time['enable']
+        body[s + 'Enable'] = 'enable' if time['enable'] == 1 else 'disable'
         t = time_hours(time['start'])
-        body[s + 'StartHour'] = int(t)
-        body[s + 'StartMinute'] = int(60 * (t - int(t)) + 0.5)
+        body[s + 'StartHour'] = str(int(t))
+        body[s + 'StartMinute'] = str(int(60 * (t - int(t)) + 0.5))
         t = time_hours(time['end'])
-        body[s + 'EndHour'] = int(t)
-        body[s + 'EndMinute'] = int(60 * (t - int(t)) + 0.5)
+        body[s + 'EndHour'] = str(int(t))
+        body[s + 'EndMinute'] = str(int(60 * (t - int(t)) + 0.5))
     return
 
-def set_battery_heating(enable=None, start=None, end=None, time1=None, time2=None, time3=None):
+def set_heating(enable=None, start=None, end=None, time1=None, time2=None, time3=None):
     global device_sn, device
     if get_device() is None:
         return None
+    if get_heating() is None:
+        return 0
     output(f"setting battery heating", 2)
     body = {'sn': device_sn}
-    body['batteryWarmUpEnable'] = enable if enable is not None else 1
-    body['startTemperature'] = start if start is not None else 9
-    body['endTemperature'] = end if end is not None else 12
+    body['batteryWarmUpEnable'] = 'disable' if enable is not None and enable == 0 else 'enable'
+    body['startTemperature'] = str(start if start is not None else 9)
+    body['endTemperature'] = str(end if end is not None else 12)
     set_time(body, 'time1', time1)
     set_time(body, 'time2', time2)
     set_time(body, 'time3', time3)
@@ -750,11 +765,8 @@ def set_battery_heating(enable=None, start=None, end=None, time1=None, time2=Non
         return None
     errno = response.json().get('errno')
     if errno != 0:
-        if errno == 41200:
-            output(f"** set_battery_heating(): not supported")
-        else:
-            output(f"** set_battery_heating(): {errno_message(response)}")
-        return None
+        output(f"** set_battery_heating(): {errno_message(response)}")
+        return 0
     return 1
 
 ##################################################################################################

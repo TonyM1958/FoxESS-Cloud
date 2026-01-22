@@ -104,7 +104,7 @@ f.get_peakshaving()
 f.get_flag()
 f.get_schedule()
 f.get_named_settings(name)
-f.get_battery_heating()
+f.get_heating()
 
 ```
 Each of these calls will return a dictionary or list containing the relevant information.
@@ -133,7 +133,7 @@ get_named_settings() returns the value of a named setting. If 'name' is a list, 
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
 + named_settings currently available are stored in f.name_list. The settings supported depends on the inverter model and firmware version. An error will be returned if an unsupported variable is used.
 
-get_battery_heating returns the current battery heating parameters and store these in f.battery_heating
+get_heating returns the current battery heating parameters and store these in f.device['heating']
 
 ## Inverter Settings
 You can change inverter settings using:
@@ -144,7 +144,7 @@ f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
 f.set_schedule(periods, enable)
 f.set_named_settings(name, value, force)
-f.set_battery_heating(enable, start, end, time1, time2, time3)
+f.set_heating(enable, start, end, time1, time2, time3)
 ```
 
 set_min() applies new SoC settings to the inverter. The parameters update battery_settings:
@@ -187,7 +187,7 @@ set_named_settings() sets the 'name' setting to 'value'.
 + a return value of 1 is success. 0 means setting failed. None is another error e.g. device not found, invalid name or value.
 + named_settings currently available are stored in f.name_list. The settings supported depend on the inverter model and firmware version. An error will be returned if an unsupported varaible is used.
 
-set_battery_heating() set the heating parameters as follows:
+set_heating() set the heating parameters as follows:
 + enable: optional, 0 or 1, default is 1
 + start, end: optional start and end temperatures. The defaults are start at 9C and end at 12C.
 + time1, time2, time3: optional times when the battery can heat from the grid time. The structure is {'enable': 1, 'start': '00:30', 'end': '05:30'}. The time slot is disabled by default.
@@ -815,6 +815,10 @@ This setting can be:
 
 
 # Version Info
+
+2.9.4 - 2026/01/22<br>
+Rename get_battery_heating(), set_battery_heating() to get_heating() and set_heating().
+Update get_heating() to return a dictionary to simplify parameter access.
 
 2.9.3 - 2026/01/18<br>
 Update get_device() to use v1 API call.
