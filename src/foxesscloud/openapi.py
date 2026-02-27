@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  19 January 2025
+Updated:  27 February 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.4"
+version = "2.9.5"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1151,7 +1151,7 @@ max_periods = 8
 
 # get the current switch status
 def get_flag():
-    global device_sn, schedule, debug_setting
+    global device_sn, schedule, debug_setting, max_periods
     if get_device() is None:
         return None
     output(f"getting flag", 2)
@@ -1169,6 +1169,17 @@ def get_flag():
     schedule['support'] = result.get('support')
     if device.get('function') is not None and device['function'].get('scheduler') is not None:
         device['function']['scheduler'] = schedule['support']
+    if schedule.get('maxGroupCount') is None:
+        output(f"getting maxGroupCount", 2)
+        body = {'deviceSN': device_sn}
+        response = signed_post(path="/op/v3/device/scheduler/get", body=body)
+        if response.status_code != 200:
+            output(f"** get_flag() got response code getting maxGroupCount {response.status_code}: {response.reason}")
+            return None
+        result = response.json().get('result')
+        if result is not None:
+            schedule['maxGroupCount'] = result.get('maxGroupCount')
+            max_periods = schedule['maxGroupCount']
     return schedule
 
 ##################################################################################################
@@ -3620,7 +3631,7 @@ def battery_monitor(interval=30, run=48, log=1, count=None, save=None, overwrite
 # span: 'week', 'month' or 'year' generated dates that span a week, month or year
 # quiet: do not print results if True
 
-def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = True):
+def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = True, step=1):
     global debug_setting
     latest_date = datetime.date(datetime.now())
     today = 0 if today == False else 1 if today == True else today
@@ -3629,7 +3640,6 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if type(s) is str else s.date() if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if type(e) is str else e.date() if e is not None else None
     last = latest_date if last is not None and last > latest_date and today != 2 else last
-    step = 1
     if first is None and last is None:
         last = latest_date
     if span is not None:

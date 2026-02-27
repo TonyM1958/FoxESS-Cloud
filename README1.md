@@ -451,7 +451,7 @@ This is an example of the output from battery_info():
 ## Date Ranges
 
 ```
-f.date_list(s, e, limit, span, today)
+f.date_list(s, e, limit, span, today, step)
 ```
 
 Returns a list of dates in the format 'YYYY-MM-DD'. This function will not return dates in the future. The last date will be yesterday or today (if today is True). All parameters are optional:
@@ -461,6 +461,7 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + limit: maximum number of days. The default is 200
 + span: the range of dates. One of 'day', 'week', 'month' or 'year', '2days' or 'weekday'
 + today: 1 allows today to be included, 2 allows future dates to be included. Default is 0, date list will stop at yesterday
++ step: optional days to add (default is 1)
 
 You can use 'span' as follows:
 + 'day' provides a single day
@@ -776,6 +777,9 @@ This setting can be:
 
 
 # Version Info
+
+1.11.1 - 2026/02/11<br>
+Add step parameter to date_list()
 
 1.11.0 - 2026/01/18<br>
 Remove Input from the f.report_vars to stop get_report() returning incorrect results with this.

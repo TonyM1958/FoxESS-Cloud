@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 January 2026
+Updated:  11 February 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.11.0"
+version = "1.11.1"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -3821,7 +3821,7 @@ def battery_monitor(interval=30, run=48, log=1, count=None, save=None, overwrite
 # span: 'week', 'month' or 'year' generated dates that span a week, month or year
 # quiet: do not print results if True
 
-def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = True):
+def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = True, step=1):
     global debug_setting
     latest_date = datetime.date(datetime.now())
     today = 0 if today == False else 1 if today == True else today
@@ -3830,7 +3830,6 @@ def date_list(s = None, e = None, limit = None, span = None, today = 0, quiet = 
     first = datetime.date(datetime.strptime(s, '%Y-%m-%d')) if type(s) is str else s.date() if s is not None else None
     last = datetime.date(datetime.strptime(e, '%Y-%m-%d')) if type(e) is str else e.date() if e is not None else None
     last = latest_date if last is not None and last > latest_date and today != 2 else last
-    step = 1
     if first is None and last is None:
         last = latest_date
     if span is not None:

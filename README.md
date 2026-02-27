@@ -125,6 +125,7 @@ get_settings() will return the battery settings and is equivalent to get_charge(
 get_peakshaving() will return the current peak shaving settings for inverters that support this work mode.
 
 get_flag() returns the current scheduler enable / support / maxsoc flags. By default support for Max Soc is set to False.
++ f.max_periods / schedule['maxGroupCount'] gives the maximum number of time periods that are supported.
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
 + if the schedule returned contains any values for 'maxSoc', the f.schedule['maxsoc'] is set to True to indicate that the current inverter supports setting Max Soc in schedules and Max Soc values are set by set_schedule().
@@ -482,7 +483,7 @@ This is an example of the output from battery_info():
 ## Date Ranges
 
 ```
-f.date_list(s, e, limit, span, today)
+f.date_list(s, e, limit, span, today, step)
 ```
 
 Returns a list of dates in the format 'YYYY-MM-DD'. This function will not return dates in the future. The last date will be yesterday or today (if today is True). All parameters are optional:
@@ -492,6 +493,7 @@ Returns a list of dates in the format 'YYYY-MM-DD'. This function will not retur
 + limit: maximum number of days. The default is 200
 + span: the range of dates. One of 'day', 'week', 'month' or 'year', '2days' or 'weekday'
 + today: 1 allows today to be included, 2 allows future dates to be included. Default is 0, date list will stop at yesterday
++ step: optional days to add (default is 1)
 
 You can use 'span' as follows:
 + 'day' provides a single day
@@ -815,6 +817,10 @@ This setting can be:
 
 
 # Version Info
+
+2.9.5 - 2026/02/27<br>
+Add step parameter to date_list().
+Get maxGroupCount from v3 scheduler and update f.max_periods with maximum number of time periods supported.
 
 2.9.4 - 2026/01/22<br>
 Rename get_battery_heating(), set_battery_heating() to get_heating() and set_heating().
