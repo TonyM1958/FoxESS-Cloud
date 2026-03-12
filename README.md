@@ -818,6 +818,13 @@ This setting can be:
 
 # Version Info
 
+2.9.6 - 2026/03/10<br>
+Fix problem setting fdsoc and fdpwr from segment for set_period().
+Correctly identify H1-G2 model inverter.
+Add maxChargeCurrent and maxDischargeCurrent to f.battery.
+Update battery charge derating with temperature so charge current is not 0.
+
+
 2.9.5 - 2026/02/27<br>
 Add step parameter to date_list().
 Get maxGroupCount from v3 scheduler and update f.max_periods with maximum number of time periods supported.

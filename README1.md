@@ -778,6 +778,9 @@ This setting can be:
 
 # Version Info
 
+1.11.2 - 2026 03 12<br>
+Correctly identify H1-G2 inverter model
+
 1.11.1 - 2026/02/11<br>
 Add step parameter to date_list()
 

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  11 February 2026
+Updated:  05 March 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.11.1"
+version = "1.11.2"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -502,6 +502,9 @@ def get_device(sn=None, device_type=None):
         model_code = 'EVO-' + model_code[4:]
     parts = model_code.split('-')
     model = parts[0]
+    if parts[-1] == 'G2':
+        parts[0] += 'G2'
+        del parts[-1]
     device['eps'] = ('E' in parts[-1]) or (model == 'EVO' and 'H' in parts[-1])
     if model not in ['F1', 'G1', 'R3', 'S1', 'T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3', 'EVO']:
         output(f"** device model not recognised for deviceType: {device['deviceType']}")

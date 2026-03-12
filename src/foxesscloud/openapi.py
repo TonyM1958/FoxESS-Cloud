@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  27 February 2026
+Updated:  10 March 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.5"
+version = "2.9.6"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -515,6 +515,9 @@ def get_device(sn=None, device_type=None):
         model_code = 'EVO-' + model_code[4:]
     parts = model_code.split('-')
     model = parts[0]
+    if parts[-1] == 'G2':
+        parts[0] += 'G2'
+        del parts[-1]
     device['eps'] = ('E' in parts[-1]) or (model == 'EVO' and 'H' in parts[-1])
     if model not in ['F1', 'G1', 'R3', 'S1', 'T3', 'KH', 'H1', 'AC1', 'H3', 'AC3', 'AIOH1', 'AIOH3', 'EVO']:
         output(f"** device model not recognised for deviceType: {device['deviceType']}")
@@ -574,8 +577,8 @@ def get_generation(update=1):
 battery = None
 batteries = None
 battery_settings = None
-battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH','energyThroughput' ]
-battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh', 'throughput']
+battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH','energyThroughput', 'maxChargeCurrent', 'maxDischargeCurrent' ]
+battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh', 'throughput', 'maxChargeCurrent', 'maxDischargeCurrent']
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 0
@@ -584,7 +587,7 @@ residual_handling = 0
 battery_params = {
 #    bms temp      5 10  15  20  25  30  35  40  45  50  55  60 65 
 #    cell temp    -5  0   5  10  15  20  25  30  35  40  45  50 55
-    1: {'table': [ 0, 2, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 0],
+    1: {'table': [ 1, 5, 10, 15, 25, 50, 50, 50, 50, 50, 30, 20, 1],
         'step': 5,
         'offset': 5,
         'charge_loss': 0.974,
@@ -592,7 +595,7 @@ battery_params = {
 # HV BMS v2 with firmware 1.014 or later
 #    bms temp     10 15  20  25  30  35  40  45  50  55  60  65  70 
 #    cell temp     0  5  10  15  20  25  30  35  40  45  50  55  60
-    2: {'table': [ 0, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  0],
+    2: {'table': [ 1, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  1],
         'step': 5,
         'offset': 11,
         'charge_loss': 1.08,
@@ -600,7 +603,7 @@ battery_params = {
 # Mira BMS with firmware 1.014 or later
 #    bms temp     10 15  20  25  30  35  40  45  50  55  60  65  70 
 #    cell temp     0  5  10  15  20  25  30  35  40  45  50  55  60
-    3: {'table': [ 0, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  0],
+    3: {'table': [ 1, 5, 10, 15, 25, 50, 50, 50, 50, 25, 20,  3,  1],
         'step': 5,
         'offset': 11,
         'charge_loss': 0.974,
@@ -1253,8 +1256,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         mode = segment.get('mode')
         min_soc = segment.get('min_soc')
         max_soc = segment.get('max_soc')
-        fdsoc = segment.get('fdSoc')
-        fdpwr = segment.get('fdPwr')
+        fdsoc = segment.get('fdsoc')
+        fdpwr = segment.get('fdpwr')
         import_limit = segment.get('import_limit')
         export_limit = segment.get('export_limit')
         price = segment.get('price')
@@ -2955,7 +2958,7 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
     reserve = capacity * min_soc / 100
     # charge current may be derated based on temperature
     charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
-    if bms_charge_current is not None and charge_current > bms_charge_current:
+    if bms_charge_current is not None and bms_charge_current < charge_current:
         charge_current = bms_charge_current
     volt_curve = charge_config['volt_curve']
     nominal_soc = charge_config['nominal_soc']
@@ -2976,10 +2979,6 @@ def charge_needed(forecast=None, consumption=None, update_settings=0, timed_mode
     output(f"  Resistance:  {bat_resistance:.2f} ohms")
     output(f"  Nominal OCV: {bat_ocv:.1f}V at {nominal_soc}% SoC")
     output(f"  Losses:      {charge_loss * 100:.1f}% charge / {discharge_loss * 100:.1f}% discharge", 2)
-    # charge current may be derated based on temperature
-    charge_current = device_current if charge_config['charge_current'] is None else charge_config['charge_current']
-    if charge_current > bms_charge_current:
-        charge_current = bms_charge_current
     # inverter losses
     inverter_power = charge_config['inverter_power'] if charge_config['inverter_power'] is not None else round(device_power, 0) * 25
     operating_loss = inverter_power / 1000
