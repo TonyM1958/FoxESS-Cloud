@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  05 March 2026
+Updated:  18 March 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.11.2"
+version = "1.11.3"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1478,7 +1478,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
-        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if ('ForceCharge' in mod or 'ForceDischarge' in mode) else ""
+        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_h, start_m = split_hours(start)

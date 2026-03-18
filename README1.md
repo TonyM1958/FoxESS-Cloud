@@ -778,7 +778,10 @@ This setting can be:
 
 # Version Info
 
-1.11.2 - 2026 03 12<br>
+1.11.3 - 2026/03/18<br>
+Fix typo in set_period() - Issue #27
+
+1.11.2 - 2026/03/12<br>
 Correctly identify H1-G2 inverter model
 
 1.11.1 - 2026/02/11<br>
