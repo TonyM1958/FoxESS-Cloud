@@ -168,8 +168,9 @@ set_period() returns a period structure that can be used to build a list for set
 + max_soc: optional, default is 100
 + fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode
-+ import_limit: optional, default is None (not set). Used when setting a period with ForceCharge mode
-+ export_limit: optional, default is None (not set). Used when setting a period with ForceDischarge mode
++ import_limit: optional, default is None (not set) but set to 0 if the mode is force discharge
++ export_limit: optional, default is None (not set).
++ pv_limit: optional, default is 1.5 x inverter rating.
 + price: optional, default None. Used to display plunge pricing for time period.
 + enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
@@ -818,12 +819,15 @@ This setting can be:
 
 # Version Info
 
+2.9.7 - 2026/03/18<br>
+Add pv_limit to set_period().
+Default import_linit to 0 for force discharge in set_period()
+
 2.9.6 - 2026/03/10<br>
 Fix problem setting fdsoc and fdpwr from segment for set_period().
 Correctly identify H1-G2 model inverter.
 Add maxChargeCurrent and maxDischargeCurrent to f.battery.
 Update battery charge derating with temperature so charge current is not 0.
-
 
 2.9.5 - 2026/02/27<br>
 Add step parameter to date_list().

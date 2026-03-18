@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  10 March 2026
+Updated:  18 March 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.6"
+version = "2.9.7"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1246,7 +1246,7 @@ def build_strategy_from_schedule():
 ##################################################################################################
 
 # create time segment structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, price=None, segment=None, enable=1, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, pv_limit=None, price=None, segment=None, enable=1, quiet=1):
     global schedule, device
     if schedule is None or schedule.get('maxsoc') is None:
         get_schedule()
@@ -1260,6 +1260,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         fdpwr = segment.get('fdpwr')
         import_limit = segment.get('import_limit')
         export_limit = segment.get('export_limit')
+        pv_limit = segment.get('pv_limit')
         price = segment.get('price')
     start = time_hours(start)
     # adjust exclusive time to inclusive
@@ -1279,6 +1280,8 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     fdsoc = min_soc if fdsoc is None else fdsoc
     power = (device['power'] * 1000) if device.get('power') is not None else None
     fdpwr = power if fdpwr is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else fdpwr
+    pv_limit = int(1.5 * power) if pv_limit is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else pv_limit
+    import_limit = 0 if import_limit is None and 'ForceDischarge' in mode else import_limit
     fdpwr = 0 if fdpwr is None else fdpwr
     if min_soc < 0 or min_soc > 100:
         output(f"set_period(): ** min_soc must be between 0 and 100")
@@ -1295,14 +1298,17 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
-        s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
+        s += f", fdPwr {int(fdpwr)}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
+        s += f", exportLimit {int(export_limit)}W" if export_limit is not None else ""
+        s += f", importLimit {int(import_limit)}W" if import_limit is not None else ""
+        s += f", pvLimit {int(pv_limit)}W" if pv_limit is not None else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
     period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode,
         'extraParam': {'minSocOnGrid': int(min_soc), 'fdSoc': int(fdsoc), 'fdPwr': int(fdpwr), 'maxSoc': max_soc, 'importLimit': import_limit,
-        'exportLimit': export_limit }}
+        'exportLimit': export_limit, 'pvLimit': pv_limit}}
     return period
 
 # set a schedule from a period or list of time segment periods
