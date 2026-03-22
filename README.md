@@ -126,9 +126,9 @@ get_peakshaving() will return the current peak shaving settings for inverters th
 
 get_flag() returns the current scheduler enable / support / maxsoc flags. By default support for Max Soc is set to False.
 + f.max_periods / schedule['maxGroupCount'] gives the maximum number of time periods that are supported.
++ f.schedule['properties'] details the parameters supported in Mode Scheduler for the current inverter.
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
-+ if the schedule returned contains any values for 'maxSoc', the f.schedule['maxsoc'] is set to True to indicate that the current inverter supports setting Max Soc in schedules and Max Soc values are set by set_schedule().
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
@@ -143,7 +143,7 @@ You can change inverter settings using:
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
 f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
-f.set_schedule(periods, enable)
+f.set_schedule(periods, enable, is_default)
 f.set_named_settings(name, value, force)
 f.set_heating(enable, start, end, time1, time2, time3)
 ```
@@ -172,7 +172,6 @@ set_period() returns a period structure that can be used to build a list for set
 + export_limit: optional, default is None (not set).
 + pv_limit: optional, default is 1.5 x inverter rating.
 + price: optional, default None. Used to display plunge pricing for time period.
-+ enable: sets whether this time segment is enable (1) or disabled (0). The default is enabled.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
 Before calling set_period(), do at least one call to get_schedule(). This will inspect the schedule result to check if max_soc is supported and set the flag f.schedule['maxsoc'] to enable or disable this field as appropriate.
@@ -182,6 +181,7 @@ The variable f.max_periods is used to check the number of time periods allowed. 
 set_schedule() configures a list of scheduled work mode / soc changes with enable=1. If called with enable=0, any existing schedules are disabled. To enable a schedule, you must provide a list of time segments
 + periods: a time segment or list of time segments created using f.set_period().
 + enable: 1 to enable schedules, 0 to disable schedules. The default is 1.
++ is_default: False (default): parameters not provided remain unchanged. True: parameters not provided are restored to system defaults
 
 set_named_settings() sets the 'name' setting to 'value'.
 + 'name' may also be a list of (name, value) pairs.
@@ -413,7 +413,7 @@ min_hours: 0.25                # minimum charge time to set (in decimal hours)
 min_kwh: 0.5                   # minimum charge to add in kwh
 solcast_adjust: 100            # % adjustment to make to Solcast forecast
 solar_adjust:  100             # % adjustment to make to Solar forecast
-forecast_selection: 1          # 1 = only update charge times if forecast is available, 0 = use best available data. Default is 1.
+forecast_selection: 0          # 1 = only update charge times if forecast is available, 0 = use best available data.
 annual_consumption: None       # optional annual consumption in kWh. If set, this replaces consumption history
 timed_mode: 0                  # 0 = None, 1 = use timed work mode, 2 = strategy mode
 special_contingency: 35        # contingency for special days when consumption might be higher
@@ -818,6 +818,19 @@ This setting can be:
 
 
 # Version Info
+
+2.9.8 - 2026/03/22<br>
+** potential breaking changes **
+Update to use Mode Scheduler API v3.
+This adds 'properties' to f.schedule that describes the work modes and parameters supported on different inverters.
+f.work_modes and f.settable_modes are now set dynamically from the properties.
+The period parameters that are sent are trimmed to the supported set and unused parameters for the mode are removed.
+** API v3 rejects unsupported parameters. This limits the testing I can do for different inverters. Please report any issues **
+API v3 removes the previous ability to send disabled time periods. If you try to send a disabled period, set_period() will return None.
+set_period() now supports 'reactive_power' as a parameter.
+set_schedule() now supports 'is_default'. See Open API documentation for more info on what this does.
+charge_needed() changed from using min_soc for battery hold to using ForceDischarge with fdpwr=0 when timed_mode=2.
+charge_needed() default configuration now has forecast_selection=0 so settings will be updated if a forecast is not available.
 
 2.9.7 - 2026/03/18<br>
 Add pv_limit to set_period().

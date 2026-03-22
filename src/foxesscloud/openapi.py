@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  18 March 2026
+Updated:  22 March 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.7"
+version = "2.9.8"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1154,7 +1154,7 @@ max_periods = 8
 
 # get the current switch status
 def get_flag():
-    global device_sn, schedule, debug_setting, max_periods
+    global device_sn, schedule, debug_setting, max_periods, work_modes, settable_modes
     if get_device() is None:
         return None
     output(f"getting flag", 2)
@@ -1167,22 +1167,29 @@ def get_flag():
     if result is None:
         return None
     if schedule is None:
-        schedule = {'enable': None, 'support': None, 'periods': None, 'maxsoc': None}
+        schedule = {'enable': None, 'support': None, 'periods': [], 'maxsoc': None}
     schedule['enable'] = result.get('enable')
     schedule['support'] = result.get('support')
     if device.get('function') is not None and device['function'].get('scheduler') is not None:
         device['function']['scheduler'] = schedule['support']
     if schedule.get('maxGroupCount') is None:
-        output(f"getting maxGroupCount", 2)
+        output(f"getting properties", 2)
         body = {'deviceSN': device_sn}
         response = signed_post(path="/op/v3/device/scheduler/get", body=body)
         if response.status_code != 200:
-            output(f"** get_flag() got response code getting maxGroupCount {response.status_code}: {response.reason}")
+            output(f"** get_flag() got response code getting properties {response.status_code}: {response.reason}")
             return None
         result = response.json().get('result')
         if result is not None:
             schedule['maxGroupCount'] = result.get('maxGroupCount')
             max_periods = schedule['maxGroupCount']
+            schedule['properties'] = result.get('properties')
+            if schedule['properties'] is not None:
+                schedule['maxsoc'] = schedule['properties'].get('maxsoc') is not None
+                modes = schedule['properties'].get('workmode')
+                if modes is not None:
+                    work_modes = sorted(modes['enumList'])
+                    settable_modes = [w for w in work_modes if 'Force' not in w]
     return schedule
 
 ##################################################################################################
@@ -1199,7 +1206,7 @@ def get_schedule():
         return None
     output(f"getting schedule", 2)
     body = {'deviceSN': device_sn}
-    response = signed_post(path="/op/v2/device/scheduler/get", body=body)
+    response = signed_post(path="/op/v3/device/scheduler/get", body=body)
     if response.status_code != 200:
         output(f"** get_schedule() got response code {response.status_code}: {response.reason}")
         return None
@@ -1212,13 +1219,10 @@ def get_schedule():
         enable = True if enable == 1 else False
     schedule['enable'] = enable
     schedule['periods'] = []
-    schedule['maxsoc'] = False
     # remove invalid work mode from periods
     for g in result['groups']:
-        if g['enable'] == 1 and g['workMode'] in work_modes:
+        if g['workMode'] in work_modes:
             schedule['periods'].append(g)
-            if g.get('extraParam') is not None and g['extraParam'].get('maxSoc') is not None:
-                schedule['maxsoc'] = True
     return schedule
 
 # build strategy using current schedule
@@ -1246,9 +1250,10 @@ def build_strategy_from_schedule():
 ##################################################################################################
 
 # create time segment structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, pv_limit=None, price=None, segment=None, enable=1, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, pv_limit=None, reactive_power=None
+        , price=None, segment=None, enable=1, quiet=1):
     global schedule, device
-    if schedule is None or schedule.get('maxsoc') is None:
+    if schedule is None:
         get_schedule()
     if segment is not None and type(segment) is dict:
         start = segment.get('start')
@@ -1261,7 +1266,10 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         import_limit = segment.get('import_limit')
         export_limit = segment.get('export_limit')
         pv_limit = segment.get('pv_limit')
+        reactive_power = segment.get('reactive_power')
         price = segment.get('price')
+    if enable == 0:
+        return None
     start = time_hours(start)
     # adjust exclusive time to inclusive
     end = time_hours(end)
@@ -1273,28 +1281,18 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if mode not in work_modes:
         output(f"** mode must be one of {work_modes}")
         return None
+    properties = schedule.get('properties')
     min_soc = 10 if min_soc is None else min_soc
-    max_soc = None if schedule is None or schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
+    max_soc = None if properties.get('maxsoc') is None or 'ForceCharge' not in mode else 100 if max_soc is None else max_soc
     if 'ForceCharge' in mode and fdsoc is None:
         fdsoc = max_soc if max_soc is not None else 100
-    fdsoc = min_soc if fdsoc is None else fdsoc
+    fdsoc = None if properties.get('fdsoc') is None or 'Force' not in mode else min_soc if fdsoc is None else fdsoc
     power = (device['power'] * 1000) if device.get('power') is not None else None
-    fdpwr = power if fdpwr is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else fdpwr
-    pv_limit = int(1.5 * power) if pv_limit is None and device.get('power') is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else pv_limit
-    import_limit = 0 if import_limit is None and 'ForceDischarge' in mode else import_limit
-    fdpwr = 0 if fdpwr is None else fdpwr
-    if min_soc < 0 or min_soc > 100:
-        output(f"set_period(): ** min_soc must be between 0 and 100")
-        return None
-    if max_soc is not None and (max_soc < 10 or max_soc > 100):
-        output(f"set_period(): ** max_soc must be between 10 and 100")
-        return None
-    if fdpwr < 0 or fdpwr > 30000:
-        output(f"set_period(): ** fdpwr must be between 0 and 30000")
-        return None
-    if fdsoc < min_soc or fdsoc > 100:
-        output(f"set_period(): ** fdsoc must between {min_soc} and 100")
-        return None
+    fdpwr = None if properties.get('fdpwr') is None else power if fdpwr is None and device.get('power') is not None and ('Force' in mode) else fdpwr
+    pv_limit = None if properties.get('pvlimit') is None else int(1.5 * power) if pv_limit is None and device.get('power') is not None and ('Force' in mode) else pv_limit
+    import_limit = None if properties.get('importlimit') is None else 0 if import_limit is None and 'ForceDischarge' in mode else import_limit
+    export_limit = None if properties.get('exportlimit') is None else export_limit
+    reactive_power = None if properties.get('reactivepower') is None else reactive_power
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
@@ -1306,13 +1304,25 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(s, 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
-    period = {'enable': enable, 'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode,
-        'extraParam': {'minSocOnGrid': int(min_soc), 'fdSoc': int(fdsoc), 'fdPwr': int(fdpwr), 'maxSoc': max_soc, 'importLimit': import_limit,
-        'exportLimit': export_limit, 'pvLimit': pv_limit}}
+    period = {'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'extraParam': {'minSocOnGrid': min_soc}}
+    if max_soc is not None:
+        period['extraParam']['maxSoc'] = max_soc
+    if fdsoc is not None:
+        period['extraParam']['fdSoc'] = int(fdsoc)
+    if fdpwr is not None:
+        period['extraParam']['fdPwr'] = int(fdpwr)
+    if import_limit is not None:
+        period['extraParam']['importLimit'] = import_limit
+    if export_limit is not None:
+        period['extraParam']['exportLimit'] = export_limit
+    if pv_limit is not None:
+        period['extraParam']['pvLimit'] = pv_limit
+    if reactive_power is not None:
+        period['extraParam']['reactivePower'] = reactive_power
     return period
 
 # set a schedule from a period or list of time segment periods
-def set_schedule(periods=None, enable=True):
+def set_schedule(periods=None, enable=True, is_default=False):
     global device_sn, debug_setting, schedule, max_periods
     if get_flag() is None:
         return None
@@ -1325,18 +1335,18 @@ def set_schedule(periods=None, enable=True):
         return None
     if type(enable) is int:
         enable = True if enable == 1 else False
-    if enable == False:
-        output(f"\nDisabling schedule", 1)
-    else:
+    if enable:
         output(f"\nEnabling schedule", 1)
+    else:
+        output(f"\nDisabling schedule", 1)
     if periods is not None:
         if type(periods) is not list:
             periods = [periods]
         if len(periods) > max_periods:
             output(f"** set_schedule(): maximum of {max_periods} periods allowed, {len(periods)} provided")
-        body = {'deviceSN': device_sn, 'groups': periods[-max_periods:]}
+        body = {'deviceSN': device_sn, 'isDefault': is_default, 'groups': periods[-max_periods:]}
         setting_delay()
-        response = signed_post(path="/op/v2/device/scheduler/enable", body=body)
+        response = signed_post(path="/op/v3/device/scheduler/enable", body=body)
         if response.status_code != 200:
             output(f"** set_schedule() periods response code {response.status_code}: {response.reason}")
             return None
@@ -2734,10 +2744,10 @@ def charge_periods(work_mode_timed, base_hour, min_soc, capacity):
             elif 'ForceCharge' in period['mode']:
                 s['max_soc'] = period.get('max_soc')
             elif period['mode'] == 'SelfUse' and period['hold'] == 1:
-                s['min_soc'] = min([int(period['kwh'] / capacity * 100 + 0.5), 100])
-                s['end'] = (start + 1 / steps_per_hour) % 24
-                for p in times:
-                    p['min_soc'] = s['min_soc']
+                s['mode'] = 'ForceDischarge'
+                s['fdpwr'] = 0
+                s['fdsoc'] = min([int(period['kwh'] / capacity * 100 + 0.5), 100])
+                s['min_soc'] = 10
             if s['mode'] != 'SelfUse' or s['min_soc'] != min_soc:
                 strategy.append(s)
             start = h
@@ -2790,7 +2800,7 @@ charge_config = {
     'use_today': 21.0,                # hour when todays consumption and generation can be used
     'min_hours': 0.5,                 # minimum charge time in decimal hours
     'min_kwh': 0.5,                   # minimum to add in kwh
-    'forecast_selection': 1,          # 0 = use available forecast / generation, 1 only update settings with forecast
+    'forecast_selection': 0,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
     'special_contingency': 35,        # contingency for special days when consumption might be higher
