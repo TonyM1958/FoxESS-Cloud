@@ -102,7 +102,7 @@ f.get_charge()
 f.get_min()
 f.get_peakshaving()
 f.get_flag()
-f.get_schedule()
+f.get_schedule(filter)
 f.get_named_settings(name)
 f.get_heating()
 
@@ -129,6 +129,7 @@ get_flag() returns the current scheduler enable / support / maxsoc flags. By def
 + f.schedule['properties'] details the parameters supported in Mode Scheduler for the current inverter.
 
 get_schedule() returns the current work mode / soc schedule settings. The result is stored in f.schedule.
++ filter: 1 = remove Remain Time period (00:00-23:59) from results. 0 = don't remove. Default 1.
 
 get_named_settings() returns the value of a named setting. If 'name' is a list, it returns a list of values.
 + f.named_settings is updated. This is dictionary of information and current value, indexed by 'name'.
@@ -818,6 +819,10 @@ This setting can be:
 
 
 # Version Info
+
+2.9.9 - 2026/04/03<br>
+Add 'isRemainMode' flag to time periods (not currently processed by Open API).
+Add 'filter' to f.get_schedule() to drop Remain Time period (00:00-23:59) to avoid overlap with other time periods.
 
 2.9.8 - 2026/03/22<br>
 ** potential breaking changes **

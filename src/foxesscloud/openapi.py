@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  22 March 2026
+Updated:  03 April 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.8"
+version = "2.9.9"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1144,6 +1144,51 @@ def set_work_mode(mode, force = 0):
     work_mode = mode
     return work_mode
 
+##################################################################################################
+# Modbus Commands
+##################################################################################################
+
+slave_address = 247
+modbus_timeout = 10
+
+def modbus_data(function, register, value=None):
+    return None
+
+def get_modbus(register, slave=None, function=None, timeout=None):
+    global device_sn, modbus_timeout
+    function = 4 if function is None else function
+    output(f"\nGetting Modbus: {mode}", 1)
+    packet = modbus_data(function, register)
+    body = {'sn': device_sn, 'timeout': modbus_timeout, 'data': packet}
+    response = signed_post(path="/op/v0/module/modbus/commands", body=body)
+    if response.status_code != 200:
+        output(f"** get_modbus() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        output(f"** get_modbus(), {errno_message(response)}")
+        return None
+    result = response.json().get('result')
+    return result
+
+def set_modbus(register, value, slave=None, function=None, timeout=None):
+    global device_sn, modbus_timeout
+    function = 16 if type(value) is list else 6
+    output(f"\nSetting Modbus: {mode}", 1)
+    packet = modbus_data(function, register, value)
+    body = {'sn': device_sn, 'timeout': modbus_timeout, 'data': packet}
+    setting_delay()
+    response = signed_post(path="/op/v0/module/modbus/commands", body=body)
+    if response.status_code != 200:
+        output(f"** get_modbus() got response code {response.status_code}: {response.reason}")
+        return None
+    errno = response.json().get('errno')
+    if errno != 0:
+        output(f"** get_modbus(), {errno_message(response)}")
+        return None
+    result = response.json().get('result')
+    return result
+
 
 ##################################################################################################
 # get flag
@@ -1197,7 +1242,7 @@ def get_flag():
 ##################################################################################################
 
 # get the current schedule
-def get_schedule():
+def get_schedule(filter=1):
     global device_sn, schedule, debug_setting, work_modes
     if get_flag() is None:
         return None
@@ -1222,7 +1267,10 @@ def get_schedule():
     # remove invalid work mode from periods
     for g in result['groups']:
         if g['workMode'] in work_modes:
-            schedule['periods'].append(g)
+            remain_mode = g['startHour'] == 0 and g['startMinute'] == 0 and g['endHour'] == 23 and g['endMinute'] == 59
+            g['isRemainMode'] = remain_mode
+            if not remain_mode or filter == 0:
+                schedule['periods'].append(g)
     return schedule
 
 # build strategy using current schedule
@@ -1276,6 +1324,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if start is None or end is None or start >= end:
         output(f"set_period(): ** invalid period times: {hours_time(start)}-{hours_time(end)}")
         return None
+    remain_mode = start == 0 and end == 24
     end = round_time(end - 1/60)
     mode = 'SelfUse' if mode is None else mode
     if mode not in work_modes:
@@ -1301,10 +1350,12 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         s += f", importLimit {int(import_limit)}W" if import_limit is not None else ""
         s += f", pvLimit {int(pv_limit)}W" if pv_limit is not None else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
+        s += f", Remain Mode" if remain_mode else ""
         output(s, 1)
     start_hour, start_minute = split_hours(start)
     end_hour, end_minute = split_hours(end)
-    period = {'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'extraParam': {'minSocOnGrid': min_soc}}
+    period = {'startHour': start_hour, 'startMinute': start_minute, 'endHour': end_hour, 'endMinute': end_minute, 'workMode': mode, 'isRemainMode': remain_mode
+        , 'extraParam': {'minSocOnGrid': min_soc}}
     if max_soc is not None:
         period['extraParam']['maxSoc'] = max_soc
     if fdsoc is not None:
