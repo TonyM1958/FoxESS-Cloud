@@ -825,7 +825,7 @@ Restore f.var_list by parsing variables returned by get_real().
 Restore checking of variables for get_real() and get_history().
 Re-order processing of schedule meta data and check for missing result in get_flag().
 
-2.9.10 - 2026/04/00<br>
+2.9.10 - 2026/04/08<br>
 Update to remove dependence on get_vars() due to API call failing.
 
 2.9.9 - 2026/04/03<br>
