@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  03 April 2026
+Updated:  08 April 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.9"
+version = "2.9.10"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -295,14 +295,16 @@ def get_vars():
         output(f"** get_vars() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
-    if result is None:
-        output(f"** get_vars(), no result data, {errno_message(response)}")
-        return None
+#    if result is None:
+#        output(f"** get_vars(), no result data, {errno_message(response)}")
+#        output(f"result = {result}")
+#        return None
     var_table = result
     var_list = []
-    for v in var_table:
-        k = next(iter(v))
-        var_list.append(k)
+    if result is not None:
+        for v in var_table:
+            k = next(iter(v))
+            var_list.append(k)
     return var_list
 
 ##################################################################################################
@@ -1507,17 +1509,18 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         if plot > 0:
             plot_history(result_list, plot)
         return result_list
-    if v is None:
-        if var_list is None:
-            var_list = get_vars()
+    if v is None and var_list is not None :
         v = var_list
     elif type(v) is not list:
         v = [v]
-    for var in v:
-        if var not in var_list:
-            output(f"** get_history(): invalid variable '{var}'")
-            output(f"var_list = {var_list}")
-            return None
+    if len(v) == 0:
+        return None
+    if len(var_list) > 0:
+        for var in v:
+            if var not in var_list:
+                output(f"** get_history(): invalid variable '{var}'")
+                output(f"var_list = {var_list}")
+                return None
     output(f"getting history data", 2)
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
@@ -1778,7 +1781,7 @@ fix_value_threshold = 200000000.0
 fix_value_mask = 0x0000FFFF
 
 def get_report(dimension='day', d=None, v=None, summary=1, save=None, load=None, plot=0):
-    global device_sn, var_list, debug_setting, report_vars, storage
+    global device_sn, debug_setting, report_vars, storage
     if get_device() is None:
         return None
     # process list of days

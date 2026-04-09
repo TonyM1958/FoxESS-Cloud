@@ -206,9 +206,9 @@ f.get_real(v, sns, version)
 
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
-f.get_vars() returns the list of variables that can be queried. This also stores the information:
+f.get_vars() returns the list of variables that can be queried (if available). This also stores the information:
 + f.var_table: a table, indexed by variable that contains information such as the name and unit.
-++ f.var_list: a list of all the variables that are available
++ f.var_list: a list of all the variables that are available
 
 There are also pre-defined lists:
 + power_vars lists the main power variables provided by the inverter
@@ -819,6 +819,9 @@ This setting can be:
 
 
 # Version Info
+
+2.9.10 - 2026/04/00<br>
+Update to remove dependence on get_vars() due to API call failing.
 
 2.9.9 - 2026/04/03<br>
 Add 'isRemainMode' flag to time periods (not currently processed by Open API).
