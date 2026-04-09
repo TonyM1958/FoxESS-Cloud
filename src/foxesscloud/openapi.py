@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  08 April 2026
+Updated:  09 April 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.10"
+version = "2.9.11"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -228,6 +228,9 @@ messages = None
 
 def get_messages():
     global debug_setting, messages, user_agent
+    if api_key is None:
+        output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
+        return None
     output(f"getting messages", 2)
     headers = {'User-Agent': user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = signed_get(path="/c/v0/errors/message", login=1)
@@ -281,30 +284,22 @@ var_table = None
 var_list = None
 
 def get_vars():
-    global var_table, var_list, debug_setting, messages, lang
-    if api_key is None:
-        output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
-        return None
-    if messages is None:
-        get_messages()
-    if var_list is not None:
-        return var_list
-    output(f"getting variables", 2)
-    response = signed_get(path="/op/v0/device/variable/get")
+    global var_table, var_list, debug_setting, messages, lang, device_sn
+    output(f"getting var list from real-time data", 2)
+    body = {'sns': [device_sn]}
+    response = signed_post(path="/op/v1/device/real/query", body=body)
     if response.status_code != 200:
         output(f"** get_vars() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
-#    if result is None:
-#        output(f"** get_vars(), no result data, {errno_message(response)}")
-#        output(f"result = {result}")
-#        return None
-    var_table = result
+    if result is None:
+        output(f"** get_vars(), no result data, {errno_message(response)}")
+        output(f"result = {result}")
+        return None
+    var_table = result[0]
     var_list = []
-    if result is not None:
-        for v in var_table:
-            k = next(iter(v))
-            var_list.append(k)
+    for v in var_table['datas']:
+        var_list.append(v['variable'])
     return var_list
 
 ##################################################################################################
@@ -317,7 +312,7 @@ station_id = None
 
 def get_site(name=None):
     global site_list, site, debug_setting, station_id
-    if get_vars() is None:
+    if get_messages() is None:
         return None
     if site is not None and name is None:
         return site
@@ -377,7 +372,7 @@ logger_sn = None
 
 def get_logger(sn=None):
     global logger_list, logger, logger_sn, debug_setting
-    if get_vars() is None:
+    if get_messages() is None:
         return None
     if logger is not None and sn is None:
         return logger
@@ -416,7 +411,7 @@ def get_logger(sn=None):
 
 def get_signal(sn=None):
     global logger_list, logger, logger_sn, debug_setting
-    if get_vars() is None:
+    if get_messages() is None:
         return None
     if sn is None:
         if logger_sn is None:
@@ -445,8 +440,8 @@ device = None
 device_sn = None
 
 def get_device(sn=None, device_type=None):
-    global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings
-    if get_vars() is None:
+    global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings, var_list
+    if get_messages() is None:
         return None
     if device is not None:
         if sn is None:
@@ -503,6 +498,8 @@ def get_device(sn=None, device_type=None):
     schedule = None
     get_flag()
     get_generation()
+    var_list = None
+    get_vars()
 #    remote_settings = get_ui()
     # parse the model code to work out attributes
     model_code = device['deviceType'].upper() if device_type is None else device_type
@@ -1204,6 +1201,8 @@ def get_flag():
     global device_sn, schedule, debug_setting, max_periods, work_modes, settable_modes
     if get_device() is None:
         return None
+    if schedule is None:
+        schedule = {'enable': None, 'support': None, 'periods': [], 'maxsoc': None}
     output(f"getting flag", 2)
     body = {'deviceSN': device_sn}
     response = signed_post(path="/op/v1/device/scheduler/get/flag", body=body)
@@ -1211,14 +1210,9 @@ def get_flag():
         output(f"** get_flag() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
-    if result is None:
-        return None
-    if schedule is None:
-        schedule = {'enable': None, 'support': None, 'periods': [], 'maxsoc': None}
-    schedule['enable'] = result.get('enable')
-    schedule['support'] = result.get('support')
-    if device.get('function') is not None and device['function'].get('scheduler') is not None:
-        device['function']['scheduler'] = schedule['support']
+    if result is not None:
+        schedule['enable'] = result.get('enable')
+        schedule['support'] = result.get('support')
     if schedule.get('maxGroupCount') is None:
         output(f"getting properties", 2)
         body = {'deviceSN': device_sn}
@@ -1431,7 +1425,7 @@ residual_scale = 0.01
 
 # get real time data
 def get_real(v = None, sns = None, version = 0):
-    global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale
+    global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale, var_list
     if sns is None:
         if get_device() is None:
             return None
@@ -1443,7 +1437,15 @@ def get_real(v = None, sns = None, version = 0):
     output(f"getting real-time data", 2)
     body = {'sns': sns if sns is not None and type(sns) is list else [sns] if sns is not None else [device_sn]}
     if v is not None:
-        body['variables'] = v if type(v) is list else [v]
+        if type(v) is not list:
+            v = [v]
+        if len(var_list) > 0:
+            for var in v:
+                if var not in var_list:
+                    output(f"** get_real(): invalid variable '{var}'")
+                    output(f"var_list = {var_list}")
+                    return None        
+        body['variables'] = v
     response = signed_post(path="/op/v1/device/real/query", body=body)
     if response.status_code != 200:
         output(f"** get_real() got response code {response.status_code}: {response.reason}")
@@ -1509,24 +1511,22 @@ def get_history(time_span='hour', d=None, v=None, summary=1, save=None, load=Non
         if plot > 0:
             plot_history(result_list, plot)
         return result_list
-    if v is None and var_list is not None :
-        v = var_list
-    elif type(v) is not list:
-        v = [v]
-    if len(v) == 0:
-        return None
-    if len(var_list) > 0:
-        for var in v:
-            if var not in var_list:
-                output(f"** get_history(): invalid variable '{var}'")
-                output(f"var_list = {var_list}")
-                return None
     output(f"getting history data", 2)
     if load is None:
         (t_begin, t_end) = query_time(d, time_span)
         if t_begin is None:
             return None
-        body = {'sn': device_sn, 'variables': v, 'begin': t_begin, 'end': t_end}
+        body = {'sn': device_sn, 'begin': t_begin, 'end': t_end}
+        if v is not None:
+            if type(v) is not list:
+                v = [v]
+            if len(var_list) > 0:
+                for var in v:
+                    if var not in var_list:
+                        output(f"** get_history(): invalid variable '{var}'")
+                        output(f"var_list = {var_list}")
+                        return None        
+            body['variables'] = v
         response = signed_post(path="/op/v0/device/history/query", body=body)
         if response.status_code != 200:
             output(f"** get_history() got response code {response.status_code}: {response.reason}")

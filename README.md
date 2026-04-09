@@ -820,6 +820,11 @@ This setting can be:
 
 # Version Info
 
+2.9.11 - 2026/04/09<br>
+Restore f.var_list by parsing variables returned by get_real().
+Restore checking of variables for get_real() and get_history().
+Re-order processing of schedule meta data and check for missing result in get_flag().
+
 2.9.10 - 2026/04/00<br>
 Update to remove dependence on get_vars() due to API call failing.
 
