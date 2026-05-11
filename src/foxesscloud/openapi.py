@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.13"
+version = "2.9.14"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -637,7 +637,7 @@ def get_battery(info=0, v=None, rated=None, count=None):
     if v is None:
         v = battery_vars_1 if 'SoC_1' in var_list else battery_vars 
     result = get_real(v)
-    for i in range(0, len(battery_vars)):
+    for i in range(0, len(v)):
         battery[battery_data[i]] = result[i].get('value')
     if debug_setting > 1:
         print(f"raw battery = {battery}")

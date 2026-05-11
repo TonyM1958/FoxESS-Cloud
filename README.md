@@ -820,7 +820,7 @@ This setting can be:
 
 # Version Info
 
-2.09.13 - 2026/05/11<br>
+2.09.14 - 2026/05/11<br>
 Correct f.var_table so it lists 'name' and 'unit' for each variable.
 Add check for SoC / SoC_1 in var_list for get_battery() when using H3 Pro with 1 battery.
 
