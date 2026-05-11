@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  09 April 2026
+Updated:  11 May 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.11"
+version = "2.9.13"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -231,6 +231,8 @@ def get_messages():
     if api_key is None:
         output(f"** please generate an API Key at foxesscloud.com and provide this (f.api_key='your API key')")
         return None
+    if messages is not None:
+        return messages
     output(f"getting messages", 2)
     headers = {'User-Agent': user_agent, 'Content-Type': 'application/json;charset=UTF-8', 'Connection': 'keep-alive'}
     response = signed_get(path="/c/v0/errors/message", login=1)
@@ -296,10 +298,14 @@ def get_vars():
         output(f"** get_vars(), no result data, {errno_message(response)}")
         output(f"result = {result}")
         return None
-    var_table = result[0]
+    var_table = {}
     var_list = []
-    for v in var_table['datas']:
-        var_list.append(v['variable'])
+    for var in result[0]['datas']:
+        v = var['variable']
+        var_list.append(v)
+        var_table[v] = {}
+        var_table[v]['name'] = var.get('name')
+        var_table[v]['unit'] = var.get('unit')
     return var_list
 
 ##################################################################################################
@@ -576,8 +582,9 @@ def get_generation(update=1):
 battery = None
 batteries = None
 battery_settings = None
-battery_vars = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'ResidualEnergy','SOH','energyThroughput', 'maxChargeCurrent', 'maxDischargeCurrent' ]
-battery_data = ['soc', 'volt', 'current', 'power', 'temperature', 'residual', 'soh', 'throughput', 'maxChargeCurrent', 'maxDischargeCurrent']
+battery_vars   = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'SOH', 'ResidualEnergy','energyThroughput', 'maxChargeCurrent', 'maxDischargeCurrent' ]
+battery_vars_1 = ['SoC_1', 'batVolt_1', 'batCurrent_1', 'invBatPower_1', 'batTemperature_1', 'SOH_1']
+battery_data =   ['soc', 'volt', 'current', 'power', 'temperature', 'soh', 'residual', 'throughput', 'maxChargeCurrent', 'maxDischargeCurrent']
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 0
@@ -610,7 +617,7 @@ battery_params = {
 }
 
 def get_battery(info=0, v=None, rated=None, count=None):
-    global device_sn, battery, debug_setting, residual_handling, battery_params
+    global device_sn, battery, debug_setting, residual_handling, battery_params, var_list
     if get_device() is None:
         return None
     battery = {}
@@ -628,7 +635,7 @@ def get_battery(info=0, v=None, rated=None, count=None):
         return None
     output(f"getting battery", 2)
     if v is None:
-        v = battery_vars
+        v = battery_vars_1 if 'SoC_1' in var_list else battery_vars 
     result = get_real(v)
     for i in range(0, len(battery_vars)):
         battery[battery_data[i]] = result[i].get('value')
@@ -1240,7 +1247,7 @@ def get_flag():
 # get the current schedule
 def get_schedule(filter=1):
     global device_sn, schedule, debug_setting, work_modes
-    if get_flag() is None:
+    if schedule is None and get_flag() is None:
         return None
     if schedule.get('support') == False:
         output(f"** get_schedule(), not supported on this device")

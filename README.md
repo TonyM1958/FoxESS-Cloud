@@ -814,11 +814,15 @@ f.debug_setting = 2
 This setting can be:
 + 0: silent mode (minimal output)
 + 1: information reporting (default)
-+ 2: more debug information, updating of inverter settings is disabled
++ 2: more debug information
 + 3: internal variables and values are displayed (verbose)
 
 
 # Version Info
+
+2.09.13 - 2026/05/11<br>
+Correct f.var_table so it lists 'name' and 'unit' for each variable.
+Add check for SoC / SoC_1 in var_list for get_battery() when using H3 Pro with 1 battery.
 
 2.9.11 - 2026/04/09<br>
 Restore f.var_list by parsing variables returned by get_real().
