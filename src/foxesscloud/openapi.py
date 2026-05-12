@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  11 May 2026
+Updated:  12 May 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.14"
+version = "2.9.15"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -282,11 +282,23 @@ def get_access_count():
 # get list of variables
 ##################################################################################################
 
+# how many seconds to cache variable data for
+var_refresh = 300
+
+var_timestamp = None
+var_datas = None
 var_table = None
 var_list = None
 
 def get_vars():
-    global var_table, var_list, debug_setting, messages, lang, device_sn
+    global var_refresh, var_timestamp, var_datas, var_table, var_list, debug_setting, messages, lang, device_sn, invert_ct2, residual_scale
+    t = time.time()
+    if var_timestamp is not None and (t - var_timestamp) <= var_refresh:
+        return var_list
+    var_table = None
+    var_list = None
+    var_timestamp = None
+    var_datas = None
     output(f"getting var list from real-time data", 2)
     body = {'sns': [device_sn]}
     response = signed_post(path="/op/v1/device/real/query", body=body)
@@ -298,15 +310,26 @@ def get_vars():
         output(f"** get_vars(), no result data, {errno_message(response)}")
         output(f"result = {result}")
         return None
+    try:
+        var_timestamp = datetime.strptime(result[0]['time'], "%Y-%m-%d %H:%M:%S %Z%z").timestamp()
+    except:
+        var_timestamp = None
+    var_datas = result[0]['datas']
     var_table = {}
     var_list = []
-    for var in result[0]['datas']:
+    for var in var_datas:
         v = var['variable']
         var_list.append(v)
-        var_table[v] = {}
-        var_table[v]['name'] = var.get('name')
-        var_table[v]['unit'] = var.get('unit')
+        if v == 'meterPower2' and invert_ct2 == 1:
+            var['value'] *= -1
+        elif v == 'ResidualEnergy':
+            var['unit'] = 'kWh'
+            var['value'] = var['value'] * residual_scale
+        elif var.get('unit') is None:
+            var['unit'] = ''
+        var_table[v] = var
     return var_list
+
 
 ##################################################################################################
 # get list of sites
@@ -446,7 +469,7 @@ device = None
 device_sn = None
 
 def get_device(sn=None, device_type=None):
-    global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings, var_list
+    global device_list, device, device_sn, battery, debug_setting, schedule, remote_settings, var_timestamp
     if get_messages() is None:
         return None
     if device is not None:
@@ -504,7 +527,7 @@ def get_device(sn=None, device_type=None):
     schedule = None
     get_flag()
     get_generation()
-    var_list = None
+    var_timestamp = None
     get_vars()
 #    remote_settings = get_ui()
     # parse the model code to work out attributes
@@ -582,9 +605,13 @@ def get_generation(update=1):
 battery = None
 batteries = None
 battery_settings = None
-battery_vars   = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'SOH', 'ResidualEnergy','energyThroughput', 'maxChargeCurrent', 'maxDischargeCurrent' ]
+
+# battery data fields - vars must match the variables used to get them
+battery_data =   ['soc', 'volt', 'current', 'power', 'temperature', 'soh', 'residual', 'throughput', 'maxChargeCurrent', 'maxDischargeCurrent', 'status', 'statusV2']
+battery_vars   = ['SoC', 'invBatVolt', 'invBatCurrent', 'invBatPower', 'batTemperature', 'SOH', 'ResidualEnergy','energyThroughput', 'maxChargeCurrent', 'maxDischargeCurrent', 'batStatus', 'batStatusV2' ]
 battery_vars_1 = ['SoC_1', 'batVolt_1', 'batCurrent_1', 'invBatPower_1', 'batTemperature_1', 'SOH_1']
-battery_data =   ['soc', 'volt', 'current', 'power', 'temperature', 'soh', 'residual', 'throughput', 'maxChargeCurrent', 'maxDischargeCurrent']
+battery_vars_2 = ['SoC_2', 'batVolt_2', 'batCurrent_2', 'invBatPower_2', 'batTemperature_2', 'SOH_2']
+battery_vars_3 = ['SoC_3', 'batVolt_3', 'batCurrent_3', 'invBatPower_3', 'batTemperature_3', 'SOH_3']
 
 # 1 = Residual Energy, 2 = Residual Capacity (HV), 3 = Residual Capacity per battery (Mira)
 residual_handling = 0
@@ -616,69 +643,86 @@ battery_params = {
         'discharge_loss': 0.974},
 }
 
-def get_battery(info=0, v=None, rated=None, count=None):
+def get_battery(info=0, v=None, rated=None, count=None, n=1):
     global device_sn, battery, debug_setting, residual_handling, battery_params, var_list
     if get_device() is None:
         return None
-    battery = {}
+    b = {}
     rated = 0
     count = 0
-    for b in device['batteryList']:
-        if b.get('type') == 'bmu' and b.get('capacity') is not None:
-            rated += b['capacity']
+    bms = 0
+    for m in device['batteryList']:
+        if m.get('type') == 'bcu':
+            bms += 1
+            if bms == n:
+                for i in ['batterySN', 'model', 'version']:
+                    b[i] = m.get(i)
+        elif bms == n and m.get('type') == 'bmu' and m.get('capacity') is not None:
+            rated += m['capacity']
             count += 1
     if count > 0:
-        battery['count'] = count
-        battery['ratedCapacity'] = rated
+        b['count'] = count
+        b['ratedCapacity'] = rated
     else:
-        output(f"** get_battery(): battery capacity not available")
+        if n == 1:
+            output(f"** get_battery(): battery capacity not available")
         return None
     output(f"getting battery", 2)
     if v is None:
-        v = battery_vars_1 if 'SoC_1' in var_list else battery_vars 
+        v = battery_vars_1 if n == 1 and battery_vars_1[0] in var_list else battery_vars
     result = get_real(v)
-    for i in range(0, len(v)):
-        battery[battery_data[i]] = result[i].get('value')
     if debug_setting > 1:
-        print(f"raw battery = {battery}")
-    if battery.get('status') is None:
-        battery['status'] = 0 if battery.get('volt') is None or battery['volt'] <= 10 else 1
-    if battery['status'] == 0:
+        print(f"result = {result}")
+    for i in range(0, len(v)):
+        b[battery_data[i]] = result[i].get('value')
+    if debug_setting > 1:
+        print(f"raw battery = {b}")
+    if b.get('status') is None:
+        b['status'] = 0 if b.get('volt') is None or b['volt'] <= 10 else 1
+    elif type(b['status']) is not int and b['status'].isnumeric():
+        b['status'] = int(b['status'])
+    if b['status'] == 0:
         output(f"** get_battery(): battery status not available")
         return None
-    capacity = battery['ratedCapacity'] / 1000 * (battery['soh'] if battery.get('soh') is not None else 100) / 100
-    soc = battery.get('soc')
-    battery['residual_handling'] = residual_handling
-    if battery['residual_handling'] == 1:
-        capacity = battery['residual'] / soc * 100
-        battery['soh'] = round(capacity * 1000 / battery['ratedCapacity'] * 100, 1)
-    elif battery['residual_handling'] == 2:
-        capacity = battery.get('residual')
-        battery['soh'] = round(capacity * 1000 / battery['ratedCapacity'] * 100, 1)
-    elif battery['residual_handling'] == 3:
-        capacity = (battery['residual'] * battery['count']) if battery.get('residual') is not None else None
-        battery['soh'] = round(capacity / battery['ratedCapacity'] * 100, 1)
+    capacity = b['ratedCapacity'] / 1000 * (b['soh'] if b.get('soh') is not None else 100) / 100
+    soc = b.get('soc')
+    b['residual_handling'] = residual_handling
+    if b['residual_handling'] == 1:
+        capacity = b['residual'] / soc * 100
+        b['soh'] = round(capacity * 1000 / b['ratedCapacity'] * 100, 1)
+    elif b['residual_handling'] == 2:
+        capacity = b.get('residual')
+        b['soh'] = round(capacity * 1000 / b['ratedCapacity'] * 100, 1)
+    elif b['residual_handling'] == 3:
+        capacity = (b['residual'] * b['count']) if b.get('residual') is not None else None
+        b['soh'] = round(capacity / b['ratedCapacity'] * 100, 1)
     residual = capacity * soc / 100
-    battery['capacity'] = round(capacity, 3)
-    battery['residual'] = round(residual, 3)
-    if battery['residual_handling'] > 0:
-        params = battery_params[battery['residual_handling']]
-        battery['charge_loss'] = params['charge_loss']
-        battery['discharge_loss'] = params['discharge_loss']
-        if battery.get('temperature') is not None:
-            battery['charge_rate'] = interpolate((battery['temperature'] - params['offset']) / params['step'], params['table'])
-    return battery
+    b['capacity'] = round(capacity, 3)
+    b['residual'] = round(residual, 3)
+    if b['residual_handling'] > 0:
+        params = battery_params[b['residual_handling']]
+        b['charge_loss'] = params['charge_loss']
+        b['discharge_loss'] = params['discharge_loss']
+        if b.get('temperature') is not None:
+            b['charge_rate'] = interpolate((b['temperature'] - params['offset']) / params['step'], params['table'])
+    if n == 1:
+        battery = b
+    return b
 
 def get_batteries(info=0, rated=None, count=None):
-    global battery, batteries
-    if type(rated) is not list:
-        rated = [rated]
-    if type(count) is not list:
-        count = [count]
-    get_battery(info=info, rated=rated[0], count=count[0])
-    if battery is None:
+    global battery, batteries, var_list, battery_vars_2, battery_vars_3
+    bat_1 = get_battery(n=1)
+    if bat_1 is None:
         return None
-    batteries = [battery]
+    batteries = [bat_1]
+    if battery_vars_2[0] in var_list:
+        bat = get_battery(v=battery_vars_2, n=2)
+        if bat is not None:
+            batteries.append(bat)
+    if battery_vars_3[0] in var_list:
+        bat = get_battery(v=battery_vars_3, n=3)
+        if bat is not None:
+            batteries.append(bat)
     return batteries
 
 def get_battery_real():
@@ -1432,36 +1476,40 @@ residual_scale = 0.01
 
 # get real time data
 def get_real(v = None, sns = None, version = 0):
-    global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale, var_list
-    if sns is None:
-        if get_device() is None:
+    global device_sn, debug_setting, device, power_vars, invert_ct2, residual_scale, var_list, var_table, var_datas
+    if v is not None and type(v) is not list:
+        v = [v]
+    if sns is None and get_device() is None:        # check device is loaded if not specified
             return None
+    if version == 0:                    # cache legacy single inverter result only
         if device['status'] > 1:
             status_code = device['status']
             state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'
             output(f"** get_real(): device {device_sn} is not on-line, status = {state} ({device['status']})")
             return None
+        if get_vars() is None:          # check variables are current
+            return None
+        if v is None:
+            return var_datas
+        result = []
+        for var in v:
+            if var_table.get(var) is None:
+                output(f"** get_real(): invalid variable '{var}'")
+                output(f"var_list = {var_list}")
+                return None
+            result.append(var_table[var])
+        return(result)
     output(f"getting real-time data", 2)
     body = {'sns': sns if sns is not None and type(sns) is list else [sns] if sns is not None else [device_sn]}
     if v is not None:
-        if type(v) is not list:
-            v = [v]
-        if len(var_list) > 0:
-            for var in v:
-                if var not in var_list:
-                    output(f"** get_real(): invalid variable '{var}'")
-                    output(f"var_list = {var_list}")
-                    return None        
         body['variables'] = v
     response = signed_post(path="/op/v1/device/real/query", body=body)
     if response.status_code != 200:
         output(f"** get_real() got response code {response.status_code}: {response.reason}")
         return None
     result = response.json().get('result')
-    if result is None:
+    if result is None or type(result) is not list or len(result) < 1:
         output(f"** get_real(), no result data, {errno_message(response)}")
-        return None
-    if len(result) < 1:
         return None
     for r in result:
         datas = r['datas']

@@ -111,10 +111,10 @@ Each of these calls will return a dictionary or list containing the relevant inf
 
 get_generation() will return the latest generation information for the device. The results are also stored in f.device as 'generationToday', 'generationMonth' and 'generationTotal'.
 
-get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature', 'residual' and 'throughput'. The result also updates f.battery / f.batteries.
-get_batteries() returns multiple batteries (if available) as a list. get_battery() returns the first battery.
+get_battery() / get_batteries() returns the current battery status, including 'soc', 'volt', 'current', 'power', 'temperature', 'residual' and 'throughput' (where available). The results update f.battery / f.batteries.
+get_batteries() returns up to 2 batteries (if available) as a list. get_battery() returns the first battery.
 
-Additional battery attributes provided include:
+Additional battery attributes that may be provided include:
 + 'capacity': the estimated battery capacity, derrived from 'residual' and 'soc'
 + 'charge_rate': the estimated BMS charge rate available, based on the current 'temperature' of the BMS
 + 'charge_loss': the ratio of the kWh added to the battery for each kWh applied during charging
@@ -206,19 +206,21 @@ f.get_real(v, sns, version)
 
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
-f.get_vars() returns the list of variables that can be queried (if available). This also stores the information:
+f.get_vars() returns the list of variables that can be queried. This also stores the information:
 + f.var_table: a table, indexed by variable that contains information such as the name and unit.
 + f.var_list: a list of all the variables that are available
++ f.var_datas: a list of all the variables and their attributes
 
 There are also pre-defined lists:
 + power_vars lists the main power variables provided by the inverter
-+ battery_vars lists the main variables relevant to the battery / BMS
 
 f.get_real returns the latest values for a list of variables.
 + v is a variable, or list of variables. The default is to return the latest value for all available variables
 + sns is an optional inverter serial number or a list of inverter serial numbers to get data for. The default is the current device
 + version determines the format of the output. By default, get_real() returns a list of variables for a single inverter (legacy mode). Setting version=1 returns a list of inverter results using the v1 Open API format.
 
+Simple calls to f.get_real() for the current inverter will cache the variables returned for 5 minutes at a time and return data from the cache during this time to reduce the number of API calls consumed.
++ f.var_refresh sets the cache period. The default is 300 seconds.
 
 ## History Data
 History data reports inverter variables, collected every 5 minutes, on a given date / time and period:
@@ -819,6 +821,12 @@ This setting can be:
 
 
 # Version Info
+
+2.09.15 - 2026/05/12<br>
+Changes for work with battery variables for H3 Smart, H3 Pro and H3 Plus.
+Update f.get_vars() to cache the value of all variables and to use this for calls to f.get_real() within the validity period.
+Update get_battery() to include BMS info.
+Update get_batteries() to fetch data for up to 3 batteries (if available).
 
 2.09.14 - 2026/05/11<br>
 Correct f.var_table so it lists 'name' and 'unit' for each variable.
