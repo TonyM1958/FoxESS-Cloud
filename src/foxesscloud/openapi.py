@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  12 May 2026
+Updated:  11 June 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.15"
+version = "2.9.16"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -652,12 +652,12 @@ def get_battery(info=0, v=None, rated=None, count=None, n=1):
     count = 0
     bms = 0
     for m in device['batteryList']:
-        if m.get('type') == 'bcu':
+        if m.get('type') in ['bcu', 'master']:
             bms += 1
             if bms == n:
                 for i in ['batterySN', 'model', 'version']:
                     b[i] = m.get(i)
-        elif bms == n and m.get('type') == 'bmu' and m.get('capacity') is not None:
+        elif bms == n and m.get('type') in ['bmu', 'slave'] and m.get('capacity') is not None:
             rated += m['capacity']
             count += 1
     if count > 0:
@@ -727,6 +727,8 @@ def get_batteries(info=0, rated=None, count=None):
 
 def get_battery_real():
     global device_sn, device
+    output(f"** get_battery_real(), no result data")
+    return None
     if get_device() is None:
         return None
     output(f"getting battery real", 2)
@@ -1043,7 +1045,7 @@ def get_peakshaving():
 
 # store for named settings info
 name_list = ['ExportLimit','MinSoc','MinSocOnGrid','MaxSoc','GridCode','WorkMode','ExportLimitPower',
-    'EpsOutPut','MaxSetChargeCurrent','MaxSetDischargeCurrent','ECOMode','Meter1Enable','Meter2Enable','SysSwitch','GroundProtection']
+    'EpsOutPut','MaxSetChargeCurrent','MaxSetDischargeCurrent','ECOMode','Meter1Enable','Meter2Enable','SysSwitch','GroundProtection','LowPowerMode']
 named_settings = {}
 
 def get_remote_settings(name):
@@ -1481,7 +1483,7 @@ def get_real(v = None, sns = None, version = 0):
         v = [v]
     if sns is None and get_device() is None:        # check device is loaded if not specified
             return None
-    if version == 0:                    # cache legacy single inverter result only
+    if sns is None and version == 0:                # cache legacy single inverter result only
         if device['status'] > 1:
             status_code = device['status']
             state = 'fault' if status_code == 2 else 'off-line' if status_code == 3 else 'unknown'

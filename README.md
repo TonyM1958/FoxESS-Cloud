@@ -822,6 +822,12 @@ This setting can be:
 
 # Version Info
 
+2.09.16 - 2026/06/11<br>
+Update get_battery() to work with BCU/BMU or Master/Slave naming when processing the 'batteryList'.
+Tweak to disable caching when query is for a specific serial number.
+Add 'LowPowerMode' to list of named settings.
+Update get_battery_real() to return None and show error. Fox has removed this end point.
+
 2.09.15 - 2026/05/12<br>
 Changes for work with battery variables for H3 Smart, H3 Pro and H3 Plus.
 Update f.get_vars() to cache the value of all variables and to use this for calls to f.get_real() within the validity period.
