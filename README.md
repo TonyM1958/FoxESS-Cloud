@@ -143,7 +143,7 @@ You can change inverter settings using:
 ```
 f.set_min(minSocOnGrid, minSoc)
 f.set_charge(ch1, st1, en1, ch2, st2, en2, enable)
-f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, price, segment)
+f.set_period(start, end, mode, min_soc, max_soc, fdsoc, fdpwr, after, price, segment)
 f.set_schedule(periods, enable, is_default)
 f.set_named_settings(name, value, force)
 f.set_heating(enable, start, end, time1, time2, time3)
@@ -172,6 +172,8 @@ set_period() returns a period structure that can be used to build a list for set
 + import_limit: optional, default is None (not set) but set to 0 if the mode is force discharge
 + export_limit: optional, default is None (not set).
 + pv_limit: optional, default is 1.5 x inverter rating.
++ reactive_power: optional, default is None.
++ after: optional, default is None (Standby). The work mode to apply After Cut Off for Force Charge and Force Discharge.
 + price: optional, default None. Used to display plunge pricing for time period.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
@@ -271,6 +273,9 @@ For power values (unit = kW), the summary performs a Riemann sum of the data, in
 + kwh_peak: the total energy consumed or generated during the peak time of use (peak1, peak2)
 + kwh_neg: the total energy from -ve power flow (all other totals are based on +ve power flow)
 
+When calling with no date or time, the current date and time are used. However, this may result in no data being sent due to delays in the cloud processing pipeline.
++ f.data_lag set the time in minutes (5 by default) to look back when setting the default start time. Increase this to make the default time period start earlier.
+
 This example shows power graphs for today and yesterday:
 
 ![image](https://github.com/TonyM1958/FoxESS-Cloud/assets/63789168/d84c55c9-4f4c-431d-bc55-d7796b7e4fea)
@@ -298,6 +303,7 @@ f.get_report(report_type, d, v, summary, save, load, plot, station)
 The list of variables that can be reported on is stored in f.report_vars.
 
 Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
+Fox has now limited the data that is available for each day so you may find you get 'operational successful' but no data is available.
 
 Setting the optional parameter 'summary' when calling get_report() provides a summary of the report data:
 
@@ -822,19 +828,23 @@ This setting can be:
 
 # Version Info
 
-2.09.16 - 2026/06/11<br>
+2.9.17 - 2026/10/04<br>
+Add 'after' parameter for set_period() to set the work mode After Cut Off for Force Charge and Force Discharge (Issue #31)
+Add f.data_lag to set the history in minutes when getting data using the current date and time.
+
+2.9.16 - 2026/06/11<br>
 Update get_battery() to work with BCU/BMU or Master/Slave naming when processing the 'batteryList'.
 Tweak to disable caching when query is for a specific serial number.
 Add 'LowPowerMode' to list of named settings.
 Update get_battery_real() to return None and show error. Fox has removed this end point.
 
-2.09.15 - 2026/05/12<br>
+2.9.15 - 2026/05/12<br>
 Changes for work with battery variables for H3 Smart, H3 Pro and H3 Plus.
 Update f.get_vars() to cache the value of all variables and to use this for calls to f.get_real() within the validity period.
 Update get_battery() to include BMS info.
 Update get_batteries() to fetch data for up to 3 batteries (if available).
 
-2.09.14 - 2026/05/11<br>
+2.9.14 - 2026/05/11<br>
 Correct f.var_table so it lists 'name' and 'unit' for each variable.
 Add check for SoC / SoC_1 in var_list for get_battery() when using H3 Pro with 1 battery.
 

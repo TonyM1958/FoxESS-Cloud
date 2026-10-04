@@ -181,8 +181,9 @@ set_period() returns a period structure that can be used to build a list of stra
 + start, end, mode: required parameters. end time is exclusive e.g. end at '07:00' will set a period end time of '06:59'
 + min_soc: optional, default is 10
 + max_soc: optional, default is 100
-+ fdsoc: optional, default is 10. Used when setting a period with ForceDischarge mode
++ fdsoc: optional, default is 10. Used when setting a period with ForceDischarge or ForceCharge mode
 + fdpwr: optional, default is 0. Used when setting a period with ForceDischarge mode.
++ after: optional for gen 2 inverters, the work mode to apply After Cut Off for Force Charge and Force Discharge.
 + price: optional, default None. Used to display plunge pricing for time period.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
 
@@ -216,6 +217,9 @@ The list of variables that can be queried is stored in f.var_list (and also avai
 f.invert_ct2 determines how the meterPower2 data is handled. When invert_ct2 = 0, meterPower2 produces +ve power values during secondary generation. If meterPower2 produces -ve power values during secondary generation, setting invert_ct2 = 1 will flip the values so they are +ve when generating. The default setting is 1 (invert).
 
 f.sample_time is set to the sample time in minutes for the data processed, rounded to f.sample_rounding samples per minute.
+
+When calling with no date or time, the current date and time are used. However, this may result in no data being sent due to delays in the cloud processing pipeline.
++ f.data_lag set the time in minutes (5 by default) to look back when setting the default start time. Increase this to make the default time period start earlier.
 
 For example, this Jupyter Lab cell will load an inverter and return power data at 5 minute intervals for the 17th June 2023:
 
@@ -267,6 +271,7 @@ f.get_report(report_type, d, v, summary, save, load, plot, station)
 The list of variables that can be reported on is stored in f.report_vars.
 
 Note that reporting by 'day' produces inaccurate hourly data, where the sum does not reconcile with the daily total given in the monthly report. To correct this, reporting by day also gets the monthly data and uses the daily total to correctly report the total.
+Fox has now limited the data that is available for each day so you may find you get 'operational successful' but no data is available.
 
 Setting the optional parameter 'summary' when calling get_report() provides a summary of the report data:
 
@@ -777,6 +782,11 @@ This setting can be:
 
 
 # Version Info
+
+1.11.4 - 2026/10/04<br>
+Add 'after' parameter for set_period() to set the work mode After Cut Off for Force Charge and Force Discharge (Issue #31)
+Add f.data_lag to set the history in minutes when getting data using the current date and time.
+
 
 1.11.3 - 2026/03/18<br>
 Fix typo in set_period() - Issue #27

@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud
-Updated:  18 March 2026
+Updated:  4 October 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2023
 ##################################################################################################
 
-version = "1.11.3"
+version = "1.11.4"
 print(f"FoxESS-Cloud version {version}")
 
 debug_setting = 1
@@ -1219,7 +1219,7 @@ def set_named_settings(name, value, force=0):
 # wrappers for named settings
 ##################################################################################################
 
-work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge']
+work_modes = ['SelfUse', 'Feedin', 'Backup', 'ForceCharge', 'ForceDischarge', 'Standby']
 settable_modes = work_modes[:3]
 work_mode = None
 
@@ -1347,6 +1347,7 @@ def build_strategy_from_schedule():
         period['max_soc'] = p.get('maxSoc')
         period['fdsoc'] = p.get('fdsoc')
         period['fdpwr'] = p.get('fdpwr')
+        period['after'] = p.get('secondWorkMode')
         strategy.append(period)
     return strategy
 
@@ -1431,7 +1432,7 @@ def find_template(name):
 ##################################################################################################
 
 # create a period structure. Note: end time is exclusive.
-def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, price=None, segment=None, quiet=1):
+def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, after=None, price=None, segment=None, quiet=1):
     global schedule, device
     if schedule is None and get_flag() is None:
         return None
@@ -1443,6 +1444,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         max_soc = segment.get('max_soc')
         fdsoc = segment.get('fdsoc')
         fdpwr = segment.get('fdpwr')
+        after = segment.get('after')
         price = segment.get('price')
     start = time_hours(start)
     # adjust exclusive time to inclusive
@@ -1455,6 +1457,12 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if mode not in work_modes:
         output(f"** mode must be one of {work_modes}")
         return None
+    if after is not None and after != 'Standby':
+        if not ('ForceCharge' in mode or 'ForceDischarge' in mode):
+            after = None
+        elif after not in work_modes:
+            output(f"** after must be one of {work_modes}")
+            return None
     min_soc = 10 if min_soc is None else min_soc
     max_soc = None if schedule.get('maxsoc') is None or schedule['maxsoc'] == False else 100 if max_soc is None else max_soc
     if 'ForceCharge' in mode and fdsoc is None:
@@ -1479,12 +1487,15 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
         s += f", fdPwr {fdpwr}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
+        s += f", after {after}" if ('ForceCharge' in mode or 'ForceDischarge' in mode) and after is not None else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         output(s, 1)
     start_h, start_m = split_hours(start)
     end_h, end_m = split_hours(end)
     period = {'startH': start_h, 'startM': start_m, 'endH': end_h, 'endM': end_m, 'workMode': mode,
         'minsocongrid': int(min_soc), 'fdsoc': int(fdsoc), 'fdpwr': int(fdpwr)}
+    if after is not None and after != 'Standby' and ('ForceCharge' in mode or 'ForceDischarge' in mode):
+        period['secondWorkMode'] = after
     if max_soc is not None:
         period['maxsoc'] = int(max_soc)
     return period
@@ -1578,9 +1589,10 @@ energy_vars = ['output_daily', 'feedin_daily', 'load_daily', 'grid_daily', 'bat_
 # sample rate setting and rounding in intervals per minute
 sample_time = 5.0       # 5 minutes default
 sample_rounding = 2     # round to 30 seconds
+data_lag = 5            # time to get valid data in minutes
 
 def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, plot=0, station=0):
-    global device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time, storage
+    global device_id, debug_setting, var_list, invert_ct2, tariff, max_power_kw, messages, sample_rounding, sample_time, storage, data_lag
     if station == 0 and get_device() is None:
         return None
     elif station == 1 and get_site() is None:
@@ -1589,7 +1601,7 @@ def get_raw(time_span='hour', d=None, v=None, summary=1, save=None, load=None, p
     id_code = device_id if station == 0 else station_id
     time_span = time_span.lower()
     if d is None:
-        d = datetime.strftime(datetime.now() - timedelta(minutes=5), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
+        d = datetime.strftime(datetime.now() - timedelta(minutes=data_lag), "%Y-%m-%d %H:%M:%S" if time_span == 'hour' else "%Y-%m-%d")
     if time_span == 'week' or type(d) is list:
         days = d if type(d) is list else date_list(e=d, span='week',today=True)
         result_list = []
