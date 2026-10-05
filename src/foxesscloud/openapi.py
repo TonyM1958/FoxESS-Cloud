@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  4 October 2026
+Updated:  5 October 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.17"
+version = "2.9.18"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1432,7 +1432,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
     if reactive_power is not None:
         period['extraParam']['reactivePower'] = reactive_power
     if after is not None and after != 'Standby' and ('ForceCharge' in mode or 'ForceDischarge' in mode):
-        period['secondWorkMode'] = after
+        period['extraParam']['secondWorkMode'] = after
     return period
 
 # set a schedule from a period or list of time segment periods

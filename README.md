@@ -828,6 +828,9 @@ This setting can be:
 
 # Version Info
 
+2.9.18 - 2026/10/05<br>
+Correct setting 'secondWorkMode' as 'extraParam'.
+
 2.9.17 - 2026/10/04<br>
 Add 'after' parameter for set_period() to set the work mode After Cut Off for Force Charge and Force Discharge (Issue #31)
 Add f.data_lag to set the history in minutes when getting data using the current date and time.
