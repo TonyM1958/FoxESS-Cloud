@@ -1,7 +1,7 @@
 ##################################################################################################
 """
 Module:   Fox ESS Cloud using Open API
-Updated:  5 October 2026
+Updated:  9 October 2026
 By:       Tony Matthews
 """
 ##################################################################################################
@@ -10,7 +10,7 @@ By:       Tony Matthews
 # ALL RIGHTS ARE RESERVED © Tony Matthews 2024
 ##################################################################################################
 
-version = "2.9.18"
+version = "2.9.19"
 print(f"FoxESS-Cloud Open API version {version}")
 
 debug_setting = 1
@@ -1283,7 +1283,8 @@ def get_flag():
                 modes = schedule['properties'].get('workmode')
                 if modes is not None:
                     work_modes = sorted(modes['enumList'])
-                    settable_modes = [w for w in work_modes if 'Force' not in w]
+                modes = schedule['properties'].get('secondworkmode')
+                settable_modes = [w for w in work_modes if 'Force' not in w] if modes is None else sorted(modes['enumlist'])
     return schedule
 
 ##################################################################################################
@@ -1352,8 +1353,8 @@ def build_strategy_from_schedule():
 
 # create time segment structure. Note: end time is exclusive.
 def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdsoc=None, fdpwr=None, import_limit=None, export_limit=None, pv_limit=None, reactive_power=None, after=None
-        , price=None, segment=None, enable=1, quiet=1):
-    global schedule, device, work_modes
+        , price=None, segment=None, enable=1, quiet=1, check=1):
+    global schedule, device, work_modes, settable_modes
     if schedule is None:
         get_schedule()
     if segment is not None and type(segment) is dict:
@@ -1385,30 +1386,32 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         output(f"** mode must be one of {work_modes}")
         return None
     if after is not None and after != 'Standby':
-        if not ('ForceCharge' in mode or 'ForceDischarge' in mode):
+        if 'Force' not in mode:
             after = None
-        elif after not in work_modes:
-            output(f"** after must be one of {work_modes}")
+        elif after not in settable_modes:
+            output(f"** after must be one of {settable_modes}")
             return None
     properties = schedule.get('properties')
     min_soc = 10 if min_soc is None else min_soc
     max_soc = None if properties.get('maxsoc') is None or 'ForceCharge' not in mode else 100 if max_soc is None else max_soc
     if 'ForceCharge' in mode and fdsoc is None:
         fdsoc = max_soc if max_soc is not None else 100
-    fdsoc = None if properties.get('fdsoc') is None or 'Force' not in mode else min_soc if fdsoc is None else fdsoc
     power = (device['power'] * 1000) if device.get('power') is not None else None
-    fdpwr = None if properties.get('fdpwr') is None else power if fdpwr is None and device.get('power') is not None and ('Force' in mode) else fdpwr
-    pv_limit = None if properties.get('pvlimit') is None else int(1.5 * power) if pv_limit is None and device.get('power') is not None and ('Force' in mode) else pv_limit
-    import_limit = None if properties.get('importlimit') is None else 0 if import_limit is None and 'ForceDischarge' in mode else import_limit
-    export_limit = None if properties.get('exportlimit') is None else export_limit
-    reactive_power = None if properties.get('reactivepower') is None else reactive_power
+    if check == 1:
+        fdsoc = None if properties.get('fdsoc') is None or 'Force' not in mode else min_soc if fdsoc is None else fdsoc
+        fdpwr = None if properties.get('fdpwr') is None else power if fdpwr is None and device.get('power') is not None and ('Force' in mode) else fdpwr
+        pv_limit = None if properties.get('pvlimit') is None else int(1.5 * power) if pv_limit is None and power is not None and ('Force' in mode) else pv_limit
+        import_limit = None if properties.get('importlimit') is None else 0 if import_limit is None and 'ForceDischarge' in mode else import_limit
+        export_limit = None if properties.get('exportlimit') is None else export_limit
+        reactive_power = None if properties.get('reactivepower') is None else reactive_power
+        after = None if properties.get('secondWorkMode') is None else after
     if quiet == 0:
         s = f"   {hours_time(start)}-{hours_time(end)} {mode}, minsoc {min_soc}%"
         s += f", maxsoc {max_soc}%" if max_soc is not None and 'ForceCharge' in mode else ""
-        s += f", fdPwr {int(fdpwr)}W, fdSoC {fdsoc}%" if ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
+        s += f", fdPwr {int(fdpwr)}W, fdSoC {fdsoc}%" if 'Force' in mode else ""
         s += f", exportLimit {int(export_limit)}W" if export_limit is not None else ""
         s += f", importLimit {int(import_limit)}W" if import_limit is not None else ""
-        s += f", after {after}" if after is not None and ('ForceCharge' in mode or 'ForceDischarge' in mode) else ""
+        s += f", after {after}" if after is not None and 'Force' in mode else ""
         s += f", pvLimit {int(pv_limit)}W" if pv_limit is not None else ""
         s += f", {price:.2f}p/kWh" if price is not None else ""
         s += f", Remain Mode" if remain_mode else ""
@@ -1431,7 +1434,7 @@ def set_period(start=None, end=None, mode=None, min_soc=None, max_soc=None, fdso
         period['extraParam']['pvLimit'] = pv_limit
     if reactive_power is not None:
         period['extraParam']['reactivePower'] = reactive_power
-    if after is not None and after != 'Standby' and ('ForceCharge' in mode or 'ForceDischarge' in mode):
+    if after is not None and after != 'Standby' and 'Force' in mode:
         period['extraParam']['secondWorkMode'] = after
     return period
 
@@ -2900,7 +2903,7 @@ base_time = None
 
 # charge_needed settings
 charge_config = {
-    'contingency': [25,15,10,20],     # % of consumption. Single value or [winter, spring, summer, autumn]
+    'contingency': [40,20,10,30],     # % of consumption. Single value or [winter, spring, summer, autumn]
     'capacity': None,                 # Battery capacity (over-ride)
     'min_soc': None,                  # Minimum Soc. Default 10%
     'max_soc': None,                  # Maximum Soc. Default 100%
@@ -2929,7 +2932,7 @@ charge_config = {
     'forecast_selection': 0,          # 0 = use available forecast / generation, 1 only update settings with forecast
     'annual_consumption': None,       # optional annual consumption in kWh
     'timed_mode': 0,                  # 0 = None, 1 = timed mode, 2 = strategy mode
-    'special_contingency': 35,        # contingency for special days when consumption might be higher
+    'special_contingency': 50,        # contingency for special days when consumption might be higher
     'special_days': ['12-25', '12-26', '01-01'],
     'full_charge': None,              # day of month (1-28) to do full charge, or 'daily' or 'Mon', 'Tue' etc
     'data_wrap': 6,                   # data items to show per line

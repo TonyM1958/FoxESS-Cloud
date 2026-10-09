@@ -176,6 +176,7 @@ set_period() returns a period structure that can be used to build a list for set
 + after: optional, default is None (Standby). The work mode to apply After Cut Off for Force Charge and Force Discharge.
 + price: optional, default None. Used to display plunge pricing for time period.
 + segment: optional, allows the parameters for the period to be passed as a dictionary instead of individual values.
++ check: default 1, checks parameters are allowed in schedule properties. 0 disables checking and sends parameters as given.
 
 Before calling set_period(), do at least one call to get_schedule(). This will inspect the schedule result to check if max_soc is supported and set the flag f.schedule['maxsoc'] to enable or disable this field as appropriate.
 
@@ -827,6 +828,11 @@ This setting can be:
 
 
 # Version Info
+
+2.9.19 - 2026/10/09<br>
+Update validation for 'secondWorkMode' to use schedule properties / enum_list.
+Add check parameter for set_period to disable checking (for testing).
+Increase default contingency for charge_needed() for greater weather variation and Axle events at times of higher self consumption.
 
 2.9.18 - 2026/10/05<br>
 Correct setting 'secondWorkMode' as 'extraParam'.
